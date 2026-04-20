@@ -1,14 +1,14 @@
 package com.migrator.common.domain.model;
 
 import com.migrator.common.domain.enums.JobStatus;
-import lombok.Builder;
-import lombok.Data;
-
+import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class MigrationJobRecord {
     private UUID jobId;
     private String name;
