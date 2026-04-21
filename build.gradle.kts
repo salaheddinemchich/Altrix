@@ -21,13 +21,28 @@ subprojects {
         mavenCentral()
     }
 
+    /*
+     * Import the Spring Boot BOM into every subproject.
+     * This is what provides version numbers for ALL dependencies —
+     * lombok, jackson, spring-boot-starter-test, etc.
+     * Submodules declare deps WITHOUT versions; the BOM resolves them.
+     */
+    configure<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension> {
+        imports {
+            mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.4")
+        }
+    }
+
     dependencies {
+        // Available in every subproject — no version needed, BOM provides it
         compileOnly("org.projectlombok:lombok")
         annotationProcessor("org.projectlombok:lombok")
+        testCompileOnly("org.projectlombok:lombok")
+        testAnnotationProcessor("org.projectlombok:lombok")
         testImplementation("org.springframework.boot:spring-boot-starter-test")
     }
 
-    // This block ensures that only modules with the Boot plugin try to configure bootJar
+    // Only modules that explicitly apply the Spring Boot plugin get a bootJar task
     plugins.withType<org.springframework.boot.gradle.plugin.SpringBootPlugin> {
         tasks.withType<org.springframework.boot.gradle.tasks.bundling.BootJar> {
             launchScript()
