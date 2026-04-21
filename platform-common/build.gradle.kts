@@ -1,37 +1,32 @@
 plugins {
     java
-    id("org.springframework.boot")
-    id("io.spring.dependency-management")
 }
 
-group = "com.migrator"
-version = "0.0.1-SNAPSHOT"
-
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
-}
-
-// THIS IS THE FIX: Disable executable jar, enable plain library jar
-tasks.getByName<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
-    enabled = false
-}
-
-tasks.jar {
-    enabled = true
-}
-
-repositories {
-    mavenCentral()
-}
+/*
+ * platform-common is a plain Java library — no Spring Boot application,
+ * no embedded server, no bootJar. It is imported by every service module
+ * as a dependency via project(":platform-common").
+ *
+ * Rules for this module:
+ *   - No @SpringBootApplication
+ *   - No @RestController, @Service, @Repository Spring annotations
+ *   - No JPA / Hibernate imports
+ *   - No Kafka imports
+ *   - Pure Java domain objects, enums, exceptions only
+ */
 
 dependencies {
-    compileOnly("org.projectlombok:lombok:1.18.34")
-    annotationProcessor("org.projectlombok:lombok:1.18.34")
-    testCompileOnly("org.projectlombok:lombok:1.18.34")
-    testAnnotationProcessor("org.projectlombok:lombok:1.18.34")
+    // Validation annotations (@NotNull, @NotBlank, etc.) used on Value Objects
+    implementation("jakarta.validation:jakarta.validation-api:3.0.2")
 
-    implementation("org.springframework.boot:spring-boot-starter-validation")
+    // Jackson for JSON serialisation of shared DTOs
     implementation("com.fasterxml.jackson.core:jackson-databind")
+
+    // Lombok — version managed by root build.gradle.kts BOM
+    compileOnly("org.projectlombok:lombok")
+    annotationProcessor("org.projectlombok:lombok")
+    testCompileOnly("org.projectlombok:lombok")
+    testAnnotationProcessor("org.projectlombok:lombok")
+
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
