@@ -1,0 +1,46 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: platform-orchestrator
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    consumer:
+      group-id: platform-orchestrator
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+
+kafka:
+  topics:
+    job-created: migration.job.created
+    job-status-update: migration.job.status.update
+
+minio:
+  endpoint:   ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ROOT_USER:admin}
+  secret-key: ${MINIO_ROOT_PASSWORD:password123}
+  bucket:
+    projects: migrator-projects
+
+ai:
+  provider:
+    base-url: ${AI_PROVIDER_BASE_URL:https://api.groq.com/openai/v1}
+    api-key:  ${AI_PROVIDER_API_KEY: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}
+    model:    ${AI_PROVIDER_MODEL:llama-3.3-70b-versatile}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

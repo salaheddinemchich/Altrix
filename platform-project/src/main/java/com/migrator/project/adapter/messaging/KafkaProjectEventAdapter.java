@@ -9,13 +9,13 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Secondary adapter — implements {@link ProjectEventPublisher} using Kafka.
+ * Publishes project.registered events.
  *
- * <p>Publishes a {@code project.registered} event carrying the project ID
- * and user ID so downstream services (platform-job) can react.
+ * Message format:
+ *   key   = projectId
+ *   value = userId|storageKey
  *
- * <p>Message key   = projectId  (ensures ordering per project)
- * Message value  = projectId  (job service reads this to create a job)
+ * Pipe-delimited so the job service can extract both userId and storageKey.
  */
 @Slf4j
 @Component
@@ -29,17 +29,17 @@ public class KafkaProjectEventAdapter implements ProjectEventPublisher {
 
     @Override
     public void publishProjectRegistered(Project project) {
-        log.info("Publishing project.registered event for project '{}'", project.getId());
+        // value = "userId|storageKey" — both needed by downstream services
+        String value = project.getUserId() + "|" + project.getStorageKey();
 
-        kafkaTemplate.send(topic, project.getId(), project.getId())
+        log.info("Publishing project.registered for project '{}' storageKey='{}'",
+                project.getId(), project.getStorageKey());
+
+        kafkaTemplate.send(topic, project.getId(), value)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
                         log.error("Failed to publish project.registered for '{}': {}",
                                 project.getId(), ex.getMessage());
-                    } else {
-                        log.debug("project.registered published to partition {} offset {}",
-                                result.getRecordMetadata().partition(),
-                                result.getRecordMetadata().offset());
                     }
                 });
     }

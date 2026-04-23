@@ -18,6 +18,7 @@ dependencies {
 
     // Validation
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("io.minio:minio:8.5.10")
 
     // Redis — job status cache
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
@@ -31,4 +32,7 @@ dependencies {
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
+
+    compileOnly("org.projectlombok:lombok")
+    annotationProcessor("org.projectlombok:lombok")
 }
