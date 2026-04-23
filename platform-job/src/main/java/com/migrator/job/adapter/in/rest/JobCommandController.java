@@ -9,10 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * Primary adapter — handles COMMAND (write) operations.
- * Completely separate from {@link JobQueryController}.
- */
 @Validated
 @RestController
 @RequestMapping("/api/v1/jobs")
@@ -21,10 +17,6 @@ public class JobCommandController {
 
     private final CreateJobUseCase createJobUseCase;
 
-    /**
-     * POST /api/v1/jobs
-     * Manually trigger a migration job for an already-registered project.
-     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public JobResponse createJob(
@@ -34,6 +26,7 @@ public class JobCommandController {
         MigrationJob job = createJobUseCase.createJob(
                 request.projectId(),
                 userId,
+                null, // storageKey comes from project-registered event in normal flow
                 request.configFormatPreference()
         );
         return JobResponse.from(job);

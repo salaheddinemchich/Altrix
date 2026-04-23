@@ -9,10 +9,11 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Secondary adapter — publishes job events to Kafka.
+ * Publishes job events.
  *
- * <p>Message key = jobId (ensures partition ordering per job).
- * Message value = projectId (orchestrator needs this to load files).
+ * job.created message format:
+ *   key   = jobId
+ *   value = projectId|storageKey
  */
 @Slf4j
 @Component
@@ -29,7 +30,9 @@ public class KafkaJobEventAdapter implements JobEventPublisher {
 
     @Override
     public void publishJobCreated(MigrationJob job) {
-        kafkaTemplate.send(jobCreatedTopic, job.getId(), job.getProjectId())
+        // value = "projectId|storageKey" — orchestrator needs both
+        String value = job.getProjectId() + "|" + job.getProjectStorageKey();
+        kafkaTemplate.send(jobCreatedTopic, job.getId(), value)
                 .whenComplete((r, ex) -> {
                     if (ex != null) {
                         log.error("Failed to publish job.created for '{}': {}",
@@ -43,14 +46,6 @@ public class KafkaJobEventAdapter implements JobEventPublisher {
     @Override
     public void publishJobCompleted(MigrationJob job) {
         String payload = job.getId() + ":" + job.getStatus().name();
-        kafkaTemplate.send(jobCompletedTopic, job.getId(), payload)
-                .whenComplete((r, ex) -> {
-                    if (ex != null) {
-                        log.error("Failed to publish job.completed for '{}': {}",
-                                job.getId(), ex.getMessage());
-                    } else {
-                        log.debug("job.completed published for job '{}'", job.getId());
-                    }
-                });
+        kafkaTemplate.send(jobCompletedTopic, job.getId(), payload);
     }
 }

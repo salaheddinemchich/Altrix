@@ -10,22 +10,6 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-/**
- * DDD Entity — represents one migration job in the system.
- *
- * <p>A job is created automatically when a project is registered.
- * It tracks the full lifecycle from PENDING to DONE or FAILED.
- *
- * <p>No JPA annotations here. The persistence adapter maps this
- * to {@link com.migrator.job.adapter.out.persistence.MigrationJobJpaEntity}.
- *
- * <p>State machine:
- * <pre>
- *   PENDING → ANALYZING → MIGRATING → DONE
- *   any state → FAILED
- *   any state → CANCELLED
- * </pre>
- */
 @Getter
 @Builder(toBuilder = true)
 @With
@@ -34,24 +18,22 @@ public final class MigrationJob {
     private final String                 id;
     private final String                 projectId;
     private final String                 userId;
+
+    /** MinIO storage key of the uploaded project ZIP — needed by orchestrator. */
+    private final String                 projectStorageKey;
+
     private final JobStatus              status;
     private final ConfigFormatPreference configFormatPreference;
-
-    /** MinIO key for the migrated output ZIP — set when DONE. */
-    private final String  outputStorageKey;
-
-    /** Human-readable error message — set when FAILED. */
-    private final String  errorMessage;
-
-    private final Instant createdAt;
-    private final Instant updatedAt;
-    private final Instant completedAt;
-
-    // ── Factory ──────────────────────────────────────────────────────────────
+    private final String                 outputStorageKey;
+    private final String                 errorMessage;
+    private final Instant                createdAt;
+    private final Instant                updatedAt;
+    private final Instant                completedAt;
 
     public static MigrationJob create(
             String projectId,
             String userId,
+            String projectStorageKey,
             ConfigFormatPreference configFormatPreference
     ) {
         Instant now = Instant.now();
@@ -59,6 +41,7 @@ public final class MigrationJob {
                 .id(UUID.randomUUID().toString())
                 .projectId(projectId)
                 .userId(userId)
+                .projectStorageKey(projectStorageKey)
                 .status(JobStatus.PENDING)
                 .configFormatPreference(
                         Objects.requireNonNullElse(
@@ -69,18 +52,14 @@ public final class MigrationJob {
                 .build();
     }
 
-    // ── State transitions — each returns a new immutable instance ────────────
-
     public MigrationJob startAnalyzing() {
         assertNotTerminal();
-        return this.withStatus(JobStatus.ANALYZING)
-                   .withUpdatedAt(Instant.now());
+        return this.withStatus(JobStatus.ANALYZING).withUpdatedAt(Instant.now());
     }
 
     public MigrationJob startMigrating() {
         assertNotTerminal();
-        return this.withStatus(JobStatus.MIGRATING)
-                   .withUpdatedAt(Instant.now());
+        return this.withStatus(JobStatus.MIGRATING).withUpdatedAt(Instant.now());
     }
 
     public MigrationJob complete(String outputStorageKey) {
@@ -108,16 +87,12 @@ public final class MigrationJob {
                    .withCompletedAt(now);
     }
 
-    // ── Guards ────────────────────────────────────────────────────────────────
-
     private void assertNotTerminal() {
         if (status.isTerminal()) {
             throw new IllegalStateException(
                     "Cannot transition job '" + id + "' — already in terminal state: " + status);
         }
     }
-
-    // ── DDD Entity equality — by identity only ────────────────────────────────
 
     @Override
     public boolean equals(Object o) {
@@ -127,7 +102,5 @@ public final class MigrationJob {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
+    public int hashCode() { return Objects.hash(id); }
 }

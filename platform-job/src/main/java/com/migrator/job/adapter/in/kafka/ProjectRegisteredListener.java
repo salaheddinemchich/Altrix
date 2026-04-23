@@ -7,15 +7,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-/**
- * Primary adapter — Kafka listener for project.registered events.
- *
- * <p>When platform-project publishes a project.registered event,
- * this listener creates a migration job automatically.
- *
- * <p>Message key   = projectId
- * Message value  = projectId
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -24,16 +15,23 @@ public class ProjectRegisteredListener {
     private final CreateJobUseCase createJobUseCase;
 
     @KafkaListener(
-            topics   = "${kafka.topics.project-registered}",
-            groupId  = "${spring.kafka.consumer.group-id}"
+            topics  = "${kafka.topics.project-registered}",
+            groupId = "${spring.kafka.consumer.group-id}"
     )
     public void onProjectRegistered(ConsumerRecord<String, String> record) {
         String projectId = record.key();
-        String userId    = record.value(); // platform-project sends userId as value
+        String value     = record.value();
 
-        log.info("Received project.registered for project '{}' user '{}'",
-                projectId, userId);
+        if (projectId == null || value == null) return;
 
-        createJobUseCase.createJob(projectId, userId, null);
+        // value = "userId|storageKey"
+        String[] parts      = value.split("\\|", 2);
+        String userId       = parts[0];
+        String storageKey   = parts.length > 1 ? parts[1] : "";
+
+        log.info("Creating job for project '{}' user '{}' storageKey='{}'",
+                projectId, userId, storageKey);
+
+        createJobUseCase.createJob(projectId, userId, storageKey, null);
     }
 }

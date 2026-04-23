@@ -4,24 +4,14 @@ import com.migrator.common.domain.enums.ConfigFormatPreference;
 import com.migrator.common.domain.enums.JobStatus;
 import jakarta.persistence.*;
 import lombok.*;
-
 import java.time.Instant;
 
-/**
- * JPA persistence entity for the migration_jobs table.
- * Lives in the adapter layer — never imported by the domain.
- */
 @Entity
 @Table(name = "migration_jobs")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class MigrationJobJpaEntity {
 
-    @Id
-    @Column(nullable = false, updatable = false, length = 36)
+    @Id @Column(nullable = false, updatable = false, length = 36)
     private String id;
 
     @Column(name = "project_id", nullable = false, length = 36)
@@ -29,6 +19,10 @@ public class MigrationJobJpaEntity {
 
     @Column(name = "user_id", nullable = false, length = 36)
     private String userId;
+
+    /** Storage key of the uploaded project ZIP in MinIO */
+    @Column(name = "project_storage_key")
+    private String projectStorageKey;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

@@ -11,50 +11,38 @@ import com.migrator.job.domain.port.out.JobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * CQRS Command service — handles all state-changing job operations.
- *
- * <p>Pure Java. No Spring, no JPA, no Kafka, no Redis imported here.
- * All infrastructure concerns are hidden behind port interfaces.
- */
 @Slf4j
 @RequiredArgsConstructor
 public class JobCommandService implements CreateJobUseCase, UpdateJobStatusUseCase {
 
-    private final JobRepository    jobRepository;
-    private final JobCachePort     jobCachePort;
+    private final JobRepository     jobRepository;
+    private final JobCachePort      jobCachePort;
     private final JobEventPublisher jobEventPublisher;
-
-    // ── CreateJobUseCase ──────────────────────────────────────────────────────
 
     @Override
     public MigrationJob createJob(
             String projectId,
             String userId,
+            String projectStorageKey,
             ConfigFormatPreference configFormatPreference
     ) {
         log.info("Creating job for project '{}' user '{}'", projectId, userId);
-
-        MigrationJob job = MigrationJob.create(projectId, userId, configFormatPreference);
+        MigrationJob job = MigrationJob.create(projectId, userId, projectStorageKey, configFormatPreference);
         job = jobRepository.save(job);
-
         jobCachePort.putStatus(job.getId(), job.getStatus().name());
         jobEventPublisher.publishJobCreated(job);
-
         log.info("Job '{}' created in PENDING status", job.getId());
         return job;
     }
 
-    // ── UpdateJobStatusUseCase ────────────────────────────────────────────────
-
     @Override
     public MigrationJob markAnalyzing(String jobId) {
-        return updateAndPersist(jobId, job -> job.startAnalyzing());
+        return updateAndPersist(jobId, MigrationJob::startAnalyzing);
     }
 
     @Override
     public MigrationJob markMigrating(String jobId) {
-        return updateAndPersist(jobId, job -> job.startMigrating());
+        return updateAndPersist(jobId, MigrationJob::startMigrating);
     }
 
     @Override
@@ -63,7 +51,6 @@ public class JobCommandService implements CreateJobUseCase, UpdateJobStatusUseCa
         updated = jobRepository.save(updated);
         jobCachePort.putStatus(updated.getId(), updated.getStatus().name());
         jobEventPublisher.publishJobCompleted(updated);
-        log.info("Job '{}' DONE — output at '{}'", jobId, outputStorageKey);
         return updated;
     }
 
@@ -73,11 +60,8 @@ public class JobCommandService implements CreateJobUseCase, UpdateJobStatusUseCa
         updated = jobRepository.save(updated);
         jobCachePort.putStatus(updated.getId(), updated.getStatus().name());
         jobEventPublisher.publishJobCompleted(updated);
-        log.error("Job '{}' FAILED — reason: {}", jobId, reason);
         return updated;
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private MigrationJob updateAndPersist(
             String jobId,
@@ -86,7 +70,6 @@ public class JobCommandService implements CreateJobUseCase, UpdateJobStatusUseCa
         MigrationJob updated = transition.apply(loadOrThrow(jobId));
         updated = jobRepository.save(updated);
         jobCachePort.putStatus(updated.getId(), updated.getStatus().name());
-        log.debug("Job '{}' → {}", jobId, updated.getStatus());
         return updated;
     }
 
