@@ -1,4 +1,4 @@
-package com.migrator.project.adapter.messaging;
+package com.migrator.project.adapter.out.messaging;
 
 import com.migrator.project.domain.model.Project;
 import com.migrator.project.domain.port.out.ProjectEventPublisher;

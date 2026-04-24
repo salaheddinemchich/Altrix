@@ -1,4 +1,4 @@
-package com.migrator.project.adapter.persistence;
+package com.migrator.project.adapter.out.persistence;
 
 import com.migrator.common.domain.enums.BuildSystem;
 import com.migrator.common.domain.enums.ConfigFormat;

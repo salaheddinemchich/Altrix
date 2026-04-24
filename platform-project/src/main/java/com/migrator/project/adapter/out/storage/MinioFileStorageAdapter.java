@@ -1,4 +1,4 @@
-package com.migrator.project.adapter.storage;
+package com.migrator.project.adapter.out.storage;
 
 import com.migrator.project.domain.port.out.FileStoragePort;
 import io.minio.*;
