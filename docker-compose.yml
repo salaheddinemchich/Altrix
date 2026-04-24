@@ -121,6 +121,21 @@ services:
     networks:
       - migrator-net
 
+  # ── GCP PubSub Emulator ──────────────────────────────────────────────────────
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    container_name: migrator-pubsub-emulator
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085
+    ports:
+      - "8085:8085"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - migrator-net
+
 # ── Named volumes (Docker manages the data, never touches the repo) ──────────
 volumes:
   postgres_data:

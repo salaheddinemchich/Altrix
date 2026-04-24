@@ -7,7 +7,6 @@ COPY build.gradle.kts settings.gradle.kts gradle.properties ./
 
 COPY platform-common/build.gradle.kts platform-common/build.gradle.kts
 COPY platform-common/src               platform-common/src
-
 COPY platform-orchestrator/build.gradle.kts platform-orchestrator/build.gradle.kts
 COPY platform-orchestrator/src               platform-orchestrator/src
 
