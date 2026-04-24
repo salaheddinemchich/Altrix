@@ -1,4 +1,4 @@
-package com.migrator.project.adapter.persistence;
+package com.migrator.project.adapter.out.persistence;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;

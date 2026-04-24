@@ -1,0 +1,28 @@
+# ── Stage 1: Build ────────────────────────────────────────────────────────────
+FROM eclipse-temurin:21-jdk-alpine AS builder
+WORKDIR /workspace
+
+COPY gradlew .
+COPY gradle/ gradle/
+COPY build.gradle.kts settings.gradle.kts gradle.properties ./
+
+COPY platform-common/build.gradle.kts platform-common/build.gradle.kts
+COPY platform-common/src               platform-common/src
+
+COPY platform-project/build.gradle.kts platform-project/build.gradle.kts
+COPY platform-project/src               platform-project/src
+
+RUN chmod +x gradlew && \
+    ./gradlew :platform-project:bootJar -x test --no-daemon --stacktrace
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+COPY --from=builder /workspace/platform-project/build/libs/*.jar app.jar
+
+EXPOSE 8082
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]

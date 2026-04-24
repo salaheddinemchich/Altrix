@@ -1,0 +1,23 @@
+FROM eclipse-temurin:21-jdk-alpine AS builder
+WORKDIR /workspace
+
+COPY gradlew .
+COPY gradle/ gradle/
+COPY build.gradle.kts settings.gradle.kts gradle.properties ./
+
+COPY platform-common/build.gradle.kts platform-common/build.gradle.kts
+COPY platform-common/src               platform-common/src
+
+COPY platform-orchestrator/build.gradle.kts platform-orchestrator/build.gradle.kts
+COPY platform-orchestrator/src               platform-orchestrator/src
+
+RUN chmod +x gradlew && \
+    ./gradlew :platform-orchestrator:bootJar -x test --no-daemon
+
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+COPY --from=builder /workspace/platform-orchestrator/build/libs/*.jar app.jar
+EXPOSE 8084
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
