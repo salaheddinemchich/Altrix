@@ -9,7 +9,7 @@ on:
 env:
   JAVA_VERSION: "21"
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator
+  IMAGE_OWNER: ${{ github.repository_owner }}
 
 jobs:
 
@@ -17,12 +17,14 @@ jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.sha }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history needed for SonarQube blame
+          fetch-depth: 0
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
@@ -31,46 +33,55 @@ jobs:
           distribution: temurin
           cache: gradle
 
-      - name: Grant gradlew permission
-        run: chmod +x gradlew
-
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v3
 
-      - name: Build all modules
+      - name: Grant gradlew permission
+        run: chmod +x gradlew
+
+      - name: Set version output
+        id: version
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build (skip tests)
         run: ./gradlew build -x test --parallel --no-daemon
 
       - name: Run tests with coverage
-        run: ./gradlew test jacocoTestReport --parallel --no-daemon
+        run: |
+          ./gradlew \
+            :platform-common:test :platform-common:jacocoTestReport \
+            :platform-project:test :platform-project:jacocoTestReport \
+            :platform-job:test :platform-job:jacocoTestReport \
+            :platform-orchestrator:test :platform-orchestrator:jacocoTestReport \
+            --parallel --no-daemon --continue
 
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports
+          name: test-reports-${{ steps.version.outputs.sha }}
           path: "**/build/reports/tests/"
-          retention-days: 7
+          retention-days: 14
 
       - name: Upload coverage reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-reports
+          name: coverage-reports-${{ steps.version.outputs.sha }}
           path: "**/build/reports/jacoco/"
-          retention-days: 7
+          retention-days: 14
 
   # ── 2. SonarQube Analysis ────────────────────────────────────────────────────
   sonarqube:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: build-and-test
-    # Run on main pushes and PRs to main
     if: |
       github.event_name == 'pull_request' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -85,29 +96,30 @@ jobs:
       - name: Grant gradlew permission
         run: chmod +x gradlew
 
-      - name: Build and generate coverage for SonarQube
-        run: ./gradlew build jacocoTestReport --parallel --no-daemon
+      - name: Build and generate coverage
+        run: |
+          ./gradlew build \
+            :platform-common:jacocoTestReport \
+            :platform-project:jacocoTestReport \
+            :platform-job:jacocoTestReport \
+            :platform-orchestrator:jacocoTestReport \
+            --parallel --no-daemon --continue
 
-      - name: Run SonarQube scan
+      - name: SonarQube Scan
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          ./gradlew sonar \
-            --no-daemon \
-            -Dsonar.projectKey=pubsub-kafka-migrator \
-            -Dsonar.projectName="PubSub to Kafka Migrator" \
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
-            -Dsonar.sources=platform-common/src/main,platform-project/src/main,platform-job/src/main,platform-orchestrator/src/main \
-            -Dsonar.tests=platform-common/src/test,platform-project/src/test,platform-job/src/test,platform-orchestrator/src/test \
-            -Dsonar.java.binaries=platform-common/build/classes/java/main,platform-project/build/classes/java/main,platform-job/build/classes/java/main,platform-orchestrator/build/classes/java/main \
-            -Dsonar.coverage.jacoco.xmlReportPaths=platform-common/build/reports/jacoco/test/jacocoTestReport.xml,platform-project/build/reports/jacoco/test/jacocoTestReport.xml,platform-job/build/reports/jacoco/test/jacocoTestReport.xml,platform-orchestrator/build/reports/jacoco/test/jacocoTestReport.xml \
-            -Dsonar.exclusions="**/build/**,**/.gradle/**,**/infra/postgres/**,**/*Application.java"
+          ./gradlew sonar --no-daemon \
+            -Dsonar.host.url="${SONAR_HOST_URL}" \
+            -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.pullrequest.key=${{ github.event.pull_request.number || '' }} \
+            -Dsonar.pullrequest.branch=${{ github.head_ref || '' }} \
+            -Dsonar.pullrequest.base=${{ github.base_ref || 'main' }}
 
   # ── 3. Docker Build & Push ───────────────────────────────────────────────────
   docker-build:
-    name: Build & Push Docker Images
+    name: Docker — ${{ matrix.service.name }}
     runs-on: ubuntu-latest
     needs: build-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -117,44 +129,41 @@ jobs:
       packages: write
 
     strategy:
+      fail-fast: false
       matrix:
         service:
           - name: platform-project
             dockerfile: infra/docker/Dockerfile.platform-project
-            port: 8082
           - name: platform-job
             dockerfile: infra/docker/Dockerfile.platform-job
-            port: 8083
           - name: platform-orchestrator
             dockerfile: infra/docker/Dockerfile.platform-orchestrator
-            port: 8084
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/pubsub-kafka-migrator/${{ matrix.service.name }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/pubsub-kafka-migrator/${{ matrix.service.name }}
           tags: |
-            type=ref,event=branch
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=true
 
       - name: Build and push ${{ matrix.service.name }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.service.dockerfile }}
@@ -162,39 +171,50 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+          cache-to:   type=gha,mode=max,scope=${{ matrix.service.name }}
+          # Security: provenance and SBOM for supply-chain transparency
+          provenance: true
+          sbom: true
 
   # ── 4. Deploy to Staging ─────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: docker-build
+    needs: [ docker-build, sonarqube ]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: staging
+    environment:
+      name: staging
+      url: http://$\{\{ secrets.STAGING_HOST }}:8082/actuator/health
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy via Docker Compose (SSH)
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.STAGING_HOST }}
+          host:     ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
+          key:      ${{ secrets.STAGING_SSH_KEY }}
           script: |
+            set -e
             cd /opt/pubsub-kafka-migrator
 
-            # Pull latest images
-            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-project:latest
-            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-job:latest
-            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-orchestrator:latest
+            echo "Pulling latest images..."
+            docker pull ghcr.io/${{ env.IMAGE_OWNER }}/pubsub-kafka-migrator/platform-project:latest
+            docker pull ghcr.io/${{ env.IMAGE_OWNER }}/pubsub-kafka-migrator/platform-job:latest
+            docker pull ghcr.io/${{ env.IMAGE_OWNER }}/pubsub-kafka-migrator/platform-orchestrator:latest
 
-            # Restart services with zero-downtime rolling update
+            echo "Restarting services..."
             docker compose up -d --no-deps --force-recreate \
               platform-project platform-job platform-orchestrator
 
-            # Health check
-            sleep 10
-            docker compose ps
-            echo "Deployment complete"
+            echo "Waiting for health checks..."
+            sleep 15
+
+            echo "Verifying health..."
+            curl -sf http://localhost:8082/actuator/health | grep '"status":"UP"'
+            curl -sf http://localhost:8083/actuator/health | grep '"status":"UP"'
+            curl -sf http://localhost:8084/actuator/health | grep '"status":"UP"'
+
+            echo "Deployment successful."
