@@ -9,7 +9,6 @@ on:
 env:
   JAVA_VERSION: "21"
   REGISTRY: ghcr.io
-  IMAGE_OWNER: ${{ github.repository_owner }}
 
 jobs:
 
@@ -18,7 +17,7 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.sha }}
+      sha: ${{ steps.version.outputs.sha }}
 
     steps:
       - name: Checkout
@@ -33,25 +32,22 @@ jobs:
           distribution: temurin
           cache: gradle
 
-      - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v3
-
       - name: Grant gradlew permission
         run: chmod +x gradlew
 
-      - name: Set version output
+      - name: Set version
         id: version
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build (skip tests)
         run: ./gradlew build -x test --parallel --no-daemon
 
-      - name: Run tests with coverage
+      - name: Run tests with JaCoCo coverage
         run: |
           ./gradlew \
-            :platform-common:test :platform-common:jacocoTestReport \
-            :platform-project:test :platform-project:jacocoTestReport \
-            :platform-job:test :platform-job:jacocoTestReport \
+            :platform-common:test     :platform-common:jacocoTestReport \
+            :platform-project:test    :platform-project:jacocoTestReport \
+            :platform-job:test        :platform-job:jacocoTestReport \
             :platform-orchestrator:test :platform-orchestrator:jacocoTestReport \
             --parallel --no-daemon --continue
 
@@ -96,7 +92,7 @@ jobs:
       - name: Grant gradlew permission
         run: chmod +x gradlew
 
-      - name: Build and generate coverage
+      - name: Build with coverage
         run: |
           ./gradlew build \
             :platform-common:jacocoTestReport \
@@ -112,10 +108,7 @@ jobs:
         run: |
           ./gradlew sonar --no-daemon \
             -Dsonar.host.url="${SONAR_HOST_URL}" \
-            -Dsonar.token="${SONAR_TOKEN}" \
-            -Dsonar.pullrequest.key=${{ github.event.pull_request.number || '' }} \
-            -Dsonar.pullrequest.branch=${{ github.head_ref || '' }} \
-            -Dsonar.pullrequest.base=${{ github.base_ref || 'main' }}
+            -Dsonar.token="${SONAR_TOKEN}"
 
   # ── 3. Docker Build & Push ───────────────────────────────────────────────────
   docker-build:
@@ -157,7 +150,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/pubsub-kafka-migrator/${{ matrix.service.name }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/pubsub-kafka-migrator/${{ matrix.service.name }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable=true
@@ -172,7 +165,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service.name }}
           cache-to:   type=gha,mode=max,scope=${{ matrix.service.name }}
-          # Security: provenance and SBOM for supply-chain transparency
           provenance: true
           sbom: true
 
@@ -200,21 +192,15 @@ jobs:
             set -e
             cd /opt/pubsub-kafka-migrator
 
-            echo "Pulling latest images..."
-            docker pull ghcr.io/${{ env.IMAGE_OWNER }}/pubsub-kafka-migrator/platform-project:latest
-            docker pull ghcr.io/${{ env.IMAGE_OWNER }}/pubsub-kafka-migrator/platform-job:latest
-            docker pull ghcr.io/${{ env.IMAGE_OWNER }}/pubsub-kafka-migrator/platform-orchestrator:latest
+            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-project:latest
+            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-job:latest
+            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-orchestrator:latest
 
-            echo "Restarting services..."
             docker compose up -d --no-deps --force-recreate \
               platform-project platform-job platform-orchestrator
 
-            echo "Waiting for health checks..."
             sleep 15
-
-            echo "Verifying health..."
             curl -sf http://localhost:8082/actuator/health | grep '"status":"UP"'
             curl -sf http://localhost:8083/actuator/health | grep '"status":"UP"'
             curl -sf http://localhost:8084/actuator/health | grep '"status":"UP"'
-
             echo "Deployment successful."

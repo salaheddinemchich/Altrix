@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+*.iml
+
+# Build outputs (we rebuild inside Docker)
+build/
+*/build/
+.gradle/
+*/.gradle/
+
+# Environment secrets
+.env
+.env.local
+
+# Postgres runtime data
+infra/postgres/base/
+infra/postgres/global/
+infra/postgres/pg_wal/
+infra/postgres/pg_xact/
+
+# Documentation
+README.md
+docs/
+
+# Test results
+**/build/reports/
