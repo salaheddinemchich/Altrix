@@ -5,10 +5,14 @@ COPY gradlew .
 COPY gradle/ gradle/
 COPY build.gradle.kts settings.gradle.kts gradle.properties ./
 
-COPY platform-common/build.gradle.kts platform-common/build.gradle.kts
-COPY platform-common/src               platform-common/src
+COPY platform-common/build.gradle.kts     platform-common/build.gradle.kts
+COPY platform-common/src                  platform-common/src
+COPY platform-project/build.gradle.kts    platform-project/build.gradle.kts
+COPY platform-project/src                 platform-project/src
+COPY platform-job/build.gradle.kts        platform-job/build.gradle.kts
+COPY platform-job/src                     platform-job/src
 COPY platform-orchestrator/build.gradle.kts platform-orchestrator/build.gradle.kts
-COPY platform-orchestrator/src               platform-orchestrator/src
+COPY platform-orchestrator/src              platform-orchestrator/src
 
 RUN chmod +x gradlew && \
     ./gradlew :platform-orchestrator:bootJar -x test --no-daemon
