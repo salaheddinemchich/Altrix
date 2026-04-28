@@ -14,18 +14,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Secondary adapter — implements {@link AiPort} using the Groq API.
- *
- * <p>Groq uses the OpenAI-compatible chat completions API.
- * Swap to any other provider (OpenAI, Ollama, Together AI) by writing
- * a new adapter that implements {@link AiPort} — zero domain changes.
- *
- * <p>Provider config via .env:
- * <ul>
- *   <li>Groq (free):  AI_PROVIDER_BASE_URL=https://api.groq.com/openai/v1</li>
- *   <li>OpenAI:       AI_PROVIDER_BASE_URL=https://api.openai.com/v1</li>
- *   <li>Ollama(local):AI_PROVIDER_BASE_URL=http://localhost:11434/v1</li>
- * </ul>
+ * Groq AI adapter with dual-model support:
+ * - Fast model (llama-3.1-8b-instant) for analysis agents — fewer tokens
+ * - Main model (llama-3.3-70b-versatile) for migration agents — better quality
  */
 @Slf4j
 @Component
@@ -33,15 +24,18 @@ public class GroqAiAdapter implements AiPort {
 
     private final WebClient    webClient;
     private final ObjectMapper objectMapper;
-    private final String       model;
+    private final String       modelFast;
+    private final String       modelMain;
 
     public GroqAiAdapter(
             @Value("${ai.provider.base-url}") String baseUrl,
             @Value("${ai.provider.api-key}")  String apiKey,
-            @Value("${ai.provider.model}")    String model,
+            @Value("${ai.provider.model-fast:llama-3.1-8b-instant}") String modelFast,
+            @Value("${ai.provider.model-main:llama-3.3-70b-versatile}") String modelMain,
             ObjectMapper objectMapper
     ) {
-        this.model        = model;
+        this.modelFast    = modelFast;
+        this.modelMain    = modelMain;
         this.objectMapper = objectMapper;
         this.webClient    = WebClient.builder()
                 .baseUrl(baseUrl)
@@ -49,10 +43,20 @@ public class GroqAiAdapter implements AiPort {
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .codecs(c -> c.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
                 .build();
+        log.info("GroqAiAdapter initialized — fast={} main={}", modelFast, modelMain);
     }
 
     @Override
     public String chat(String systemPrompt, String userContent) {
+        return chatWithModel(modelMain, systemPrompt, userContent);
+    }
+
+    @Override
+    public String chatFast(String systemPrompt, String userContent) {
+        return chatWithModel(modelFast, systemPrompt, userContent);
+    }
+
+    private String chatWithModel(String model, String systemPrompt, String userContent) {
         Map<String, Object> body = Map.of(
                 "model",       model,
                 "temperature", 0.1,
@@ -62,6 +66,9 @@ public class GroqAiAdapter implements AiPort {
                         Map.of("role", "user",   "content", userContent)
                 )
         );
+
+        log.debug("Calling AI model={} promptLen={} contentLen={}",
+                model, systemPrompt.length(), userContent.length());
 
         try {
             String response = webClient.post()
@@ -73,8 +80,7 @@ public class GroqAiAdapter implements AiPort {
 
             JsonNode root    = objectMapper.readTree(response);
             String   content = root.at("/choices/0/message/content").asText();
-
-            log.debug("AI response received ({} chars)", content.length());
+            log.debug("AI response received ({} chars) from model={}", content.length(), model);
             return content;
 
         } catch (Exception e) {

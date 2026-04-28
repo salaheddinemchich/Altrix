@@ -7,23 +7,10 @@ import org.springframework.data.jpa.domain.Specification;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Criteria API Specification factory for {@link MigrationJobJpaEntity}.
- *
- * <p>Each static method returns a composable {@link Specification}.
- * The persistence adapter combines them using {@code .and()} based on
- * which fields in {@link JobFilter} are non-null.
- *
- * <p>This pattern avoids raw JPQL strings and keeps queries type-safe,
- * testable, and composable — following the Open/Closed Principle.
- */
 public final class JobSpecification {
 
     private JobSpecification() {}
 
-    /**
-     * Builds a combined Specification from all non-null fields in the filter.
-     */
     public static Specification<MigrationJobJpaEntity> from(JobFilter filter) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -46,8 +33,11 @@ public final class JobSpecification {
                         root.get("createdAt"), filter.createdBefore()));
             }
 
-            // Default sort — newest first
-            query.orderBy(cb.desc(root.get("createdAt")));
+            // Guard: query is null in count queries — only apply orderBy for select queries
+            if (query != null && query.getResultType() != Long.class
+                    && query.getResultType() != long.class) {
+                query.orderBy(cb.desc(root.get("createdAt")));
+            }
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };

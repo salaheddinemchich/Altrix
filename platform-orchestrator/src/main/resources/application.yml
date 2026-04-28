@@ -33,8 +33,13 @@ minio:
 ai:
   provider:
     base-url: ${AI_PROVIDER_BASE_URL:https://api.groq.com/openai/v1}
-    api-key:  ${AI_PROVIDER_API_KEY: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}
-    model:    ${AI_PROVIDER_MODEL:llama-3.3-70b-versatile}
+    api-key:  ${AI_PROVIDER_API_KEY:}
+    # Fast small model for Agent 1 (analysis) — uses fewer tokens
+    model-fast: ${AI_PROVIDER_MODEL_FAST:llama-3.1-8b-instant}
+    # Powerful model for Agent 3 (actual code rewrite)
+    model-main: ${AI_PROVIDER_MODEL:llama-3.3-70b-versatile}
+  # Delay between agents in milliseconds — prevents Groq 429 rate limit
+  inter-agent-delay-ms: ${AI_INTER_AGENT_DELAY_MS:65000}
 
 management:
   endpoints:

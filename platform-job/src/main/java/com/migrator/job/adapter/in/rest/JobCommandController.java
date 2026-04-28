@@ -1,6 +1,5 @@
 package com.migrator.job.adapter.in.rest;
 
-import com.migrator.common.domain.enums.ConfigFormatPreference;
 import com.migrator.job.domain.model.MigrationJob;
 import com.migrator.job.domain.port.in.CreateJobUseCase;
 import jakarta.validation.constraints.NotBlank;

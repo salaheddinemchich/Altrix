@@ -12,10 +12,6 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
-/**
- * Wires domain services to adapter implementations.
- * Spring auto-discovers all AgentPort beans and injects them as a list.
- */
 @Configuration
 public class BeanConfig {
 
@@ -24,13 +20,15 @@ public class BeanConfig {
             List<AgentPort>         agents,
             JobStatusUpdatePort     jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
-            ProgressNotifierPort    progressNotifierPort
+            ProgressNotifierPort    progressNotifierPort,
+            @Value("${ai.inter-agent-delay-ms:65000}") long interAgentDelayMs
     ) {
         return new OrchestratorService(
                 agents,
                 jobStatusUpdatePort,
                 migratedFileStoragePort,
-                progressNotifierPort
+                progressNotifierPort,
+                interAgentDelayMs
         );
     }
 

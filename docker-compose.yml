@@ -1,6 +1,6 @@
 services:
 
-  # ── Database ────────────────────────────────────────────────────────────────
+  # ── Database ──────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16.8-alpine
     container_name: migrator-postgres
@@ -21,7 +21,6 @@ services:
     networks:
       - migrator-net
 
-  # Fix: use a real-looking email domain — pgAdmin validates it
   pgadmin:
     image: dpage/pgadmin4:8.14
     container_name: migrator-pgadmin
@@ -36,7 +35,7 @@ services:
     networks:
       - migrator-net
 
-  # ── Cache ───────────────────────────────────────────────────────────────────
+  # ── Cache ─────────────────────────────────────────────────────────────────
   redis:
     image: redis:7.2.7-alpine
     container_name: migrator-redis
@@ -56,31 +55,28 @@ services:
     container_name: migrator-redis-ui
     ports:
       - "8001:8001"
-    depends_on:
-      redis:
-        condition: service_healthy
     networks:
       - migrator-net
 
-  # ── Messaging ───────────────────────────────────────────────────────────────
+  # ── Messaging ─────────────────────────────────────────────────────────────
   kafka:
     image: apache/kafka:3.9.0
     container_name: migrator-kafka
     ports:
       - "9092:9092"
-      - "29092:29092"   # ← RESTORED: required for local bootRun services
+      - "29092:29092"
     environment:
-      KAFKA_NODE_ID:                        1
-      KAFKA_PROCESS_ROLES:                  broker,controller
-      KAFKA_LISTENERS:                      PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
-      KAFKA_ADVERTISED_LISTENERS:           PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME:     PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS:       1@localhost:9093
-      KAFKA_CONTROLLER_LISTENER_NAMES:      CONTROLLER
+      KAFKA_NODE_ID:                          1
+      KAFKA_PROCESS_ROLES:                    broker,controller
+      KAFKA_LISTENERS:                        PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS:             PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:   PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME:       PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS:         1@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES:        CONTROLLER
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
       interval: 20s
       timeout: 10s
       retries: 10
@@ -102,7 +98,7 @@ services:
     networks:
       - migrator-net
 
-  # ── Object Storage ──────────────────────────────────────────────────────────
+  # ── Object Storage ────────────────────────────────────────────────────────
   minio:
     image: minio/minio:RELEASE.2024-11-07T00-52-20Z
     container_name: migrator-minio
@@ -116,14 +112,14 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"\]
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - migrator-net
 
-  # ── GCP PubSub Emulator ──────────────────────────────────────────────────────
+  # ── GCP PubSub Emulator ───────────────────────────────────────────────────
   pubsub-emulator:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
     container_name: migrator-pubsub-emulator
@@ -133,7 +129,7 @@ services:
     networks:
       - migrator-net
 
-  # ── SonarQube ────────────────────────────────────────────────────────────────
+  # ── SonarQube ─────────────────────────────────────────────────────────────
   sonarqube-db:
     image: postgres:16.8-alpine
     container_name: migrator-sonarqube-db
@@ -171,17 +167,16 @@ services:
       nofile:
         soft: 131072
         hard: 131072
-    # Relaxed health check — SonarQube takes 3-4 min to fully start
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/api/system/status | grep -q 'UP\\|STARTING' || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/api/system/status | python3 -c \"import sys,json; s=json.load(sys.stdin); sys.exit(0 if s.get('status') in ['UP','STARTING'] else 1)\""]
       interval: 30s
-      timeout: 15s
+      timeout: 20s
       retries: 20
       start_period: 120s
     networks:
       - migrator-net
 
-# ── Named volumes ─────────────────────────────────────────────────────────────
+# ── Named volumes ─────────────────────────────────────────────────────────
 volumes:
   postgres_data:
   minio_data:

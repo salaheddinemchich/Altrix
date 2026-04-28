@@ -19,27 +19,25 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ArchitectureAnalyzerAgent implements AgentPort {
 
-    private final AiPort        aiPort;
-    private final FileReaderPort fileReaderPort;
-    private final ObjectMapper  objectMapper;
+    private final AiPort         aiPort;
+    private final FileReaderPort  fileReaderPort;
+    private final ObjectMapper    objectMapper;
 
     private static final String SYSTEM_PROMPT = """
-            You are an expert Java developer analysing a Spring Boot or Java EE application
-            that uses Google Cloud PubSub.
-
-            Your task: identify EVERY PubSub-related component in the provided source files.
+            You are a Java expert analyzing a Spring Boot application that uses Google Cloud PubSub.
+            Identify every PubSub component in the source files provided.
 
             Look for:
-            - @PubSubListener annotations
-            - PubSubTemplate usages (.publish() calls)
-            - ProjectSubscriptionName references
-            - MessagePublisher beans
+            - PubSubTemplate usages and .publish() calls
+            - @ServiceActivator on message handler methods
+            - PubSubInboundChannelAdapter beans
             - Topic and subscription string literals
+            - Classes that import com.google.cloud.spring.pubsub
 
-            Respond ONLY with a valid JSON object — no markdown, no explanation:
+            Respond ONLY with valid JSON — no markdown, no explanation:
             {
-              "pubSubTopics":        ["topic-name-1"],
-              "pubSubSubscriptions": ["subscription-name-1"],
+              "pubSubTopics":        ["topic-name"],
+              "pubSubSubscriptions": ["subscription-name"],
               "listenerClasses":     ["com.example.MyListener"],
               "publisherClasses":    ["com.example.MyPublisher"]
             }
@@ -53,35 +51,37 @@ public class ArchitectureAnalyzerAgent implements AgentPort {
 
     @Override
     public ProjectContext execute(ProjectContext context) {
-        log.info("Agent 1 — reading source files storageKey='{}'", context.storageKey());
+        log.info("Agent 1 — storageKey='{}'", context.storageKey());
 
         if (context.storageKey() == null || context.storageKey().isBlank()) {
-            log.warn("No storageKey in context — skipping file read");
+            log.warn("No storageKey — skipping file read");
             return context;
         }
 
         Map<String, String> sourceFiles = fileReaderPort.readSourceFiles(context.storageKey());
-
         if (sourceFiles.isEmpty()) {
-            log.warn("No source files found for storageKey '{}'", context.storageKey());
+            log.warn("No source files found at '{}'", context.storageKey());
             return context;
         }
 
-        StringBuilder userContent = new StringBuilder("Analyse these source files:\n\n");
+        StringBuilder userContent = new StringBuilder("Analyze these source files:\n\n");
         sourceFiles.forEach((path, content) ->
                 userContent.append("// FILE: ").append(path).append("\n")
                            .append(content).append("\n\n"));
 
-        log.debug("Sending {} source files to AI", sourceFiles.size());
-        String aiResponse = aiPort.chat(SYSTEM_PROMPT, userContent.toString());
+        log.info("Sending {} files to AI (fast model)", sourceFiles.size());
 
+        // Use fast model for analysis — cheaper tokens, respects rate limit
+        String aiResponse = aiPort.chatFast(SYSTEM_PROMPT, userContent.toString());
         return parseAndEnrich(context, aiResponse);
     }
 
     private ProjectContext parseAndEnrich(ProjectContext context, String aiResponse) {
         try {
             String cleaned = aiResponse.strip()
-                    .replaceAll("^```json", "").replaceAll("```$", "").strip();
+                    .replaceAll("(?s)^```json\\s*", "")
+                    .replaceAll("(?s)```\\s*$", "")
+                    .strip();
             JsonNode root = objectMapper.readTree(cleaned);
 
             List<String> topics        = readStringList(root, "pubSubTopics");
@@ -89,8 +89,8 @@ public class ArchitectureAnalyzerAgent implements AgentPort {
             List<String> listeners     = readStringList(root, "listenerClasses");
             List<String> publishers    = readStringList(root, "publisherClasses");
 
-            log.info("Agent 1 found: {} topics, {} subscriptions, {} listeners, {} publishers",
-                    topics.size(), subscriptions.size(), listeners.size(), publishers.size());
+            log.info("Agent 1 found: topics={} subs={} listeners={} publishers={}",
+                    topics, subscriptions, listeners, publishers);
 
             return context
                     .withPubSubTopics(topics)
@@ -99,7 +99,8 @@ public class ArchitectureAnalyzerAgent implements AgentPort {
                     .withPublisherClasses(publishers);
 
         } catch (Exception e) {
-            log.error("Failed to parse Agent 1 response: {}", e.getMessage());
+            log.error("Failed to parse Agent 1 response: {} — raw: {}",
+                    e.getMessage(), aiResponse.substring(0, Math.min(200, aiResponse.length())));
             return context;
         }
     }

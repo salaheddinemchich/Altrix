@@ -3,17 +3,14 @@ package com.migrator.orchestrator.domain.port.out;
 /**
  * Secondary port — abstraction over any AI provider.
  *
- * <p>The domain never imports WebClient, Groq, or OpenAI SDK.
- * Swap providers by writing a new adapter that implements this interface.
+ * Two methods allow using a smaller/faster model for lightweight tasks
+ * and a larger model for complex code rewriting.
  */
 public interface AiPort {
 
-    /**
-     * Sends a prompt to the AI and returns the raw text response.
-     *
-     * @param systemPrompt instructions that define the agent's role
-     * @param userContent  the actual content for the AI to analyse
-     * @return raw AI response text
-     */
+    /** Call with the main (powerful) model — use for code generation. */
     String chat(String systemPrompt, String userContent);
+
+    /** Call with the fast (smaller) model — use for analysis/classification. */
+    String chatFast(String systemPrompt, String userContent);
 }

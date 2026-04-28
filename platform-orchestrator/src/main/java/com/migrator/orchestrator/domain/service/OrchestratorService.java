@@ -12,21 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Core domain service — runs the agent pipeline.
- *
- * <p>Pure Java. No Spring, no Kafka, no MinIO, no WebSocket imported.
- *
- * <p>Pipeline execution:
- * <ol>
- *   <li>Sort agents by {@link AgentPort#getOrder()}</li>
- *   <li>Run each agent — pass current context in, get enriched context out</li>
- *   <li>Broadcast progress after each agent via {@link ProgressNotifierPort}</li>
- *   <li>Update job status in platform-job via {@link JobStatusUpdatePort}</li>
- *   <li>On completion — store migrated ZIP and mark job DONE</li>
- *   <li>On any failure — mark job FAILED and rethrow</li>
- * </ol>
- */
 @Slf4j
 public class OrchestratorService implements RunPipelineUseCase {
 
@@ -34,45 +19,55 @@ public class OrchestratorService implements RunPipelineUseCase {
     private final JobStatusUpdatePort     jobStatusUpdatePort;
     private final MigratedFileStoragePort migratedFileStoragePort;
     private final ProgressNotifierPort    progressNotifierPort;
+    private final long                    interAgentDelayMs;
 
     public OrchestratorService(
             List<AgentPort>         agents,
             JobStatusUpdatePort     jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
-            ProgressNotifierPort    progressNotifierPort
+            ProgressNotifierPort    progressNotifierPort,
+            long                    interAgentDelayMs
     ) {
-        // Sort once at construction — agents run in fixed order
-        this.agents                  = agents.stream()
+        this.agents               = agents.stream()
                 .sorted(Comparator.comparingInt(AgentPort::getOrder))
                 .toList();
-        this.jobStatusUpdatePort     = jobStatusUpdatePort;
+        this.jobStatusUpdatePort  = jobStatusUpdatePort;
         this.migratedFileStoragePort = migratedFileStoragePort;
-        this.progressNotifierPort    = progressNotifierPort;
+        this.progressNotifierPort = progressNotifierPort;
+        this.interAgentDelayMs    = interAgentDelayMs;
+        log.info("OrchestratorService initialized — {} agents, delay={}ms",
+                this.agents.size(), interAgentDelayMs);
     }
 
     @Override
     public ProjectContext run(ProjectContext initial) {
         String jobId = initial.jobId();
         log.info("Starting pipeline for job '{}'", jobId);
-
         ProjectContext context = initial;
 
         try {
-            for (AgentPort agent : agents) {
-                context = runAgent(agent, context);
+            for (int i = 0; i < agents.size(); i++) {
+                context = runAgent(agents.get(i), context);
+
+                if (i < agents.size() - 1 && interAgentDelayMs > 0) {
+                    log.info("Waiting {}ms between agents (rate limit guard)...", interAgentDelayMs);
+                    Thread.sleep(interAgentDelayMs);
+                }
             }
 
-            // All agents done — store output ZIP and mark DONE
             String outputKey = migratedFileStoragePort
                     .storeMigratedZip(jobId, context.migratedFiles());
 
             jobStatusUpdatePort.markDone(jobId, outputKey);
             progressNotifierPort.notify(jobId, "Pipeline", "DONE",
-                    "Migration complete. Output ready for download.");
-
+                    "Migration complete. Ready to download.");
             log.info("Pipeline DONE for job '{}'", jobId);
             return context;
 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            jobStatusUpdatePort.markFailed(jobId, "Pipeline interrupted");
+            throw new RuntimeException("Pipeline interrupted", e);
         } catch (Exception e) {
             log.error("Pipeline FAILED for job '{}': {}", jobId, e.getMessage(), e);
             jobStatusUpdatePort.markFailed(jobId, e.getMessage());
@@ -83,23 +78,18 @@ public class OrchestratorService implements RunPipelineUseCase {
 
     private ProjectContext runAgent(AgentPort agent, ProjectContext context) {
         String jobId = context.jobId();
-        log.info("Job '{}' — running agent [{}] {}", jobId, agent.getOrder(), agent.getName());
-
+        log.info("Job '{}' — agent [{}] {}", jobId, agent.getOrder(), agent.getName());
         progressNotifierPort.notify(jobId, agent.getName(), "RUNNING", null);
 
-        // Advance job status for known agents
         if (agent.getOrder() == 1) jobStatusUpdatePort.markAnalyzing(jobId);
         if (agent.getOrder() == 3) jobStatusUpdatePort.markMigrating(jobId);
 
         try {
             ProjectContext result = agent.execute(context);
             progressNotifierPort.notify(jobId, agent.getName(), "DONE", null);
-            log.info("Job '{}' — agent {} DONE", jobId, agent.getName());
             return result;
-
         } catch (Exception e) {
-            String reason = "Agent '" + agent.getName() + "' failed: " + e.getMessage();
-            progressNotifierPort.notify(jobId, agent.getName(), "FAILED", reason);
+            progressNotifierPort.notify(jobId, agent.getName(), "FAILED", e.getMessage());
             throw new AgentFailureException(agent.getName(), e.getMessage());
         }
     }
