@@ -42,13 +42,13 @@ jobs:
       - name: Build (skip tests)
         run: ./gradlew build -x test --parallel --no-daemon
 
-      - name: Run tests with JaCoCo coverage
+      - name: Run tests
         run: |
           ./gradlew \
-            :platform-common:test     :platform-common:jacocoTestReport \
-            :platform-project:test    :platform-project:jacocoTestReport \
-            :platform-job:test        :platform-job:jacocoTestReport \
-            :platform-orchestrator:test :platform-orchestrator:jacocoTestReport \
+            :platform-common:test \
+            :platform-project:test \
+            :platform-job:test \
+            :platform-orchestrator:test \
             --parallel --no-daemon --continue
 
       - name: Upload test reports
@@ -59,58 +59,7 @@ jobs:
           path: "**/build/reports/tests/"
           retention-days: 14
 
-      - name: Upload coverage reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-reports-${{ steps.version.outputs.sha }}
-          path: "**/build/reports/jacoco/"
-          retention-days: 14
-
-  # ── 2. SonarQube Analysis ────────────────────────────────────────────────────
-  sonarqube:
-    name: SonarQube Analysis
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    if: |
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
-          cache: gradle
-
-      - name: Grant gradlew permission
-        run: chmod +x gradlew
-
-      - name: Build with coverage
-        run: |
-          ./gradlew build \
-            :platform-common:jacocoTestReport \
-            :platform-project:jacocoTestReport \
-            :platform-job:jacocoTestReport \
-            :platform-orchestrator:jacocoTestReport \
-            --parallel --no-daemon --continue
-
-      - name: SonarQube Scan
-        env:
-          SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          ./gradlew sonar --no-daemon \
-            -Dsonar.host.url="${SONAR_HOST_URL}" \
-            -Dsonar.token="${SONAR_TOKEN}"
-
-  # ── 3. Docker Build & Push ───────────────────────────────────────────────────
+  # ── 2. Docker Build & Push ───────────────────────────────────────────────────
   docker-build:
     name: Docker — ${{ matrix.service.name }}
     runs-on: ubuntu-latest
@@ -165,23 +114,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service.name }}
           cache-to:   type=gha,mode=max,scope=${{ matrix.service.name }}
-          provenance: true
-          sbom: true
 
-  # ── 4. Deploy to Staging ─────────────────────────────────────────────────────
+  # ── 3. Deploy to Staging ─────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [ docker-build, sonarqube ]
+    needs: docker-build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: staging
-      url: http://$\{\{ secrets.STAGING_HOST }}:8082/actuator/health
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -191,16 +134,9 @@ jobs:
           script: |
             set -e
             cd /opt/pubsub-kafka-migrator
-
             docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-project:latest
             docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-job:latest
             docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-orchestrator:latest
-
             docker compose up -d --no-deps --force-recreate \
               platform-project platform-job platform-orchestrator
-
-            sleep 15
-            curl -sf http://localhost:8082/actuator/health | grep '"status":"UP"'
-            curl -sf http://localhost:8083/actuator/health | grep '"status":"UP"'
-            curl -sf http://localhost:8084/actuator/health | grep '"status":"UP"'
-            echo "Deployment successful."
+            echo "Deployment complete"

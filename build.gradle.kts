@@ -1,25 +1,16 @@
 plugins {
-    id("org.springframework.boot")      version "3.3.4"    apply false
-    id("io.spring.dependency-management") version "1.1.6"  apply false
-    id("org.sonarqube")                 version "5.1.0.4882"
+    id("org.springframework.boot")        version "3.3.4"   apply false
+    id("io.spring.dependency-management") version "1.1.6"   apply false
+    id("org.sonarqube")                   version "5.1.0.4882"
     java
 }
 
-// ── SonarQube root config ─────────────────────────────────────────────────────
+// sonar-project.properties handles all project config.
+// Only host/token are set here (injected at runtime via -D flags or env).
 sonar {
     properties {
         property("sonar.projectKey",  "pubsub-kafka-migrator")
         property("sonar.projectName", "PubSub to Kafka Migrator")
-        property("sonar.java.source", "21")
-        property("sonar.sourceEncoding", "UTF-8")
-        property("sonar.exclusions",
-            "**/build/**,**/.gradle/**,**/infra/postgres/**,**/*Application.java,**/generated/**")
-
-        // Aggregate coverage from all submodules
-        property("sonar.coverage.jacoco.xmlReportPaths",
-            subprojects.map {
-                "${it.projectDir}/build/reports/jacoco/test/jacocoTestReport.xml"
-            }.joinToString(","))
     }
 }
 
@@ -57,31 +48,21 @@ subprojects {
 
     tasks.withType<Test> {
         useJUnitPlatform()
-        // Always generate coverage report after tests
         finalizedBy(tasks.named("jacocoTestReport"))
     }
 
     tasks.named<JacocoReport>("jacocoTestReport") {
         dependsOn(tasks.named("test"))
         reports {
-            xml.required.set(true)   // needed by SonarQube
-            html.required.set(true)  // human-readable local report
+            xml.required.set(true)
+            html.required.set(true)
             csv.required.set(false)
         }
     }
 
-    // Only modules with SpringBoot plugin get a bootJar
     plugins.withType<org.springframework.boot.gradle.plugin.SpringBootPlugin> {
         tasks.withType<org.springframework.boot.gradle.tasks.bundling.BootJar> {
             launchScript()
         }
     }
-}
-
-// ── Aggregate task: run all subproject tests + coverage in one command ────────
-tasks.register("testAll") {
-    group = "verification"
-    description = "Run tests and generate JaCoCo reports for all subprojects"
-    dependsOn(subprojects.map { "${it.path}:test" })
-    dependsOn(subprojects.map { "${it.path}:jacocoTestReport" })
 }
