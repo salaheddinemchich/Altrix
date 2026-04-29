@@ -44,6 +44,7 @@ subprojects {
         testCompileOnly("org.projectlombok:lombok")
         testAnnotationProcessor("org.projectlombok:lombok")
         testImplementation("org.springframework.boot:spring-boot-starter-test")
+        testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     }
 
     tasks.withType<Test> {
@@ -53,6 +54,19 @@ subprojects {
 
     tasks.named<JacocoReport>("jacocoTestReport") {
         dependsOn(tasks.named("test"))
+        // Adapter and infrastructure layers are tested via integration tests (Testcontainers).
+        // Exclude them from unit-test coverage so the domain-layer % is meaningful.
+        classDirectories.setFrom(
+            files(classDirectories.files.map { dir ->
+                fileTree(dir) {
+                    exclude(
+                        "**/adapter/**",
+                        "**/infrastructure/**",
+                        "**/*Application.class"
+                    )
+                }
+            })
+        )
         reports {
             xml.required.set(true)
             html.required.set(true)

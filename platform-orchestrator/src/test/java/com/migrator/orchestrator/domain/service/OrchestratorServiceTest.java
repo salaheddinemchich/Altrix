@@ -30,8 +30,13 @@ class OrchestratorServiceTest {
     private OrchestratorService service(List<AgentPort> agents) {
         return new OrchestratorService(
                 agents, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, 0L // zero delay for tests
-        );
+                progressNotifierPort, 0L);
+    }
+
+    private OrchestratorService service(List<AgentPort> agents, long delayMs) {
+        return new OrchestratorService(
+                agents, jobStatusUpdatePort, migratedFileStoragePort,
+                progressNotifierPort, delayMs);
     }
 
     @Test
@@ -63,10 +68,11 @@ class OrchestratorServiceTest {
 
         ProjectContext result = service(List.of(agent3, agent1)).run(initial); // deliberate wrong order
 
-        // Agents should have been reordered by getOrder()
         assertThat(result.migratedFiles()).hasSize(1);
+        verify(jobStatusUpdatePort).markAnalyzing("job-1");
+        verify(jobStatusUpdatePort).markMigrating("job-1");
         verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
-        verify(progressNotifierPort).notify(eq("job-1"), any(), eq("DONE"), any());
+        verify(progressNotifierPort).notify(eq("job-1"), eq("Pipeline"), eq("DONE"), any());
     }
 
     @Test
@@ -83,7 +89,7 @@ class OrchestratorServiceTest {
                 .isInstanceOf(RuntimeException.class);
 
         verify(jobStatusUpdatePort).markFailed(eq("job-1"), any());
-        verify(progressNotifierPort).notify(eq("job-1"), any(), eq("FAILED"), any());
+        verify(progressNotifierPort).notify(eq("job-1"), eq("Pipeline"), eq("FAILED"), any());
     }
 
     @Test
@@ -97,5 +103,26 @@ class OrchestratorServiceTest {
         service(List.of()).run(initial);
 
         verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
+    }
+
+    @Test
+    void run_pausesBetweenAgents_whenDelayIsPositive() {
+        AgentPort a1 = mock(AgentPort.class);
+        AgentPort a2 = mock(AgentPort.class);
+        when(a1.getOrder()).thenReturn(2);
+        when(a2.getOrder()).thenReturn(4);
+        when(a1.getName()).thenReturn("A");
+        when(a2.getName()).thenReturn("B");
+
+        ProjectContext ctx = ProjectContext.builder().jobId("job-1").projectId("p").build();
+        when(a1.execute(any())).thenReturn(ctx);
+        when(a2.execute(any())).thenReturn(ctx);
+        when(migratedFileStoragePort.storeMigratedZip(any(), any())).thenReturn("out.zip");
+
+        service(List.of(a1, a2), 1L).run(ctx);
+
+        verify(a1).execute(any());
+        verify(a2).execute(any());
+        verify(jobStatusUpdatePort).markDone("job-1", "out.zip");
     }
 }

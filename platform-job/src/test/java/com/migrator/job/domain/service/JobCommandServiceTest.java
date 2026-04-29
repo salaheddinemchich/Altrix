@@ -92,6 +92,19 @@ class JobCommandServiceTest {
     }
 
     @Test
+    void markMigrating_transitionsStatus() {
+        MigrationJob analyzing = MigrationJob.create("proj-1", "user-1", "key", null).startAnalyzing();
+        MigrationJob migrating = analyzing.startMigrating();
+        when(jobRepository.findById("job-id")).thenReturn(Optional.of(analyzing));
+        when(jobRepository.save(any())).thenReturn(migrating);
+
+        MigrationJob result = commandService.markMigrating("job-id");
+
+        assertThat(result.getStatus()).isEqualTo(JobStatus.MIGRATING);
+        verify(jobCachePort).putStatus(any(), eq("MIGRATING"));
+    }
+
+    @Test
     void loadOrThrow_throwsJobNotFoundException_whenNotFound() {
         when(jobRepository.findById("unknown")).thenReturn(Optional.empty());
 
