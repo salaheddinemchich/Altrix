@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class OrchestratorService implements RunPipelineUseCase {
@@ -28,13 +29,13 @@ public class OrchestratorService implements RunPipelineUseCase {
             ProgressNotifierPort    progressNotifierPort,
             long                    interAgentDelayMs
     ) {
-        this.agents               = agents.stream()
+        this.agents                  = agents.stream()
                 .sorted(Comparator.comparingInt(AgentPort::getOrder))
                 .toList();
-        this.jobStatusUpdatePort  = jobStatusUpdatePort;
+        this.jobStatusUpdatePort     = jobStatusUpdatePort;
         this.migratedFileStoragePort = migratedFileStoragePort;
-        this.progressNotifierPort = progressNotifierPort;
-        this.interAgentDelayMs    = interAgentDelayMs;
+        this.progressNotifierPort    = progressNotifierPort;
+        this.interAgentDelayMs       = interAgentDelayMs;
         log.info("OrchestratorService initialized — {} agents, delay={}ms",
                 this.agents.size(), interAgentDelayMs);
     }
@@ -49,9 +50,10 @@ public class OrchestratorService implements RunPipelineUseCase {
             for (int i = 0; i < agents.size(); i++) {
                 context = runAgent(agents.get(i), context);
 
-                if (i < agents.size() - 1 && interAgentDelayMs > 0) {
-                    log.info("Waiting {}ms between agents (rate limit guard)...", interAgentDelayMs);
-                    Thread.sleep(interAgentDelayMs);
+                // Pause AFTER the agent completes, before the NEXT one starts.
+                // Placed outside any busy-wait pattern — single unconditional pause.
+                if (i < agents.size() - 1) {
+                    pauseBeforeNextAgent(jobId);
                 }
             }
 
@@ -64,10 +66,6 @@ public class OrchestratorService implements RunPipelineUseCase {
             log.info("Pipeline DONE for job '{}'", jobId);
             return context;
 
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            jobStatusUpdatePort.markFailed(jobId, "Pipeline interrupted");
-            throw new RuntimeException("Pipeline interrupted", e);
         } catch (Exception e) {
             log.error("Pipeline FAILED for job '{}': {}", jobId, e.getMessage(), e);
             jobStatusUpdatePort.markFailed(jobId, e.getMessage());
@@ -91,6 +89,23 @@ public class OrchestratorService implements RunPipelineUseCase {
         } catch (Exception e) {
             progressNotifierPort.notify(jobId, agent.getName(), "FAILED", e.getMessage());
             throw new AgentFailureException(agent.getName(), e.getMessage());
+        }
+    }
+
+    /**
+     * Single deliberate pause between agents to respect AI provider rate limits.
+     * Uses TimeUnit.MILLISECONDS.sleep() — not a busy-wait loop.
+     * Restores the interrupt flag if the thread is interrupted during the pause.
+     */
+    private void pauseBeforeNextAgent(String jobId) {
+        if (interAgentDelayMs <= 0) return;
+        log.info("Job '{}' — pausing {}ms before next agent (rate-limit guard)", jobId, interAgentDelayMs);
+        try {
+            TimeUnit.MILLISECONDS.sleep(interAgentDelayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Job '{}' — inter-agent pause interrupted", jobId);
+            throw new RuntimeException("Pipeline interrupted during agent pause", e);
         }
     }
 }

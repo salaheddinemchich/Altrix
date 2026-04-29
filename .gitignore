@@ -40,3 +40,4 @@ out/
 
 # Claude agent bridge (local tool — not project code)
 .agentbridge/
+.junie/

@@ -87,6 +87,12 @@ public final class MigrationJob {
                    .withCompletedAt(now);
     }
 
+
+    /** Returns true if the job is in a terminal state and cannot transition further. */
+    public boolean isTerminalStatus() {
+        return status.isTerminal();
+    }
+
     private void assertNotTerminal() {
         if (status.isTerminal()) {
             throw new IllegalStateException(
@@ -104,3 +110,4 @@ public final class MigrationJob {
     @Override
     public int hashCode() { return Objects.hash(id); }
 }
+// Note: this line won't work as append — use str_replace below
