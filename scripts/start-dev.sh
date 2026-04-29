@@ -85,8 +85,32 @@ else
 fi
 
 echo ""
-echo "=== Run tests with JaCoCo coverage (optional — takes ~2 min) ==="
-echo "  To run: cd $MIGRATOR_DIR && ./gradlew testAll --no-daemon --continue"
+echo "=== SonarQube analysis ==="
+if [ -z "${SONAR_TOKEN:-}" ]; then
+  echo "  SONAR_TOKEN not set in .env — skipping auto-scan"
+else
+  echo "  Waiting for SonarQube to be ready at ${SONAR_HOST_URL:-http://localhost:9003} ..."
+  until curl -sf "${SONAR_HOST_URL:-http://localhost:9003}/api/system/status" 2>/dev/null \
+      | grep -q '"status":"UP"'; do
+    printf "."; sleep 5
+  done
+  echo "  SonarQube ready"
+
+  echo "  Generating coverage reports..."
+  ./gradlew test jacocoTestReport --no-daemon -q
+
+  echo "  Sending analysis to SonarQube..."
+  docker run --rm \
+    --network=host \
+    -e SONAR_HOST_URL="${SONAR_HOST_URL:-http://localhost:9003}" \
+    -e SONAR_TOKEN="$SONAR_TOKEN" \
+    -v "$MIGRATOR_DIR:/usr/src" \
+    sonarsource/sonar-scanner-cli:latest 2>&1 \
+    | grep -E "(EXECUTION|ANALYSIS SUCCESSFUL|dashboard|ERROR)" || true
+
+  echo ""
+  echo "  Dashboard: ${SONAR_HOST_URL:-http://localhost:9003}/dashboard?id=pubsub-kafka-migrator"
+fi
 
 echo ""
 echo "================================================================"
@@ -102,6 +126,5 @@ echo " Kafdrop:   http://localhost:9002"
 echo " MinIO:     http://localhost:9001"
 echo " SonarQube: http://localhost:9003  (takes ~3 min to start)"
 echo ""
-echo " Local coverage: ./gradlew testAll"
-echo " Local sonar:    ./gradlew sonar -Dsonar.host.url=http://localhost:9003 -Dsonar.token=YOUR_TOKEN"
+echo " Local sonar:    re-run start-dev.sh  (scan runs auto if SONAR_TOKEN is in .env)"
 echo "================================================================"
