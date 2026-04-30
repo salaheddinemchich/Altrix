@@ -236,7 +236,7 @@ services:
       DD_DEBUG:                  "False"
     entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-uwsgi.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8081/ >/dev/null"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/')\" 2>/dev/null && echo ok"]
       interval: 30s
       timeout: 10s
       retries: 10
