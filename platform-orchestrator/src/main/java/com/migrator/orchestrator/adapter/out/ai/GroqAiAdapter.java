@@ -48,19 +48,21 @@ public class GroqAiAdapter implements AiPort {
 
     @Override
     public String chat(String systemPrompt, String userContent) {
-        return chatWithModel(modelMain, systemPrompt, userContent);
+        return chatWithModel(modelMain, systemPrompt, userContent, 4096);
     }
 
     @Override
     public String chatFast(String systemPrompt, String userContent) {
-        return chatWithModel(modelFast, systemPrompt, userContent);
+        // 512 max_tokens keeps total well under Groq free-tier 6 000 TPM limit.
+        // The Architecture Analyzer only returns a small JSON object (~200 tokens).
+        return chatWithModel(modelFast, systemPrompt, userContent, 512);
     }
 
-    private String chatWithModel(String model, String systemPrompt, String userContent) {
+    private String chatWithModel(String model, String systemPrompt, String userContent, int maxTokens) {
         Map<String, Object> body = Map.of(
                 "model",       model,
                 "temperature", 0.1,
-                "max_tokens",  4096,
+                "max_tokens",  maxTokens,
                 "messages",    List.of(
                         Map.of("role", "system", "content", systemPrompt),
                         Map.of("role", "user",   "content", userContent)

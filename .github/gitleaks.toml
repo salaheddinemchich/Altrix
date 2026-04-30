@@ -1,0 +1,39 @@
+# Gitleaks configuration for pubsub-kafka-migrator
+# Docs: https://github.com/gitleaks/gitleaks#configuration
+
+title = "pubsub-kafka-migrator gitleaks config"
+
+[extend]
+# Extend the default rules shipped with gitleaks
+useDefault = true
+
+[allowlist]
+description = "Allowlist for known-safe patterns in this repository"
+
+# Spring Boot ${VAR:default} property placeholders are not secrets
+regexes = [
+  # Spring property interpolation: ${ENV_VAR:default_value}
+  '''\$\{[A-Z_]+:[^}]+\}''',
+]
+
+# Paths that contain only infrastructure / development defaults
+paths = [
+  # .env.example is documentation, not real credentials
+  '''.env\.example''',
+  # Test fixtures and integration test resources
+  '''.*src/test/.*''',
+  # Gitleaks config itself
+  '''.github/gitleaks\.toml''',
+]
+
+[[rules]]
+id          = "sonar-jdbc-password"
+description = "Allow SonarQube JDBC password env-var reference in docker-compose"
+regex       = '''SONAR_JDBC_PASSWORD:\s+\$\{SONAR_JDBC_PASSWORD\}'''
+tags        = ["allowlist"]
+
+[[rules]]
+id          = "pgadmin-password"
+description = "Allow PgAdmin password env-var reference in docker-compose"
+regex       = '''PGADMIN_DEFAULT_PASSWORD:\s+\$\{PGADMIN_PASSWORD\}'''
+tags        = ["allowlist"]

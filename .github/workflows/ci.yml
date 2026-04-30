@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD + DevSecOps Pipeline
 
 on:
   push:
@@ -10,7 +10,36 @@ env:
   JAVA_VERSION: "21"
   REGISTRY: ghcr.io
 
+# Minimal global permissions — each job declares only what it needs
+permissions:
+  contents: read
+
 jobs:
+
+  # ── 0. Secret Scan — Gitleaks ─────────────────────────────────────────────
+  secret-scan:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Archive Gitleaks report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
 
   # ── 1. Build, Test & Coverage ─────────────────────────────────────────────
   build-and-test:
@@ -47,6 +76,13 @@ jobs:
             :platform-orchestrator:test :platform-orchestrator:jacocoTestReport \
             --parallel --no-daemon --continue
 
+      - name: Upload JARs
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-libs-${{ steps.version.outputs.sha }}
+          path: "**/build/libs/*.jar"
+          retention-days: 1
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,11 +99,95 @@ jobs:
           path: "**/build/reports/jacoco/"
           retention-days: 14
 
-  # ── 2. Docker Build & Push ────────────────────────────────────────────────
+  # ── 2. SAST — Semgrep ─────────────────────────────────────────────────────
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep SAST
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/java
+            p/spring
+            p/owasp-top-ten
+            p/secrets
+          generateSarif: "1"
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload Semgrep SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+        continue-on-error: true
+
+      - name: Archive Semgrep report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ── 3. SCA — Trivy filesystem (dependency CVEs) ───────────────────────────
+  sca:
+    name: SCA (Trivy — Dependencies)
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          vuln-type: library
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+        continue-on-error: true
+
+      - name: Archive SCA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-fs-report
+          path: trivy-fs.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ── 4. Docker Build & Push ────────────────────────────────────────────────
   docker-build:
     name: Docker — ${{ matrix.service.name }}
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: [build-and-test, sast, sca]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     permissions:
@@ -113,11 +233,63 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service.name }}
           cache-to:   type=gha,mode=max,scope=${{ matrix.service.name }}
 
-  # ── 3. Deploy to Staging ──────────────────────────────────────────────────
+  # ── 5. Container Scan — Trivy image ───────────────────────────────────────
+  container-scan:
+    name: Container Scan — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [platform-project, platform-job, platform-orchestrator]
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy image scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/pubsub-kafka-migrator/${{ matrix.service }}:latest
+          format: sarif
+          output: trivy-image-${{ matrix.service }}.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+        continue-on-error: true
+
+      - name: Upload Trivy image SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-${{ matrix.service }}.sarif
+          category: trivy-image-${{ matrix.service }}
+        continue-on-error: true
+
+      - name: Archive container scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-${{ matrix.service }}
+          path: trivy-image-${{ matrix.service }}.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ── 6. Deploy to Staging ──────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: docker-build
+    needs: [docker-build, container-scan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: staging
@@ -129,12 +301,175 @@ jobs:
           host:     ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key:      ${{ secrets.STAGING_SSH_KEY }}
+          envs:     DD_DB_PASSWORD,DD_SECRET_KEY,DD_AES_256_KEY,DD_ADMIN_PASSWORD
           script: |
             set -e
             cd /opt/pubsub-kafka-migrator
+
+            # ── Application services ──────────────────────────────────────
             docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-project:latest
             docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-job:latest
             docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-orchestrator:latest
             docker compose up -d --no-deps --force-recreate \
               platform-project platform-job platform-orchestrator
-            echo "Deployment complete"
+
+            # ── DefectDojo (CVE aggregation dashboard) ────────────────────
+            # Inject DefectDojo secrets into .env on staging
+            grep -v '^DD_' .env > .env.tmp && mv .env.tmp .env
+            echo "DD_DB_PASSWORD=${DD_DB_PASSWORD}"   >> .env
+            echo "DD_SECRET_KEY=${DD_SECRET_KEY}"     >> .env
+            echo "DD_AES_256_KEY=${DD_AES_256_KEY}"   >> .env
+            echo "DD_ADMIN_PASSWORD=${DD_ADMIN_PASSWORD}" >> .env
+
+            docker pull defectdojo/defectdojo-django:latest
+            docker compose up -d \
+              defectdojo-db defectdojo-initializer \
+              defectdojo defectdojo-celery-worker defectdojo-celery-beat
+
+            echo "Deployment complete — DefectDojo at http://${{ secrets.STAGING_HOST }}:8089"
+        env:
+          DD_DB_PASSWORD:   ${{ secrets.DD_DB_PASSWORD }}
+          DD_SECRET_KEY:    ${{ secrets.DD_SECRET_KEY }}
+          DD_AES_256_KEY:   ${{ secrets.DD_AES_256_KEY }}
+          DD_ADMIN_PASSWORD: ${{ secrets.DD_ADMIN_PASSWORD }}
+
+  # ── 7. DAST — OWASP ZAP baseline scan ────────────────────────────────────
+  dast:
+    name: DAST (OWASP ZAP)
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for staging to be ready
+        run: |
+          echo "Waiting for platform-project to be healthy..."
+          for i in $(seq 1 18); do
+            if curl -sf "http://${{ secrets.STAGING_HOST }}:8082/actuator/health" \
+                | grep -q '"status":"UP"'; then
+              echo "Service is UP"
+              break
+            fi
+            echo "  attempt $i/18 — sleeping 10s"
+            sleep 10
+          done
+
+      - name: ZAP Baseline Scan — platform-project API
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://${{ secrets.STAGING_HOST }}:8082'
+          rules_file_name: '.github/zap-rules.tsv'
+          cmd_options: '-I'
+          allow_issue_writing: false
+        continue-on-error: true
+
+      - name: Archive ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: report_json.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ── 8. DefectDojo — Aggregate all findings ────────────────────────────────
+  defectdojo-upload:
+    name: Upload to DefectDojo
+    runs-on: ubuntu-latest
+    needs: [secret-scan, sast, sca, container-scan, dast]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      vars.DEFECTDOJO_URL != ''
+
+    steps:
+      - name: Download all scan artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*report*'
+          merge-multiple: false
+          path: scan-artifacts
+
+      - name: Download Semgrep artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: scan-artifacts/semgrep-sarif
+        continue-on-error: true
+
+      - name: Download container scan artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'trivy-image-*'
+          merge-multiple: false
+          path: scan-artifacts
+        continue-on-error: true
+
+      - name: Upload findings to DefectDojo
+        env:
+          DD_URL: ${{ vars.DEFECTDOJO_URL }}
+          DD_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DD_PRODUCT: pubsub-kafka-migrator
+          DD_ENGAGEMENT: "CI-${{ github.run_number }}"
+        run: |
+          upload_to_dojo() {
+            local scan_type="$1"
+            local file="$2"
+            local label="$3"
+
+            if [ ! -f "$file" ]; then
+              echo "  [SKIP] $label — file not found"
+              return 0
+            fi
+
+            HTTP_STATUS=$(curl -s -o /tmp/dd-response.json -w "%{http_code}" \
+              -H "Authorization: Token ${DD_API_KEY}" \
+              -F "scan_type=${scan_type}" \
+              -F "file=@${file}" \
+              -F "product_name=${DD_PRODUCT}" \
+              -F "engagement_name=${DD_ENGAGEMENT}" \
+              -F "auto_create_context=true" \
+              -F "close_old_findings=false" \
+              "${DD_URL}/api/v2/import-scan/")
+
+            if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+              echo "  [OK]   $label (HTTP $HTTP_STATUS)"
+            else
+              echo "  [WARN] $label — HTTP $HTTP_STATUS (non-blocking)"
+              cat /tmp/dd-response.json || true
+            fi
+          }
+
+          echo "=== Uploading security findings to DefectDojo at ${DD_URL} ==="
+
+          upload_to_dojo "Gitleaks Scan" \
+            "scan-artifacts/gitleaks-report/results.sarif" \
+            "Gitleaks secret scan"
+
+          upload_to_dojo "SARIF" \
+            "scan-artifacts/semgrep-sarif/semgrep.sarif" \
+            "Semgrep SAST"
+
+          upload_to_dojo "SARIF" \
+            "scan-artifacts/trivy-fs-report/trivy-fs.sarif" \
+            "Trivy SCA (filesystem)"
+
+          for svc in platform-project platform-job platform-orchestrator; do
+            upload_to_dojo "SARIF" \
+              "scan-artifacts/trivy-image-${svc}/trivy-image-${svc}.sarif" \
+              "Trivy container — ${svc}"
+          done
+
+          upload_to_dojo "ZAP Scan" \
+            "scan-artifacts/zap-report/report_json.json" \
+            "OWASP ZAP DAST"
+
+          echo "=== DefectDojo upload complete ==="
+          echo "Dashboard: ${DD_URL}/product/list"
