@@ -213,7 +213,7 @@ services:
       DD_ALLOWED_HOSTS:          "*"
       DD_DEBUG:                  "False"
       DD_INITIALIZE:             "True"
-    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/app/docker/entrypoints/initialize.sh"]
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-initializer.sh"]
     restart: on-failure
     networks:
       - migrator-net
@@ -234,7 +234,7 @@ services:
       DD_ADMIN_MAIL:             admin@migrator.com
       DD_ALLOWED_HOSTS:          "*"
       DD_DEBUG:                  "False"
-    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/app/docker/entrypoints/uwsgi.sh"]
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-uwsgi.sh"]
     ports:
       - "8089:8080"
     healthcheck:
@@ -260,7 +260,7 @@ services:
       DD_CREDENTIAL_AES_256_KEY: ${DD_AES_256_KEY}
       DD_ALLOWED_HOSTS:          "*"
       DD_DEBUG:                  "False"
-    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/app/docker/entrypoints/celery-worker.sh"]
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-celery-worker.sh"]
     networks:
       - migrator-net
     restart: unless-stopped
@@ -278,7 +278,7 @@ services:
       DD_CREDENTIAL_AES_256_KEY: ${DD_AES_256_KEY}
       DD_ALLOWED_HOSTS:          "*"
       DD_DEBUG:                  "False"
-    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/app/docker/entrypoints/celery-beat.sh"]
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-celery-beat.sh"]
     networks:
       - migrator-net
     restart: unless-stopped
