@@ -106,11 +106,6 @@ jobs:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
-
     steps:
       - uses: actions/checkout@v4
 
@@ -128,14 +123,6 @@ jobs:
             --output semgrep.sarif \
             . 2>&1 || true
 
-      - name: Upload Semgrep SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: semgrep.sarif
-          category: semgrep
-        continue-on-error: true
-
       - name: Archive Semgrep report
         if: always()
         uses: actions/upload-artifact@v4
@@ -151,11 +138,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-test
 
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
-
     steps:
       - uses: actions/checkout@v4
 
@@ -169,14 +151,6 @@ jobs:
           severity: CRITICAL,HIGH,MEDIUM
           ignore-unfixed: true
           vuln-type: library
-        continue-on-error: true
-
-      - name: Upload Trivy SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-fs.sarif
-          category: trivy-fs
         continue-on-error: true
 
       - name: Archive SCA report
@@ -247,9 +221,7 @@ jobs:
 
     permissions:
       contents: read
-      actions: read
       packages: read
-      security-events: write
 
     strategy:
       fail-fast: false
@@ -272,14 +244,6 @@ jobs:
           output: trivy-image-${{ matrix.service }}.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-        continue-on-error: true
-
-      - name: Upload Trivy image SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-image-${{ matrix.service }}.sarif
-          category: trivy-image-${{ matrix.service }}
         continue-on-error: true
 
       - name: Archive container scan report
