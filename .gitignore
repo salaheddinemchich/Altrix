@@ -32,3 +32,5 @@ backend/gen/
 .agentbridge/
 .junie/
 .agent-work/
+.claude/
+.vscode/

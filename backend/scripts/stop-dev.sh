@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MIGRATOR_DIR="/home/blacklight/IdeaProjects/pubsub-kafka-migrator"
+MIGRATOR_DIR="/home/blacklight/IdeaProjects/pubsub-kafka-migrator/backend"
 SAMPLE_APP_DIR="/home/blacklight/IdeaProjects/sample-pubsub-app"
 cd "$MIGRATOR_DIR"
 
