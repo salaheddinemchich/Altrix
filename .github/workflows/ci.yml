@@ -108,6 +108,7 @@ jobs:
 
     permissions:
       contents: read
+      actions: read
       security-events: write
 
     steps:
@@ -152,6 +153,7 @@ jobs:
 
     permissions:
       contents: read
+      actions: read
       security-events: write
 
     steps:
@@ -245,6 +247,7 @@ jobs:
 
     permissions:
       contents: read
+      actions: read
       packages: read
       security-events: write
 
