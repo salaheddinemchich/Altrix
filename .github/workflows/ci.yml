@@ -50,6 +50,10 @@ jobs:
     outputs:
       sha: ${{ steps.version.outputs.sha }}
 
+    defaults:
+      run:
+        working-directory: ./backend
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,6 +68,7 @@ jobs:
       - run: chmod +x gradlew
 
       - id: version
+        working-directory: .
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build
@@ -121,7 +126,7 @@ jobs:
             --config p/secrets \
             --sarif \
             --output semgrep.sarif \
-            . 2>&1 || true
+            backend 2>&1 || true
 
       - name: Archive Semgrep report
         if: always()
@@ -178,11 +183,11 @@ jobs:
       matrix:
         service:
           - name: platform-project
-            dockerfile: infra/docker/Dockerfile.platform-project
+            dockerfile: backend/infra/docker/Dockerfile.platform-project
           - name: platform-job
-            dockerfile: infra/docker/Dockerfile.platform-job
+            dockerfile: backend/infra/docker/Dockerfile.platform-job
           - name: platform-orchestrator
-            dockerfile: infra/docker/Dockerfile.platform-orchestrator
+            dockerfile: backend/infra/docker/Dockerfile.platform-orchestrator
 
     steps:
       - uses: actions/checkout@v4
@@ -204,7 +209,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./backend
           file: ${{ matrix.service.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}

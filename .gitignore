@@ -1,43 +1,34 @@
-# Java & JVM
-*.class
-*.log
-*.jar
-*.war
-*.ear
-/build/
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.local
 
-# Gradle
-.gradle/
-build/
-!gradle/wrapper/gradle-wrapper.jar
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
 
-# IntelliJ IDEA
+# ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/
 *.iml
 *.iws
 *.ipr
-/out/
-gen/
 .idea_modules/
 
-# Secrets & Environment
-.env
-.env.local
+# ── Frontend (node) ───────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.angular/
+frontend/dist/
 
-# OS Files
-.DS_Store
-Thumbs.db
-
-# Ignore everything in postgres folder
-infra/postgres/*
-
-# BUT keep this file tracked
-!infra/postgres/init.sql
-
-# IntelliJ IDEA build outputs (not source — already in src/main/resources)
-**/out/
+# ── Backend (Java/Gradle) ─────────────────────────────────────────────────────
+.gradle/
+build/
 out/
+gen/
+backend/.gradle/
+backend/build/
+backend/out/
+backend/gen/
 
-# Claude agent bridge (local tool — not project code)
+# ── Agent tooling (local only) ────────────────────────────────────────────────
 .agentbridge/
 .junie/
+.agent-work/
