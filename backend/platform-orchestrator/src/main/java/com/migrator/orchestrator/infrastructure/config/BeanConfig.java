@@ -7,12 +7,14 @@ import com.migrator.orchestrator.domain.port.out.ProgressNotifierPort;
 import com.migrator.orchestrator.domain.service.OrchestratorService;
 import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
 @Configuration
+@EnableConfigurationProperties(AiProvidersConfig.class)
 public class BeanConfig {
 
     @Bean

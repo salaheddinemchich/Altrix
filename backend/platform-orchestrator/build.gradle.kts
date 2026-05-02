@@ -4,6 +4,9 @@ plugins {
     id("io.spring.dependency-management")
 }
 
+val langchain4jVersion = "0.36.2"
+val resilience4jVersion = "2.2.0"
+
 dependencies {
     implementation(project(":platform-common"))
 
@@ -20,16 +23,26 @@ dependencies {
     // MinIO — reads uploaded ZIPs, writes migrated ZIPs
     implementation("io.minio:minio:8.5.12")
 
-    // HTTP client — calls Groq AI API
-    implementation("org.springframework.boot:spring-boot-starter-webflux")
-
     // JSON
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
     // Observability
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
+    // LangChain4j — multi-provider AI routing
+    implementation("dev.langchain4j:langchain4j:$langchain4jVersion")
+    implementation("dev.langchain4j:langchain4j-open-ai:$langchain4jVersion")   // covers Groq (OpenAI-compat) and OpenAI
+    implementation("dev.langchain4j:langchain4j-anthropic:$langchain4jVersion")
+    implementation("dev.langchain4j:langchain4j-ollama:$langchain4jVersion")
+
+    // Resilience4j — circuit breaker + retry per provider
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:$resilience4jVersion")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4jVersion")
+    implementation("io.github.resilience4j:resilience4j-retry:$resilience4jVersion")
+    implementation("org.springframework.boot:spring-boot-starter-aop")
+
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
+    testImplementation("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4jVersion")
 }
