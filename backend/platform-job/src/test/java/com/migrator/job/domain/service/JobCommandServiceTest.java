@@ -2,7 +2,6 @@ package com.migrator.job.domain.service;
 
 import com.migrator.common.domain.enums.JobStatus;
 import com.migrator.common.exception.JobNotFoundException;
-import com.migrator.job.adapter.out.persistence.spec.JobFilter;
 import com.migrator.job.domain.model.MigrationJob;
 import com.migrator.job.domain.port.out.JobCachePort;
 import com.migrator.job.domain.port.out.JobEventPublisher;
@@ -13,7 +12,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;

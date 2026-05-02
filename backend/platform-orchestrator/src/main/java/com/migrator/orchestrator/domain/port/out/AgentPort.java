@@ -1,29 +1,13 @@
 package com.migrator.orchestrator.domain.port.out;
 
 import com.migrator.common.domain.model.ProjectContext;
+import com.migrator.common.domain.port.MigrationAgent;
 
 /**
- * Secondary port — contract every AI agent must implement.
- *
- * <p>Each agent receives the current immutable context and returns
- * a new enriched copy. Agents never mutate the context directly.
+ * Secondary port — specialises {@link MigrationAgent} with {@link ProjectContext}
+ * as both input and output, covering agents that enrich the shared pipeline state.
  *
  * <p>Ordering is determined by {@link #getOrder()} — lower = runs first.
  */
-public interface AgentPort {
-
-    /** Human-readable name used in logs and progress events. */
-    String getName();
-
-    /** Execution order — Agent 1 = 1, Agent 3 = 3. */
-    int getOrder();
-
-    /**
-     * Executes this agent's task and returns an enriched context.
-     *
-     * @param context current pipeline state
-     * @return new context with this agent's findings added
-     * @throws com.migrator.common.exception.AgentFailureException on non-recoverable failure
-     */
-    ProjectContext execute(ProjectContext context);
+public interface AgentPort extends MigrationAgent<ProjectContext, ProjectContext> {
 }

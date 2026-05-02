@@ -1,6 +1,5 @@
 package com.migrator.job.domain.service;
 
-import com.migrator.common.domain.enums.JobStatus;
 import com.migrator.common.exception.JobNotFoundException;
 import com.migrator.job.adapter.out.persistence.spec.JobFilter;
 import com.migrator.job.domain.model.MigrationJob;

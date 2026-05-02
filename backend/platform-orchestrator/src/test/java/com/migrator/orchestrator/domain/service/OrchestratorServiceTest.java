@@ -3,6 +3,7 @@ package com.migrator.orchestrator.domain.service;
 import com.migrator.common.domain.model.MigratedFile;
 import com.migrator.common.domain.model.ProjectContext;
 import com.migrator.common.domain.enums.FileChangeType;
+import com.migrator.common.domain.port.MigrationAgent;
 import com.migrator.orchestrator.domain.port.out.AgentPort;
 import com.migrator.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.migrator.orchestrator.domain.port.out.MigratedFileStoragePort;
@@ -103,6 +104,27 @@ class OrchestratorServiceTest {
         service(List.of()).run(initial);
 
         verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
+    }
+
+    // -----------------------------------------------------------------------
+    // Type hierarchy: AgentPort must be a MigrationAgent<ProjectContext, ProjectContext>
+    // -----------------------------------------------------------------------
+
+    @Test
+    void agentPort_is_a_subtype_of_MigrationAgent() {
+        assertThat(MigrationAgent.class).isAssignableFrom(AgentPort.class);
+    }
+
+    @Test
+    void agentPort_mock_is_usable_as_MigrationAgent() {
+        AgentPort agent = mock(AgentPort.class);
+        when(agent.getName()).thenReturn("test-agent");
+        when(agent.getOrder()).thenReturn(1);
+
+        // Cast must succeed — AgentPort IS-A MigrationAgent<ProjectContext, ProjectContext>
+        MigrationAgent<ProjectContext, ProjectContext> typed = agent;
+        assertThat(typed.getName()).isEqualTo("test-agent");
+        assertThat(typed.getOrder()).isEqualTo(1);
     }
 
     @Test

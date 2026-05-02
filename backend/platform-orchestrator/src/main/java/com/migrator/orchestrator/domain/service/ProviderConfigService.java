@@ -8,7 +8,6 @@ import com.migrator.orchestrator.domain.port.in.UpdateProviderConfigUseCase;
 import com.migrator.orchestrator.domain.port.out.ApiKeyEncryptionPort;
 import com.migrator.orchestrator.domain.port.out.ProviderConfigRepository;
 import com.migrator.orchestrator.domain.port.out.ProviderRefreshPort;
-import com.migrator.orchestrator.infra.ai.provider.ProviderCostTier;
 import com.migrator.orchestrator.infra.ai.provider.factory.ProviderFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
