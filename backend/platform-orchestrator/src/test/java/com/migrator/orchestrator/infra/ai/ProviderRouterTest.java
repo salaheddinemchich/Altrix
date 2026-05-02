@@ -5,6 +5,7 @@ import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig.CircuitBr
 import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig.RetrySettings;
 import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
 import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig.TierPreference;
+import com.migrator.orchestrator.infrastructure.config.McpConfig;
 import com.migrator.orchestrator.infra.ai.provider.ProviderCostTier;
 import com.migrator.orchestrator.infra.ai.provider.ProviderTier;
 import com.migrator.orchestrator.infra.ai.provider.RegisteredProvider;
@@ -14,6 +15,7 @@ import dev.langchain4j.model.output.Response;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,11 +60,17 @@ class ProviderRouterTest {
         );
     }
 
+    /** Builds a router with MCP disabled (Optional.empty). */
+    private static ProviderRouter router(ProviderRegistry registry, AiRoutingConfig routing) {
+        McpConfig mcpCfg = new McpConfig(false, 5, List.of());
+        return new ProviderRouter(registry, routing, mcpCfg, Optional.empty());
+    }
+
     // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
     void returns_response_from_first_available_provider() {
-        ProviderRouter router = new ProviderRouter(
+        ProviderRouter router = router(
                 registryOf(provider("openai", ProviderCostTier.PAID, modelReturning("hello"))),
                 defaultRouting()
         );
@@ -75,7 +83,7 @@ class ProviderRouterTest {
         ChatLanguageModel broken = modelThrowing();
         ChatLanguageModel ok     = modelReturning("fallback");
 
-        ProviderRouter router = new ProviderRouter(
+        ProviderRouter router = router(
                 registryOf(
                         provider("openai", ProviderCostTier.PAID, broken),
                         provider("groq",   ProviderCostTier.FREE, ok)
@@ -88,7 +96,7 @@ class ProviderRouterTest {
 
     @Test
     void throws_AllProvidersUnavailable_when_every_provider_fails() {
-        ProviderRouter router = new ProviderRouter(
+        ProviderRouter router = router(
                 registryOf(
                         provider("openai", ProviderCostTier.PAID, modelThrowing()),
                         provider("groq",   ProviderCostTier.FREE, modelThrowing())
@@ -103,7 +111,7 @@ class ProviderRouterTest {
 
     @Test
     void circuit_breaker_opens_after_repeated_failures() {
-        ProviderRouter router = new ProviderRouter(
+        ProviderRouter router = router(
                 registryOf(provider("groq", ProviderCostTier.FREE, modelThrowing())),
                 defaultRouting()
         );
@@ -122,7 +130,7 @@ class ProviderRouterTest {
         ChatLanguageModel migrationModel = modelReturning("migration result");
         RegisteredProvider p = new RegisteredProvider("groq", ProviderCostTier.FREE, analysisModel, migrationModel);
 
-        ProviderRouter router = new ProviderRouter(registryOf(p), defaultRouting());
+        ProviderRouter router = router(registryOf(p), defaultRouting());
 
         assertThat(router.chat(ProviderTier.ANALYSIS, "sys", "usr")).isEqualTo("analysis result");
         verify(analysisModel).generate(anyList());
@@ -131,7 +139,7 @@ class ProviderRouterTest {
 
     @Test
     void explicit_order_strategy_respects_configured_order() {
-        ChatLanguageModel groqModel  = modelReturning("groq");
+        ChatLanguageModel groqModel   = modelReturning("groq");
         ChatLanguageModel openaiModel = modelReturning("openai");
 
         AiRoutingConfig explicitCfg = new AiRoutingConfig(
@@ -142,7 +150,7 @@ class ProviderRouterTest {
                 new RetrySettings(2, 100L)
         );
 
-        ProviderRouter router = new ProviderRouter(
+        ProviderRouter r = router(
                 registryOf(
                         provider("openai", ProviderCostTier.PAID, openaiModel),
                         provider("groq",   ProviderCostTier.FREE, groqModel)
@@ -151,6 +159,18 @@ class ProviderRouterTest {
         );
 
         // Explicit order says groq first — cost tier is irrelevant here
-        assertThat(router.chat(ProviderTier.MIGRATION, "s", "u")).isEqualTo("groq");
+        assertThat(r.chat(ProviderTier.MIGRATION, "s", "u")).isEqualTo("groq");
+    }
+
+    @Test
+    void chatAgentic_falls_back_to_chat_when_mcp_disabled() {
+        ChatLanguageModel model = modelReturning("agentic result");
+        ProviderRouter router = router(
+                registryOf(provider("groq", ProviderCostTier.FREE, model)),
+                defaultRouting()
+        );
+
+        // MCP is disabled (Optional.empty) — should silently fall back to regular chat
+        assertThat(router.chatAgentic(ProviderTier.MIGRATION, "sys", "usr")).isEqualTo("agentic result");
     }
 }
