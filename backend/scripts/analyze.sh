@@ -34,6 +34,7 @@ set -a && source "$ROOT/.env" && set +a
 SONAR_HOST="${SONAR_HOST_URL:-http://localhost:9003}"
 DD_HOST="http://localhost:8089"
 SCAN_DIR="$ROOT/build/security-scans"
+GIT_ROOT="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || echo "$ROOT")"
 mkdir -p "$SCAN_DIR"
 
 # ── Colours ───────────────────────────────────────────────────────────────────
@@ -107,16 +108,22 @@ if [ "$SECURITY_ONLY" = false ]; then
       ok "SonarQube is UP"
       echo "  Sending analysis..."
 
-      docker run --rm \
+      SONAR_OUTPUT=$(docker run --rm \
         --network=host \
         -e SONAR_HOST_URL="$SONAR_HOST" \
         -e SONAR_TOKEN="$SONAR_TOKEN" \
         -v "$ROOT:/usr/src" \
-        sonarsource/sonar-scanner-cli:latest 2>&1 \
-        | grep -E "(EXECUTION|ANALYSIS SUCCESSFUL|dashboard|Quality Gate|ERROR)" || true
+        sonarsource/sonar-scanner-cli:latest 2>&1) && SONAR_OK=true || SONAR_OK=false
 
+      echo "$SONAR_OUTPUT" \
+        | grep -E "(EXECUTION|ANALYSIS SUCCESSFUL|dashboard|Quality Gate|ERROR)" || true
       echo ""
-      ok "SonarQube dashboard: $SONAR_HOST/dashboard?id=pubsub-kafka-migrator"
+
+      if [ "$SONAR_OK" = "true" ]; then
+        ok "SonarQube dashboard: $SONAR_HOST/dashboard?id=pubsub-kafka-migrator"
+      else
+        fail "SonarQube analysis FAILED — regenerate SONAR_TOKEN at: $SONAR_HOST/account/security"
+      fi
     fi
   fi
 fi
@@ -128,13 +135,14 @@ if [ "$SONAR_ONLY" = false ]; then
   hdr "Security scans"
 
   # 3a. Gitleaks — secret detection
+  # Mount GIT_ROOT (repo root with .git/) so gitleaks can scan commit history
   echo "  [1/3] Gitleaks (secret scan)..."
   docker run --rm \
-    -v "$ROOT:/repo" \
+    -v "$GIT_ROOT:/repo" \
     zricethezav/gitleaks:latest detect \
       --source /repo \
       --report-format sarif \
-      --report-path /repo/build/security-scans/gitleaks.sarif \
+      --report-path /repo/backend/build/security-scans/gitleaks.sarif \
       --no-banner \
       --redact \
       2>&1 | tail -3 || true
@@ -193,6 +201,17 @@ if [ "$SONAR_ONLY" = false ]; then
       -d '{"name":"pubsub-kafka-migrator","description":"PubSub to Kafka migration platform","prod_type":1}' \
       -o /dev/null 2>/dev/null || true
 
+    # Look up product ID by name — never assume it is 1
+    DD_PRODUCT_ID=$(curl -s "$DD_HOST/api/v2/products/?name=pubsub-kafka-migrator&limit=1" \
+      -H "Authorization: Token $DD_TOKEN" \
+      2>/dev/null | python3 -c "import sys,json; r=json.load(sys.stdin); print(r['results'][0]['id'])" 2>/dev/null || true)
+
+    if [ -z "${DD_PRODUCT_ID:-}" ]; then
+      fail "Could not resolve DefectDojo product ID for 'pubsub-kafka-migrator'"
+    else
+      ok "Product ID resolved: $DD_PRODUCT_ID"
+    fi
+
     # Create a new engagement named after the current date+commit
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
     TODAY=$(date +%Y-%m-%d)
@@ -201,7 +220,7 @@ if [ "$SONAR_ONLY" = false ]; then
     ENG_ID=$(curl -s -X POST "$DD_HOST/api/v2/engagements/" \
       -H "Authorization: Token $DD_TOKEN" \
       -H "Content-Type: application/json" \
-      -d "{\"name\":\"${ENG_NAME}\",\"product\":1,\"target_start\":\"${TODAY}\",\"target_end\":\"${TODAY}\",\"status\":\"In Progress\",\"engagement_type\":\"CI/CD\"}" \
+      -d "{\"name\":\"${ENG_NAME}\",\"product\":${DD_PRODUCT_ID},\"target_start\":\"${TODAY}\",\"target_end\":\"${TODAY}\",\"status\":\"In Progress\",\"engagement_type\":\"CI/CD\"}" \
       2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null || true)
 
     if [ -z "${ENG_ID:-}" ]; then
