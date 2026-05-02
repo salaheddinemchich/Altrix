@@ -1,10 +1,15 @@
 package com.migrator.orchestrator.infrastructure.config;
 
 import com.migrator.orchestrator.domain.port.out.AgentPort;
+import com.migrator.orchestrator.domain.port.out.ApiKeyEncryptionPort;
 import com.migrator.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.migrator.orchestrator.domain.port.out.MigratedFileStoragePort;
 import com.migrator.orchestrator.domain.port.out.ProgressNotifierPort;
+import com.migrator.orchestrator.domain.port.out.ProviderConfigRepository;
+import com.migrator.orchestrator.domain.port.out.ProviderRefreshPort;
 import com.migrator.orchestrator.domain.service.OrchestratorService;
+import com.migrator.orchestrator.domain.service.ProviderConfigService;
+import com.migrator.orchestrator.infra.ai.provider.factory.ProviderFactory;
 import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -14,7 +19,7 @@ import org.springframework.context.annotation.Configuration;
 import java.util.List;
 
 @Configuration
-@EnableConfigurationProperties(AiProvidersConfig.class)
+@EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, EncryptionConfig.class})
 public class BeanConfig {
 
     @Bean
@@ -23,7 +28,7 @@ public class BeanConfig {
             JobStatusUpdatePort     jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
             ProgressNotifierPort    progressNotifierPort,
-            @Value("${ai.inter-agent-delay-ms:65000}") long interAgentDelayMs
+            @Value("${ai.inter-agent-delay-ms:0}") long interAgentDelayMs
     ) {
         return new OrchestratorService(
                 agents,
@@ -32,6 +37,16 @@ public class BeanConfig {
                 progressNotifierPort,
                 interAgentDelayMs
         );
+    }
+
+    @Bean
+    public ProviderConfigService providerConfigService(
+            ProviderConfigRepository configRepository,
+            ApiKeyEncryptionPort     encryption,
+            ProviderRefreshPort      providerRefresh,
+            List<ProviderFactory>    factories
+    ) {
+        return new ProviderConfigService(configRepository, encryption, providerRefresh, factories);
     }
 
     @Bean

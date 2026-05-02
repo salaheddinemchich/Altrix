@@ -1,5 +1,11 @@
 package com.migrator.orchestrator.infra.ai;
 
+import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig;
+import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig.CircuitBreakerSettings;
+import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig.RetrySettings;
+import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
+import com.migrator.orchestrator.infrastructure.config.AiRoutingConfig.TierPreference;
+import com.migrator.orchestrator.infra.ai.provider.ProviderCostTier;
 import com.migrator.orchestrator.infra.ai.provider.ProviderTier;
 import com.migrator.orchestrator.infra.ai.provider.RegisteredProvider;
 import dev.langchain4j.data.message.AiMessage;
@@ -21,78 +27,89 @@ class ProviderRouterTest {
     @SuppressWarnings("unchecked")
     private static ChatLanguageModel modelReturning(String text) {
         ChatLanguageModel m = mock(ChatLanguageModel.class);
-        when(m.generate(anyList())).thenReturn(
-                Response.from(AiMessage.from(text))
-        );
+        when(m.generate(anyList())).thenReturn(Response.from(AiMessage.from(text)));
         return m;
     }
 
     @SuppressWarnings("unchecked")
-    private static ChatLanguageModel modelThrowing(String msg) {
+    private static ChatLanguageModel modelThrowing() {
         ChatLanguageModel m = mock(ChatLanguageModel.class);
-        when(m.generate(anyList())).thenThrow(new RuntimeException(msg));
+        when(m.generate(anyList())).thenThrow(new RuntimeException("provider error"));
         return m;
     }
 
-    private static ProviderRegistry registryOf(RegisteredProvider... providers) {
-        ProviderRegistry registry = mock(ProviderRegistry.class);
-        when(registry.all()).thenReturn(List.of(providers));
-        return registry;
+    private static RegisteredProvider provider(String id, ProviderCostTier costTier, ChatLanguageModel model) {
+        return new RegisteredProvider(id, costTier, model, model);
     }
 
-    private static RegisteredProvider provider(String id, ChatLanguageModel model) {
-        return new RegisteredProvider(id, true, model, model);
+    private static ProviderRegistry registryOf(RegisteredProvider... providers) {
+        ProviderRegistry r = mock(ProviderRegistry.class);
+        when(r.all()).thenReturn(List.of(providers));
+        return r;
+    }
+
+    private static AiRoutingConfig defaultRouting() {
+        return new AiRoutingConfig(
+                RoutingStrategy.TIER_PREFERENCE,
+                TierPreference.PAID_FIRST,
+                List.of(),
+                new CircuitBreakerSettings(10, 50f, 30L, 3),
+                new RetrySettings(2, 100L)
+        );
     }
 
     // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
-    void uses_first_provider_when_available() {
-        ChatLanguageModel model = modelReturning("hello");
-        ProviderRouter router   = new ProviderRouter(registryOf(provider("groq", model)));
+    void returns_response_from_first_available_provider() {
+        ProviderRouter router = new ProviderRouter(
+                registryOf(provider("openai", ProviderCostTier.PAID, modelReturning("hello"))),
+                defaultRouting()
+        );
 
-        String result = router.chat(ProviderTier.MIGRATION, "sys", "user");
-
-        assertThat(result).isEqualTo("hello");
+        assertThat(router.chat(ProviderTier.MIGRATION, "sys", "usr")).isEqualTo("hello");
     }
 
     @Test
-    void falls_back_to_second_provider_when_first_fails() {
-        ChatLanguageModel broken = modelThrowing("rate limited");
-        ChatLanguageModel ok     = modelReturning("fallback response");
-        ProviderRouter router    = new ProviderRouter(registryOf(
-                provider("openai", broken),
-                provider("groq",   ok)
-        ));
+    void falls_back_when_first_provider_throws() {
+        ChatLanguageModel broken = modelThrowing();
+        ChatLanguageModel ok     = modelReturning("fallback");
 
-        String result = router.chat(ProviderTier.MIGRATION, "sys", "user");
+        ProviderRouter router = new ProviderRouter(
+                registryOf(
+                        provider("openai", ProviderCostTier.PAID, broken),
+                        provider("groq",   ProviderCostTier.FREE, ok)
+                ),
+                defaultRouting()
+        );
 
-        assertThat(result).isEqualTo("fallback response");
+        assertThat(router.chat(ProviderTier.MIGRATION, "sys", "usr")).isEqualTo("fallback");
     }
 
     @Test
-    void throws_when_all_providers_fail() {
-        ChatLanguageModel broken = modelThrowing("network error");
-        ProviderRouter router    = new ProviderRouter(registryOf(
-                provider("openai", broken),
-                provider("groq",   broken)
-        ));
+    void throws_AllProvidersUnavailable_when_every_provider_fails() {
+        ProviderRouter router = new ProviderRouter(
+                registryOf(
+                        provider("openai", ProviderCostTier.PAID, modelThrowing()),
+                        provider("groq",   ProviderCostTier.FREE, modelThrowing())
+                ),
+                defaultRouting()
+        );
 
-        assertThatThrownBy(() -> router.chat(ProviderTier.ANALYSIS, "sys", "user"))
+        assertThatThrownBy(() -> router.chat(ProviderTier.ANALYSIS, "sys", "usr"))
                 .isInstanceOf(ProviderRouter.AllProvidersUnavailableException.class)
                 .hasMessageContaining("ANALYSIS");
     }
 
     @Test
     void circuit_breaker_opens_after_repeated_failures() {
-        ChatLanguageModel model = modelThrowing("500 error");
-        ProviderRouter router   = new ProviderRouter(registryOf(provider("groq", model)));
+        ProviderRouter router = new ProviderRouter(
+                registryOf(provider("groq", ProviderCostTier.FREE, modelThrowing())),
+                defaultRouting()
+        );
 
-        // Drive the CB to open (need >50% failure in a window of 10)
         for (int i = 0; i < 10; i++) {
-            try {
-                router.chat(ProviderTier.MIGRATION, "sys", "user");
-            } catch (Exception ignored) {}
+            try { router.chat(ProviderTier.MIGRATION, "s", "u"); } catch (Exception ignored) {}
         }
 
         assertThat(router.circuitBreakerStates().get("groq"))
@@ -100,16 +117,40 @@ class ProviderRouterTest {
     }
 
     @Test
-    void analysis_tier_uses_analysis_model() {
+    void analysis_tier_routes_to_analysis_model() {
         ChatLanguageModel analysisModel  = modelReturning("analysis result");
         ChatLanguageModel migrationModel = modelReturning("migration result");
-        RegisteredProvider p = new RegisteredProvider("groq", true, analysisModel, migrationModel);
-        ProviderRouter router = new ProviderRouter(registryOf(p));
+        RegisteredProvider p = new RegisteredProvider("groq", ProviderCostTier.FREE, analysisModel, migrationModel);
 
-        String result = router.chat(ProviderTier.ANALYSIS, "sys", "user");
+        ProviderRouter router = new ProviderRouter(registryOf(p), defaultRouting());
 
-        assertThat(result).isEqualTo("analysis result");
+        assertThat(router.chat(ProviderTier.ANALYSIS, "sys", "usr")).isEqualTo("analysis result");
         verify(analysisModel).generate(anyList());
         verifyNoInteractions(migrationModel);
+    }
+
+    @Test
+    void explicit_order_strategy_respects_configured_order() {
+        ChatLanguageModel groqModel  = modelReturning("groq");
+        ChatLanguageModel openaiModel = modelReturning("openai");
+
+        AiRoutingConfig explicitCfg = new AiRoutingConfig(
+                RoutingStrategy.EXPLICIT_ORDER,
+                TierPreference.PAID_FIRST,
+                List.of("groq", "openai"),
+                new CircuitBreakerSettings(10, 50f, 30L, 3),
+                new RetrySettings(2, 100L)
+        );
+
+        ProviderRouter router = new ProviderRouter(
+                registryOf(
+                        provider("openai", ProviderCostTier.PAID, openaiModel),
+                        provider("groq",   ProviderCostTier.FREE, groqModel)
+                ),
+                explicitCfg
+        );
+
+        // Explicit order says groq first — cost tier is irrelevant here
+        assertThat(router.chat(ProviderTier.MIGRATION, "s", "u")).isEqualTo("groq");
     }
 }

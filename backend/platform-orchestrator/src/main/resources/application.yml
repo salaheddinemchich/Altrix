@@ -5,6 +5,22 @@ spring:
   application:
     name: platform-orchestrator
 
+  datasource:
+    url:      ${DB_URL:jdbc:postgresql://localhost:5432/migrator}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
     consumer:
@@ -30,30 +46,72 @@ minio:
   bucket:
     projects: migrator-projects
 
+encryption:
+  provider-config:
+    # Base64-encoded 32-byte AES-256 key. Generate with:
+    #   openssl rand -base64 32
+    # Required only when saving custom API keys via the /api/ai/providers endpoint.
+    key: ${PROVIDER_CONFIG_ENCRYPTION_KEY:}
+
 ai:
   providers:
+    # ── Free-tier providers (rate-limited, no-cost) ──────────────────────────
     groq:
       enabled: true
       api-key: ${GROQ_API_KEY:${AI_PROVIDER_API_KEY:}}
       base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
-      model-analysis: ${GROQ_MODEL_ANALYSIS:llama-3.1-8b-instant}
+      model-analysis:  ${GROQ_MODEL_ANALYSIS:llama-3.1-8b-instant}
       model-migration: ${GROQ_MODEL_MIGRATION:llama-3.3-70b-versatile}
-    openai:
-      enabled: ${OPENAI_ENABLED:false}
-      api-key: ${OPENAI_API_KEY:}
-      model-analysis: ${OPENAI_MODEL_ANALYSIS:gpt-4o-mini}
-      model-migration: ${OPENAI_MODEL_MIGRATION:gpt-4o}
-    anthropic:
-      enabled: ${ANTHROPIC_ENABLED:false}
-      api-key: ${ANTHROPIC_API_KEY:}
-      model-analysis: ${ANTHROPIC_MODEL_ANALYSIS:claude-haiku-4-5-20251001}
-      model-migration: ${ANTHROPIC_MODEL_MIGRATION:claude-sonnet-4-6}
+      timeout-seconds: ${GROQ_TIMEOUT_SECONDS:120}
+      temperature:     ${GROQ_TEMPERATURE:0.1}
+    deepseek:
+      enabled: ${DEEPSEEK_ENABLED:false}
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com/v1}
+      model-analysis:  ${DEEPSEEK_MODEL_ANALYSIS:deepseek-chat}
+      model-migration: ${DEEPSEEK_MODEL_MIGRATION:deepseek-reasoner}
+      timeout-seconds: ${DEEPSEEK_TIMEOUT_SECONDS:180}
+      temperature:     ${DEEPSEEK_TEMPERATURE:0.1}
     ollama:
       enabled: ${OLLAMA_ENABLED:false}
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-      model-analysis: ${OLLAMA_MODEL_ANALYSIS:llama3.2:3b}
+      model-analysis:  ${OLLAMA_MODEL_ANALYSIS:llama3.2:3b}
       model-migration: ${OLLAMA_MODEL_MIGRATION:llama3.1:8b}
-  # Delay between agents in ms (0 = off; set >0 only for Groq free-tier rate-limit guard)
+      timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:300}
+    # ── Paid providers (higher quality, per-token billing) ───────────────────
+    openai:
+      enabled: ${OPENAI_ENABLED:false}
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ""
+      model-analysis:  ${OPENAI_MODEL_ANALYSIS:gpt-4o-mini}
+      model-migration: ${OPENAI_MODEL_MIGRATION:gpt-4o}
+      timeout-seconds: ${OPENAI_TIMEOUT_SECONDS:120}
+      temperature:     ${OPENAI_TEMPERATURE:0.1}
+    anthropic:
+      enabled: ${ANTHROPIC_ENABLED:false}
+      api-key: ${ANTHROPIC_API_KEY:}
+      model-analysis:  ${ANTHROPIC_MODEL_ANALYSIS:claude-haiku-4-5-20251001}
+      model-migration: ${ANTHROPIC_MODEL_MIGRATION:claude-sonnet-4-6}
+      timeout-seconds: ${ANTHROPIC_TIMEOUT_SECONDS:120}
+      temperature:     ${ANTHROPIC_TEMPERATURE:0.1}
+
+  routing:
+    # TIER_PREFERENCE (default) or EXPLICIT_ORDER
+    strategy: ${AI_ROUTING_STRATEGY:TIER_PREFERENCE}
+    # When strategy=TIER_PREFERENCE: PAID_FIRST (quality) or FREE_FIRST (cost)
+    tier-preference: ${AI_ROUTING_TIER_PREFERENCE:PAID_FIRST}
+    # When strategy=EXPLICIT_ORDER: ordered list of provider IDs
+    explicit-order: ${AI_ROUTING_EXPLICIT_ORDER:}
+    circuit-breaker:
+      sliding-window-size:        ${AI_CB_WINDOW:10}
+      failure-rate-threshold:     ${AI_CB_FAILURE_RATE:50}
+      wait-duration-open-seconds: ${AI_CB_WAIT_SECONDS:30}
+      permitted-calls-half-open:  ${AI_CB_HALF_OPEN_CALLS:3}
+    retry:
+      max-attempts:        ${AI_RETRY_MAX:2}
+      wait-duration-millis: ${AI_RETRY_WAIT_MS:1000}
+
+  # Delay between agents in ms (0 = off; raise only for single-provider Groq free-tier)
   inter-agent-delay-ms: ${AI_INTER_AGENT_DELAY_MS:0}
 
 websocket:

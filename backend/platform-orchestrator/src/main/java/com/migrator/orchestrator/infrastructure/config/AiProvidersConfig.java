@@ -3,40 +3,52 @@ package com.migrator.orchestrator.infrastructure.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
+/**
+ * All provider identity config (endpoints, model names, credentials).
+ * Nothing is hardcoded in Java — every value comes from {@code application.yml}
+ * or an environment variable override.
+ *
+ * <p>API key fields map to environment variables via Spring's
+ * {@code ${ENV_VAR:default}} syntax in {@code application.yml}. They are
+ * NEVER logged — only {@code [CONFIGURED]} / {@code [NOT SET]} markers are used.
+ */
 @ConfigurationProperties(prefix = "ai.providers")
 public record AiProvidersConfig(
-        GroqConfig groq,
-        OpenAiConfig openai,
-        AnthropicConfig anthropic,
-        OllamaConfig ollama
+        OpenAiCompatibleConfig groq,
+        OpenAiCompatibleConfig openai,
+        OpenAiCompatibleConfig deepseek,
+        AnthropicConfig        anthropic,
+        OllamaConfig           ollama
 ) {
 
-    public record GroqConfig(
-            @DefaultValue("true")  boolean enabled,
-            @DefaultValue("")      String  apiKey,
-            @DefaultValue("https://api.groq.com/openai/v1") String baseUrl,
-            @DefaultValue("llama-3.1-8b-instant")           String modelAnalysis,
-            @DefaultValue("llama-3.3-70b-versatile")        String modelMigration
-    ) {}
-
-    public record OpenAiConfig(
+    /**
+     * Shared config shape for any provider with an OpenAI-compatible REST API
+     * (Groq, OpenAI, DeepSeek, Together.ai, Fireworks.ai, etc.).
+     */
+    public record OpenAiCompatibleConfig(
             @DefaultValue("false") boolean enabled,
             @DefaultValue("")      String  apiKey,
-            @DefaultValue("gpt-4o-mini") String modelAnalysis,
-            @DefaultValue("gpt-4o")      String modelMigration
+            @DefaultValue("")      String  baseUrl,
+            @DefaultValue("")      String  modelAnalysis,
+            @DefaultValue("")      String  modelMigration,
+            @DefaultValue("120")   long    timeoutSeconds,
+            @DefaultValue("0.1")   double  temperature
     ) {}
 
     public record AnthropicConfig(
             @DefaultValue("false") boolean enabled,
             @DefaultValue("")      String  apiKey,
-            @DefaultValue("claude-haiku-4-5-20251001") String modelAnalysis,
-            @DefaultValue("claude-sonnet-4-6")         String modelMigration
+            @DefaultValue("")      String  modelAnalysis,
+            @DefaultValue("")      String  modelMigration,
+            @DefaultValue("120")   long    timeoutSeconds,
+            @DefaultValue("0.1")   double  temperature
     ) {}
 
     public record OllamaConfig(
-            @DefaultValue("false")                    boolean enabled,
-            @DefaultValue("http://localhost:11434")   String  baseUrl,
-            @DefaultValue("llama3.2:3b")              String  modelAnalysis,
-            @DefaultValue("llama3.1:8b")              String  modelMigration
+            @DefaultValue("false")                  boolean enabled,
+            @DefaultValue("http://localhost:11434") String  baseUrl,
+            @DefaultValue("llama3.2:3b")            String  modelAnalysis,
+            @DefaultValue("llama3.1:8b")            String  modelMigration,
+            @DefaultValue("300")                    long    timeoutSeconds
     ) {}
 }

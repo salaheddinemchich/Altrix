@@ -3,16 +3,17 @@ package com.migrator.orchestrator.infra.ai.provider;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 
 /**
- * A resolved AI provider pairing a provider ID with the two LangChain4j models
- * it exposes (one per tier). Immutable value type — constructed once at startup.
+ * Immutable value type holding a provider's identity and its two LangChain4j
+ * models (one per call tier). Constructed once at startup by a
+ * {@link com.migrator.orchestrator.infra.ai.provider.factory.ProviderFactory}.
  */
 public record RegisteredProvider(
         String            id,
-        boolean           free,
+        ProviderCostTier  costTier,
         ChatLanguageModel analysisModel,
         ChatLanguageModel migrationModel
 ) {
-    public ChatLanguageModel modelFor(ProviderTier tier) {
-        return tier == ProviderTier.ANALYSIS ? analysisModel : migrationModel;
+    public ChatLanguageModel modelFor(ProviderTier callTier) {
+        return callTier == ProviderTier.ANALYSIS ? analysisModel : migrationModel;
     }
 }
