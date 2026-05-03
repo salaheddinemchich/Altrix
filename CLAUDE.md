@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Repository Layout
 
 ```
-pubsub-kafka-migrator/
+altrix/
 ├── backend/               Gradle multi-module Java 21 backend
 │   ├── gradlew            All Gradle commands run from here
 │   ├── docker-compose.yml Infrastructure (Postgres, Redis, Kafka, MinIO, SonarQube, DefectDojo)
@@ -36,10 +36,10 @@ All Gradle commands must be run from `backend/`:
 ./gradlew :platform-orchestrator:test
 
 # Run a single test class
-./gradlew :platform-orchestrator:test --tests "com.migrator.orchestrator.infra.ai.ProviderRouterTest"
+./gradlew :platform-orchestrator:test --tests "com.altrix.orchestrator.infra.ai.ProviderRouterTest"
 
 # Run a single test method
-./gradlew :platform-orchestrator:test --tests "com.migrator.orchestrator.infra.ai.ProviderRouterTest.falls_back_when_first_provider_throws"
+./gradlew :platform-orchestrator:test --tests "com.altrix.orchestrator.infra.ai.ProviderRouterTest.falls_back_when_first_provider_throws"
 
 # Run a service locally
 ./gradlew :platform-orchestrator:bootRun
@@ -183,4 +183,4 @@ Each service manages its own schema independently:
 | 7. DAST | OWASP ZAP baseline | after staging deploy |
 | 8. Findings aggregation | DefectDojo | after all scans (if `DEFECTDOJO_URL` set) |
 
-Dockerfiles are at `backend/infra/docker/Dockerfile.platform-{project,job,orchestrator}`. Images are pushed to `ghcr.io/{owner}/pubsub-kafka-migrator/{service}:latest`.
+Dockerfiles are at `backend/infra/docker/Dockerfile.platform-{project,job,orchestrator}`. Images are pushed to `ghcr.io/{owner}/altrix/{service}:latest`.

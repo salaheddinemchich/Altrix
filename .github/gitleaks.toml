@@ -1,7 +1,7 @@
-# Gitleaks configuration for pubsub-kafka-migrator
+# Gitleaks configuration for altrix
 # Docs: https://github.com/gitleaks/gitleaks#configuration
 
-title = "pubsub-kafka-migrator gitleaks config"
+title = "altrix gitleaks config"
 
 [extend]
 # Extend the default rules shipped with gitleaks

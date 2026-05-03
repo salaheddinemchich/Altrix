@@ -1,4 +1,4 @@
-rootProject.name = "pubsub-kafka-migrator"
+rootProject.name = "altrix"
 
 include("platform-common")
 include("platform-project")

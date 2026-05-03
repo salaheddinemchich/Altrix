@@ -6,9 +6,9 @@ spring:
     name: platform-orchestrator
 
   datasource:
-    url:      ${DB_URL:jdbc:postgresql://localhost:5432/migrator}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:postgres}
+    url:      jdbc:postgresql://localhost:5432/${POSTGRES_DB:altrix_db}
+    username: ${POSTGRES_USER:altrix}
+    password: ${POSTGRES_PASSWORD:altrix_pass}
 
   jpa:
     hibernate:
@@ -44,7 +44,7 @@ minio:
   access-key: ${MINIO_ROOT_USER:admin}
   secret-key: ${MINIO_ROOT_PASSWORD:password123}
   bucket:
-    projects: migrator-projects
+    projects: altrix-projects
 
 encryption:
   provider-config:

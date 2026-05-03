@@ -62,11 +62,11 @@ check_container() {
 }
 
 if [ "$SECURITY_ONLY" = false ]; then
-  check_container "migrator-sonarqube"
+  check_container "altrix-sonarqube"
 fi
 if [ "$SONAR_ONLY" = false ]; then
-  check_container "migrator-defectdojo"
-  check_container "migrator-defectdojo-nginx"
+  check_container "altrix-defectdojo"
+  check_container "altrix-defectdojo-nginx"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

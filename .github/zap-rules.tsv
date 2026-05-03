@@ -1,4 +1,4 @@
-# ZAP baseline scan rule overrides for pubsub-kafka-migrator
+# ZAP baseline scan rule overrides for altrix
 # Format: <rule-id>	<IGNORE|WARN|FAIL>	<description>
 # Docs: https://www.zaproxy.org/docs/docker/baseline-scan/
 

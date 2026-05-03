@@ -1,0 +1,63 @@
+<section class="hero">
+  <h1>Welcome to Altrix</h1>
+  <p class="muted">
+    AI-powered migration platform — automated codebase analysis, planning,
+    transformation, and validation across any stack.
+  </p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" routerLink="/projects">Upload a project</a>
+    <a class="btn" routerLink="/jobs">View migration jobs</a>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="card stat">
+    <div class="stat-label">Projects</div>
+    <div class="stat-value">{{ projectCount() ?? '—' }}</div>
+    <a class="stat-link" routerLink="/projects">Manage →</a>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Jobs</div>
+    <div class="stat-value">{{ jobCount() ?? '—' }}</div>
+    <a class="stat-link" routerLink="/jobs">View all →</a>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Enabled providers</div>
+    <div class="stat-value">{{ enabledProvs() ?? '—' }}</div>
+    <a class="stat-link" routerLink="/providers">Configure →</a>
+  </div>
+</section>
+
+<section>
+  <h2>Recent jobs</h2>
+
+  @if (jobList() === null) {
+    <div class="empty">Loading…</div>
+  } @else if (recentJobs().length === 0) {
+    <div class="empty">
+      No migration jobs yet.
+      <a routerLink="/projects">Upload a project</a> to start.
+    </div>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Job</th>
+          <th>Project</th>
+          <th>Status</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (job of recentJobs(); track job.id) {
+          <tr>
+            <td class="mono">{{ job.id.slice(0, 8) }}…</td>
+            <td class="mono muted">{{ job.projectId.slice(0, 8) }}…</td>
+            <td><span class="pill" [class]="statusClass(job.status)">{{ job.status }}</span></td>
+            <td class="muted">{{ job.createdAt | date:'short' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

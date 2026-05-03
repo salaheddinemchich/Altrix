@@ -6,9 +6,9 @@ spring:
     name: platform-project
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB:migrator_db}
-    username: ${POSTGRES_USER:migrator}
-    password: ${POSTGRES_PASSWORD:migrator_pass}
+    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB:altrix_db}
+    username: ${POSTGRES_USER:altrix}
+    password: ${POSTGRES_PASSWORD:altrix_pass}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -51,7 +51,7 @@ minio:
   access-key: ${MINIO_ROOT_USER:admin}
   secret-key: ${MINIO_ROOT_PASSWORD:password123}
   bucket:
-    projects: migrator-projects
+    projects: altrix-projects
 
 kafka:
   topics:

@@ -56,30 +56,30 @@ wait_healthy() {
   fail "$name did not become healthy in time — check: docker logs $name"
 }
 
-wait_healthy "migrator-postgres"
-wait_healthy "migrator-redis"
-wait_healthy "migrator-kafka"
-wait_healthy "migrator-minio"
+wait_healthy "altrix-postgres"
+wait_healthy "altrix-redis"
+wait_healthy "altrix-kafka"
+wait_healthy "altrix-minio"
 
 # ── 4. MinIO bucket ──────────────────────────────────────────────────────────
 hdr "MinIO bucket"
-docker exec migrator-minio sh -c "
+docker exec altrix-minio sh -c "
   mc alias set local http://localhost:9000 \$MINIO_ROOT_USER \$MINIO_ROOT_PASSWORD --quiet 2>/dev/null || true
-  mc ls local/migrator-projects --quiet 2>/dev/null \
-    && echo '  migrator-projects: EXISTS' \
-    || (mc mb local/migrator-projects --quiet && echo '  migrator-projects: CREATED')
+  mc ls local/altrix-projects --quiet 2>/dev/null \
+    && echo '  altrix-projects: EXISTS' \
+    || (mc mb local/altrix-projects --quiet && echo '  altrix-projects: CREATED')
 "
-ok "migrator-projects bucket ready"
+ok "altrix-projects bucket ready"
 
 # ── 5. Kafka topics ───────────────────────────────────────────────────────────
 hdr "Kafka topics"
-until docker exec migrator-kafka /opt/kafka/bin/kafka-topics.sh \
+until docker exec altrix-kafka /opt/kafka/bin/kafka-topics.sh \
     --bootstrap-server localhost:9092 --list > /dev/null 2>&1; do
   printf "."; sleep 3
 done
 echo ""
 for topic in project.registered migration.job.created migration.job.status.update migration.job.completed; do
-  docker exec migrator-kafka /opt/kafka/bin/kafka-topics.sh \
+  docker exec altrix-kafka /opt/kafka/bin/kafka-topics.sh \
     --bootstrap-server localhost:9092 --create --if-not-exists \
     --topic "$topic" --partitions 1 --replication-factor 1 > /dev/null 2>&1
   ok "$topic"
@@ -104,10 +104,10 @@ ok "subscription: orders.inventory.sub"
 
 # ── 7. Postgres: orders_db ───────────────────────────────────────────────────
 hdr "Postgres: orders_db"
-docker exec migrator-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
+docker exec altrix-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
   "SELECT 1 FROM pg_database WHERE datname='orders_db'" | grep -q 1 \
   && ok "orders_db EXISTS" \
-  || (docker exec migrator-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  || (docker exec altrix-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
       -c "CREATE DATABASE orders_db OWNER $POSTGRES_USER;" > /dev/null && ok "orders_db CREATED")
 
 # ── 8. AI provider key test ───────────────────────────────────────────────────
@@ -128,7 +128,7 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN} Infrastructure ready${NC}"
 echo -e "${GREEN}══════════════════════════════════════════════════════${NC}"
 echo ""
-echo "  pgAdmin:    http://localhost:5050  (admin@migrator.com / admin123)"
+echo "  pgAdmin:    http://localhost:5050  (admin@altrix.com / admin123)"
 echo "  Kafdrop:    http://localhost:9002"
 echo "  MinIO:      http://localhost:9001  ($MINIO_ROOT_USER)"
 echo "  RedisUI:    http://localhost:8001"

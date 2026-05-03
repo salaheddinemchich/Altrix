@@ -1,5 +1,5 @@
 {
-  "name": "pubsub-kafka-migrator-front-end",
+  "name": "altrix-frontend",
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
@@ -7,7 +7,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "serve:ssr:pubsub-kafka-migrator-front-end": "node dist/pubsub-kafka-migrator-front-end/server/server.mjs"
+    "serve:ssr:altrix-frontend": "node dist/altrix-frontend/server/server.mjs"
   },
   "private": true,
   "dependencies": {

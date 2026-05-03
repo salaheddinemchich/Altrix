@@ -1,0 +1,86 @@
+<header class="page-header">
+  <div>
+    <h1>Projects</h1>
+    <p class="muted">Upload a codebase to start a migration. Altrix detects the stack automatically.</p>
+  </div>
+  <button class="btn" (click)="refresh()" [disabled]="projects() === null">
+    Refresh
+  </button>
+</header>
+
+<section class="card upload">
+  <h3>Upload new project</h3>
+
+  <div class="upload-grid">
+    <div>
+      <label for="file">Project archive (.zip)</label>
+      <input id="file" type="file" accept=".zip" (change)="onFileSelected($event)" />
+      @if (selectedFile(); as f) {
+        <small class="muted">{{ f.name }} · {{ (f.size / 1024 / 1024).toFixed(2) }} MB</small>
+      }
+    </div>
+
+    <div>
+      <label for="cfg">Config format preference</label>
+      <select id="cfg" [(ngModel)]="configFormat">
+        @for (opt of configOptions; track opt) {
+          <option [value]="opt">{{ opt }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="upload-actions">
+      <button
+        class="btn btn-primary"
+        [disabled]="!selectedFile() || uploading()"
+        (click)="upload()"
+      >
+        {{ uploading() ? 'Uploading…' : 'Upload' }}
+      </button>
+    </div>
+  </div>
+
+  @if (uploadError(); as err) {
+    <p class="error">Upload failed — {{ err }}</p>
+  }
+</section>
+
+<section>
+  <h2>Your projects</h2>
+
+  @if (loadError(); as err) {
+    <div class="empty">Could not load projects — {{ err }}</div>
+  } @else if (projects() === null) {
+    <div class="empty">Loading…</div>
+  } @else if (projects()!.length === 0) {
+    <div class="empty">No projects yet. Upload one above to get started.</div>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Stack</th>
+          <th>Build</th>
+          <th>Config</th>
+          <th>Status</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (p of projects(); track p.id) {
+          <tr>
+            <td>
+              <div>{{ p.name }}</div>
+              <small class="mono faint">{{ p.id }}</small>
+            </td>
+            <td class="muted">{{ p.framework }}</td>
+            <td class="muted">{{ p.buildSystem }}</td>
+            <td class="muted">{{ p.configFormat }}</td>
+            <td><span class="pill" [class]="statusClass(p.status)">{{ p.status }}</span></td>
+            <td class="muted">{{ p.createdAt | date:'short' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

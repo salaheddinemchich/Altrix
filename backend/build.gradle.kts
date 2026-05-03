@@ -9,8 +9,8 @@ plugins {
 // Only host/token are set here (injected at runtime via -D flags or env).
 sonar {
     properties {
-        property("sonar.projectKey",  "pubsub-kafka-migrator")
-        property("sonar.projectName", "PubSub to Kafka Migrator")
+        property("sonar.projectKey",  "altrix")
+        property("sonar.projectName", "Altrix")
     }
 }
 
@@ -19,7 +19,7 @@ subprojects {
     apply(plugin = "io.spring.dependency-management")
     apply(plugin = "jacoco")
 
-    group   = "com.migrator"
+    group   = "com.altrix"
     version = "0.0.1-SNAPSHOT"
 
     java {

@@ -22,10 +22,12 @@ frontend/dist/
 .gradle/
 build/
 out/
+bin/
 gen/
 backend/.gradle/
 backend/build/
 backend/out/
+backend/bin/
 backend/gen/
 
 # ── Agent tooling (local only) ────────────────────────────────────────────────

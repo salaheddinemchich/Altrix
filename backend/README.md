@@ -55,7 +55,7 @@ The platform transforms PubSub-based Spring Boot projects by:
 ### Module Structure
 
 ```
-pubsub-kafka-migrator/
+altrix/
 ├── platform-common/        Pure Java domain kernel — shared types, no Spring
 ├── platform-project/       (port 8082) File upload, detection, project registration
 ├── platform-job/           (port 8083) Job lifecycle management, download endpoint
@@ -121,7 +121,7 @@ Handles file uploads, build-system detection, project persistence, and publishes
 |---------|------|--------|
 | `ProjectController` | REST | `POST /api/v1/projects/upload` (multipart), `GET /api/v1/projects/{id}`, `GET /api/v1/projects` |
 | `ProjectPersistenceAdapter` | JPA | Maps `Project` ↔ `ProjectJpaEntity`; `projects` table |
-| `MinioFileStorageAdapter` | Object storage | Bucket `migrator-projects`, prefix `uploads/`, UUID-named keys |
+| `MinioFileStorageAdapter` | Object storage | Bucket `altrix-projects`, prefix `uploads/`, UUID-named keys |
 | `KafkaProjectEventAdapter` | Kafka producer | Topic `project.registered`, format `key=projectId value="userId|storageKey"` |
 
 #### Detection
@@ -394,7 +394,7 @@ All infrastructure is defined in `infra/docker-compose.yml`.
 | Kafdrop | 9002 | Kafka management UI |
 | MinIO | 9000 (API), 9001 (console) | Object storage |
 
-All services are connected via the `migrator-net` bridge network and use named Docker volumes for persistence (`postgres_data`, `minio_data`).
+All services are connected via the `altrix-net` bridge network and use named Docker volumes for persistence (`postgres_data`, `minio_data`).
 
 ---
 
@@ -405,7 +405,7 @@ Environment variables are supplied via `infra/.env`:
 ```env
 POSTGRES_USER=...
 POSTGRES_PASSWORD=...
-POSTGRES_DB=migrator_db
+POSTGRES_DB=altrix_db
 
 REDIS_PASSWORD=...
 
@@ -419,7 +419,7 @@ AI_PROVIDER_MODEL=llama-3.3-70b-versatile
 
 Each service has its own `application.yml`. Key settings per service:
 
-- **platform-project**: `max-file-size: 50MB`, Flyway table `flyway_schema_history_project`, MinIO bucket `migrator-projects`
+- **platform-project**: `max-file-size: 50MB`, Flyway table `flyway_schema_history_project`, MinIO bucket `altrix-projects`
 - **platform-job**: Redis TTL 24 h, Kafka consumer group `platform-job`
 - **platform-orchestrator**: Kafka consumer group `platform-orchestrator`, AI temperature `0.1`, max tokens `4096`, per-file read cap `128 KB`
 

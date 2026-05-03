@@ -1,0 +1,46 @@
+<a class="back" routerLink="/jobs">← Back to jobs</a>
+
+@if (loadError(); as err) {
+  <div class="empty">Could not load job — {{ err }}</div>
+} @else if (!job()) {
+  <div class="empty">Loading…</div>
+} @else {
+  <header class="job-header">
+    <div>
+      <h1>Job</h1>
+      <code class="mono">{{ job()!.id }}</code>
+    </div>
+    <span class="pill" [class]="statusClass(job()!.status)">{{ job()!.status }}</span>
+  </header>
+
+  <section class="card details">
+    <dl>
+      <dt>Project</dt>
+      <dd class="mono">{{ job()!.projectId }}</dd>
+
+      <dt>User</dt>
+      <dd class="mono">{{ job()!.userId }}</dd>
+
+      <dt>Created</dt>
+      <dd class="muted">{{ job()!.createdAt | date:'medium' }}</dd>
+
+      <dt>Completed</dt>
+      <dd class="muted">{{ job()!.completedAt ? (job()!.completedAt | date:'medium') : '—' }}</dd>
+
+      <dt>Config preference</dt>
+      <dd class="muted">{{ job()!.configFormatPreference || '—' }}</dd>
+
+      @if (job()!.errorMessage) {
+        <dt>Error</dt>
+        <dd class="error">{{ job()!.errorMessage }}</dd>
+      }
+    </dl>
+
+    <div class="actions">
+      <button class="btn" (click)="refresh()">Refresh</button>
+      @if (canDownload()) {
+        <a class="btn btn-primary" [href]="downloadUrl()" target="_blank">Download migrated ZIP</a>
+      }
+    </div>
+  </section>
+}
