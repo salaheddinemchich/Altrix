@@ -1,5 +1,6 @@
 {
     "java.compile.nullAnalysis.mode": "automatic",
     "java.project.outputPath": "build/vscode-bin",
-    "java.autobuild.enabled": true
+    "java.autobuild.enabled": true,
+    "java.configuration.updateBuildConfiguration": "interactive"
 }

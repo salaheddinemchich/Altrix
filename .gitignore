@@ -31,4 +31,7 @@ backend/platform-*/bin/
 .junie/
 .agent-work/
 .claude/
-.vscode/
+
+# VS Code — ignore personal/workspace files but commit shared project settings
+.vscode/*
+!.vscode/settings.json

@@ -18,6 +18,15 @@ subprojects {
     apply(plugin = "java")
     apply(plugin = "io.spring.dependency-management")
     apply(plugin = "jacoco")
+    apply(plugin = "idea")
+
+    // Redirect IntelliJ IDEA compiler output into build/ so it never creates out/ or bin/
+    configure<org.gradle.plugins.ide.idea.model.IdeaModel> {
+        module {
+            outputDir = file("build/idea-out/main")
+            testOutputDir = file("build/idea-out/test")
+        }
+    }
 
     group   = "com.altrix"
     version = "0.0.1-SNAPSHOT"
