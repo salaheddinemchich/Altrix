@@ -20,15 +20,11 @@ frontend/dist/
 
 # ── Backend (Java/Gradle) ─────────────────────────────────────────────────────
 .gradle/
-build/
-out/
-bin/
-gen/
 backend/.gradle/
 backend/build/
-backend/out/
-backend/bin/
-backend/gen/
+backend/platform-*/build/
+backend/platform-*/out/
+backend/platform-*/bin/
 
 # ── Agent tooling (local only) ────────────────────────────────────────────────
 .agentbridge/

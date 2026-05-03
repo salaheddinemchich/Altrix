@@ -34,9 +34,8 @@ infra/postgres/*
 # BUT keep this file tracked
 !infra/postgres/init.sql
 
-# IntelliJ IDEA build outputs (not source — already in src/main/resources)
-**/out/
-out/
+# IntelliJ IDEA build outputs — only top-level module out/ dirs, NOT source paths like domain/port/out/
+platform-*/out/
 
 # Claude agent bridge (local tool — not project code)
 .agentbridge/
