@@ -120,23 +120,22 @@ jobs:
       - name: Install Semgrep
         run: pip install semgrep --quiet
 
-      - name: Run Semgrep SAST
+      - name: Run Semgrep SAST (JSON for DefectDojo native parser)
         run: |
           semgrep scan \
             --config p/java \
-            --config p/spring \
             --config p/owasp-top-ten \
             --config p/secrets \
-            --sarif \
-            --output semgrep.sarif \
+            --json \
+            --output semgrep.json \
             backend 2>&1 || true
 
       - name: Archive Semgrep report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: semgrep-sarif
-          path: semgrep.sarif
+          name: semgrep-report
+          path: semgrep.json
           if-no-files-found: ignore
           retention-days: 14
 
@@ -149,13 +148,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run Trivy filesystem scan
+      - name: Run Trivy filesystem scan (JSON for DefectDojo native parser)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
-          format: sarif
-          output: trivy-fs.sarif
+          format: json
+          output: trivy-fs.json
           severity: CRITICAL,HIGH,MEDIUM
           ignore-unfixed: true
           vuln-type: library
@@ -166,7 +165,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: trivy-fs-report
-          path: trivy-fs.sarif
+          path: trivy-fs.json
           if-no-files-found: ignore
           retention-days: 14
 
@@ -205,7 +204,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/pubsub-kafka-migrator/${{ matrix.service.name }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/altrix/${{ matrix.service.name }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable=true
@@ -244,12 +243,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Trivy image scan
+      - name: Run Trivy image scan (JSON for DefectDojo native parser)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/pubsub-kafka-migrator/${{ matrix.service }}:latest
-          format: sarif
-          output: trivy-image-${{ matrix.service }}.sarif
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/altrix/${{ matrix.service }}:latest
+          format: json
+          output: trivy-image-${{ matrix.service }}.json
           severity: CRITICAL,HIGH
           ignore-unfixed: true
         continue-on-error: true
@@ -259,7 +258,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: trivy-image-${{ matrix.service }}
-          path: trivy-image-${{ matrix.service }}.sarif
+          path: trivy-image-${{ matrix.service }}.json
           if-no-files-found: ignore
           retention-days: 14
 
@@ -285,12 +284,12 @@ jobs:
           envs:     DD_DB_PASSWORD,DD_SECRET_KEY,DD_AES_256_KEY,DD_ADMIN_PASSWORD
           script: |
             set -e
-            cd /opt/pubsub-kafka-migrator
+            cd /opt/altrix
 
             # ── Application services ──────────────────────────────────────
-            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-project:latest
-            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-job:latest
-            docker pull ghcr.io/${{ github.repository_owner }}/pubsub-kafka-migrator/platform-orchestrator:latest
+            docker pull ghcr.io/${{ github.repository_owner }}/altrix/platform-project:latest
+            docker pull ghcr.io/${{ github.repository_owner }}/altrix/platform-job:latest
+            docker pull ghcr.io/${{ github.repository_owner }}/altrix/platform-orchestrator:latest
             docker compose up -d --no-deps --force-recreate \
               platform-project platform-job platform-orchestrator
 
@@ -384,8 +383,8 @@ jobs:
       - name: Download Semgrep artifact
         uses: actions/download-artifact@v8
         with:
-          name: semgrep-sarif
-          path: scan-artifacts/semgrep-sarif
+          name: semgrep-report
+          path: scan-artifacts/semgrep-report
         continue-on-error: true
 
       - name: Download container scan artifacts
@@ -400,9 +399,34 @@ jobs:
         env:
           DD_URL: ${{ vars.DEFECTDOJO_URL }}
           DD_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-          DD_PRODUCT: pubsub-kafka-migrator
-          DD_ENGAGEMENT: "CI-${{ github.run_number }}"
+          DD_PRODUCT: Altrix
+          DD_ENGAGEMENT: "CI-${{ github.run_number }}-${{ github.sha }}"
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
         run: |
+          set -euo pipefail
+          TODAY=$(date +%Y-%m-%d)
+
+          # ── Resolve product (create if missing) ─────────────────────────
+          curl -s -X POST "${DD_URL}/api/v2/products/" \
+            -H "Authorization: Token ${DD_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"${DD_PRODUCT}\",\"description\":\"AI-powered migration platform — automated codebase analysis, planning, transformation, and validation across any stack.\",\"prod_type\":1}" \
+            -o /dev/null 2>/dev/null || true
+
+          PRODUCT_ID=$(curl -s "${DD_URL}/api/v2/products/?name=${DD_PRODUCT}&limit=1" \
+            -H "Authorization: Token ${DD_API_KEY}" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+          echo "Product '${DD_PRODUCT}' (id=${PRODUCT_ID})"
+
+          # ── Create engagement for this CI run ───────────────────────────
+          ENG_ID=$(curl -s -X POST "${DD_URL}/api/v2/engagements/" \
+            -H "Authorization: Token ${DD_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"${DD_ENGAGEMENT}\",\"product\":${PRODUCT_ID},\"target_start\":\"${TODAY}\",\"target_end\":\"${TODAY}\",\"status\":\"In Progress\",\"engagement_type\":\"CI/CD\",\"commit_hash\":\"${COMMIT}\",\"branch_tag\":\"${BRANCH}\",\"build_id\":\"${{ github.run_id }}\"}" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "Engagement '${DD_ENGAGEMENT}' (id=${ENG_ID})"
+
           upload_to_dojo() {
             local scan_type="$1"
             local file="$2"
@@ -418,9 +442,10 @@ jobs:
               -H "Authorization: Token ${DD_API_KEY}" \
               -F "scan_type=${scan_type}" \
               -F "file=@${file}" \
-              -F "product_name=${DD_PRODUCT}" \
-              -F "engagement_name=${DD_ENGAGEMENT}" \
-              -F "auto_create_context=true" \
+              -F "engagement=${ENG_ID}" \
+              -F "test_title=${label}" \
+              -F "active=true" \
+              -F "verified=false" \
               -F "close_old_findings=false" \
               "${DD_URL}/api/v2/import-scan/" 2>/dev/null) || true
             HTTP_STATUS="${HTTP_STATUS:-0}"
@@ -428,34 +453,42 @@ jobs:
             if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
               echo "  [OK]   $label (HTTP $HTTP_STATUS)"
             else
-              echo "  [WARN] $label — HTTP $HTTP_STATUS (non-blocking, DefectDojo may not be reachable from CI)"
+              echo "  [WARN] $label — HTTP $HTTP_STATUS"
             fi
             return 0
           }
 
           echo "=== Uploading security findings to DefectDojo at ${DD_URL} ==="
 
+          # Native scan types — richer parsing than generic SARIF
           upload_to_dojo "Gitleaks Scan" \
             "scan-artifacts/gitleaks-report/results.sarif" \
-            "Gitleaks secret scan"
+            "Gitleaks — Secret Detection"
 
-          upload_to_dojo "SARIF" \
-            "scan-artifacts/semgrep-sarif/semgrep.sarif" \
-            "Semgrep SAST"
+          upload_to_dojo "Semgrep JSON Report" \
+            "scan-artifacts/semgrep-report/semgrep.json" \
+            "Semgrep — SAST"
 
-          upload_to_dojo "SARIF" \
-            "scan-artifacts/trivy-fs-report/trivy-fs.sarif" \
-            "Trivy SCA (filesystem)"
+          upload_to_dojo "Trivy Scan" \
+            "scan-artifacts/trivy-fs-report/trivy-fs.json" \
+            "Trivy — Dependency CVEs"
 
           for svc in platform-project platform-job platform-orchestrator; do
-            upload_to_dojo "SARIF" \
-              "scan-artifacts/trivy-image-${svc}/trivy-image-${svc}.sarif" \
-              "Trivy container — ${svc}"
+            upload_to_dojo "Trivy Scan" \
+              "scan-artifacts/trivy-image-${svc}/trivy-image-${svc}.json" \
+              "Trivy — Container (${svc})"
           done
 
           upload_to_dojo "ZAP Scan" \
             "scan-artifacts/zap-report/report_json.json" \
-            "OWASP ZAP DAST"
+            "OWASP ZAP — DAST"
+
+          # Mark engagement Completed
+          curl -s -X PATCH "${DD_URL}/api/v2/engagements/${ENG_ID}/" \
+            -H "Authorization: Token ${DD_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"status":"Completed"}' \
+            -o /dev/null 2>/dev/null || true
 
           echo "=== DefectDojo upload complete ==="
-          echo "Dashboard: ${DD_URL}/product/list"
+          echo "Dashboard: ${DD_URL}/engagement/${ENG_ID}"

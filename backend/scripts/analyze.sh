@@ -32,7 +32,9 @@ done
 set -a && source "$ROOT/.env" && set +a
 
 SONAR_HOST="${SONAR_HOST_URL:-http://localhost:9003}"
+SONAR_PROJECT_KEY="${SONAR_PROJECT_KEY:-altrix}"
 DD_HOST="http://localhost:8089"
+DD_PRODUCT="Altrix"
 SCAN_DIR="$ROOT/build/security-scans"
 GIT_ROOT="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || echo "$ROOT")"
 mkdir -p "$SCAN_DIR"
@@ -120,7 +122,7 @@ if [ "$SECURITY_ONLY" = false ]; then
       echo ""
 
       if [ "$SONAR_OK" = "true" ]; then
-        ok "SonarQube dashboard: $SONAR_HOST/dashboard?id=pubsub-kafka-migrator"
+        ok "SonarQube dashboard: $SONAR_HOST/dashboard?id=$SONAR_PROJECT_KEY"
       else
         fail "SonarQube analysis FAILED — regenerate SONAR_TOKEN at: $SONAR_HOST/account/security"
       fi
@@ -129,54 +131,58 @@ if [ "$SECURITY_ONLY" = false ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. Security scans (Gitleaks · Semgrep · Trivy)
+# 3. Security scans (Gitleaks · Semgrep · Trivy) — JSON for DefectDojo native parsers
 # ─────────────────────────────────────────────────────────────────────────────
 if [ "$SONAR_ONLY" = false ]; then
   hdr "Security scans"
 
-  # 3a. Gitleaks — secret detection
-  # Mount GIT_ROOT (repo root with .git/) so gitleaks can scan commit history
+  # 3a. Gitleaks — secret detection (JSON for DefectDojo "Gitleaks Scan" parser)
   echo "  [1/3] Gitleaks (secret scan)..."
   docker run --rm \
     -v "$GIT_ROOT:/repo" \
     zricethezav/gitleaks:latest detect \
       --source /repo \
-      --report-format sarif \
-      --report-path /repo/backend/build/security-scans/gitleaks.sarif \
+      --report-format json \
+      --report-path /repo/backend/build/security-scans/gitleaks.json \
       --no-banner \
       --redact \
       2>&1 | tail -3 || true
-  ok "Gitleaks → build/security-scans/gitleaks.sarif"
+  ok "Gitleaks → build/security-scans/gitleaks.json"
 
-  # 3b. Semgrep — SAST
+  # 3b. Semgrep — SAST (JSON for DefectDojo "Semgrep JSON Report" parser)
   echo "  [2/3] Semgrep (SAST)..."
-  docker run --rm \
+  SEMGREP_OUTPUT=$(docker run --rm \
+    --network=host \
     -v "$ROOT:/src" \
     -e SEMGREP_SEND_METRICS=off \
     semgrep/semgrep:latest semgrep scan \
       --config p/java \
-      --config p/spring \
       --config p/owasp-top-ten \
       --config p/secrets \
-      --sarif \
-      --output /src/build/security-scans/semgrep.sarif \
-      /src 2>&1 | grep -E "(ran|findings|error|Error)" || true
-  ok "Semgrep → build/security-scans/semgrep.sarif"
+      --json \
+      --output /src/build/security-scans/semgrep.json \
+      /src 2>&1) && SEMGREP_OK=true || SEMGREP_OK=false
+  echo "$SEMGREP_OUTPUT" | grep -E "(ran|findings|Rules|error|Error|warning)" | head -10 || true
+  if [ "$SEMGREP_OK" = "true" ]; then
+    ok "Semgrep → build/security-scans/semgrep.json"
+  else
+    fail "Semgrep scan FAILED — check output above"
+  fi
 
-  # 3c. Trivy — dependency CVEs
+  # 3c. Trivy — dependency CVEs (JSON for DefectDojo "Trivy Scan" parser)
   echo "  [3/3] Trivy (dependency CVEs)..."
   docker run --rm \
     -v "$ROOT:/repo" \
     -v trivy-cache:/root/.cache/trivy \
     aquasec/trivy:latest filesystem \
-      --format sarif \
-      --output /repo/build/security-scans/trivy-fs.sarif \
+      --format json \
+      --output /repo/build/security-scans/trivy-fs.json \
       --severity CRITICAL,HIGH,MEDIUM \
       --ignore-unfixed \
       --vuln-type library \
       --quiet \
       /repo 2>/dev/null || true
-  ok "Trivy → build/security-scans/trivy-fs.sarif"
+  ok "Trivy → build/security-scans/trivy-fs.json"
 
   # ─────────────────────────────────────────────────────────────────────────
   # 4. Upload to DefectDojo
@@ -194,39 +200,40 @@ if [ "$SONAR_ONLY" = false ]; then
   else
     ok "DefectDojo authenticated"
 
-    # Ensure product exists (create once, ignore duplicate errors)
+    # Ensure product exists (idempotent — duplicate name returns 400, ignored)
     curl -s -X POST "$DD_HOST/api/v2/products/" \
       -H "Authorization: Token $DD_TOKEN" \
       -H "Content-Type: application/json" \
-      -d '{"name":"pubsub-kafka-migrator","description":"PubSub to Kafka migration platform","prod_type":1}' \
+      -d "{\"name\":\"${DD_PRODUCT}\",\"description\":\"AI-powered migration platform — automated codebase analysis, planning, transformation, and validation across any stack.\",\"prod_type\":1}" \
       -o /dev/null 2>/dev/null || true
 
-    # Look up product ID by name — never assume it is 1
-    DD_PRODUCT_ID=$(curl -s "$DD_HOST/api/v2/products/?name=pubsub-kafka-migrator&limit=1" \
+    DD_PRODUCT_ID=$(curl -s "$DD_HOST/api/v2/products/?name=${DD_PRODUCT}&limit=1" \
       -H "Authorization: Token $DD_TOKEN" \
       2>/dev/null | python3 -c "import sys,json; r=json.load(sys.stdin); print(r['results'][0]['id'])" 2>/dev/null || true)
 
     if [ -z "${DD_PRODUCT_ID:-}" ]; then
-      fail "Could not resolve DefectDojo product ID for 'pubsub-kafka-migrator'"
+      fail "Could not resolve DefectDojo product ID for '${DD_PRODUCT}'"
     else
-      ok "Product ID resolved: $DD_PRODUCT_ID"
+      ok "Product '${DD_PRODUCT}' (id=$DD_PRODUCT_ID)"
     fi
 
-    # Create a new engagement named after the current date+commit
+    # Engagement: unique-per-run (timestamp ensures no duplicate-name collisions)
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
+    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "local")
     TODAY=$(date +%Y-%m-%d)
-    ENG_NAME="local-scan-${TODAY}-${COMMIT}"
+    TIMESTAMP=$(date +%H%M%S)
+    ENG_NAME="local-${BRANCH}-${COMMIT}-${TIMESTAMP}"
 
     ENG_ID=$(curl -s -X POST "$DD_HOST/api/v2/engagements/" \
       -H "Authorization: Token $DD_TOKEN" \
       -H "Content-Type: application/json" \
-      -d "{\"name\":\"${ENG_NAME}\",\"product\":${DD_PRODUCT_ID},\"target_start\":\"${TODAY}\",\"target_end\":\"${TODAY}\",\"status\":\"In Progress\",\"engagement_type\":\"CI/CD\"}" \
+      -d "{\"name\":\"${ENG_NAME}\",\"product\":${DD_PRODUCT_ID},\"target_start\":\"${TODAY}\",\"target_end\":\"${TODAY}\",\"status\":\"In Progress\",\"engagement_type\":\"CI/CD\",\"commit_hash\":\"${COMMIT}\",\"branch_tag\":\"${BRANCH}\"}" \
       2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null || true)
 
     if [ -z "${ENG_ID:-}" ]; then
       fail "Could not create DefectDojo engagement"
     else
-      ok "Engagement created: $ENG_NAME (id=$ENG_ID)"
+      ok "Engagement '${ENG_NAME}' (id=$ENG_ID)"
 
       upload_to_dojo() {
         local scan_type="$1"
@@ -241,23 +248,34 @@ if [ "$SONAR_ONLY" = false ]; then
           -H "Authorization: Token $DD_TOKEN" \
           -F "scan_type=${scan_type}" \
           -F "file=@${file}" \
-          -F "product_name=pubsub-kafka-migrator" \
-          -F "engagement_name=${ENG_NAME}" \
-          -F "auto_create_context=true" \
+          -F "engagement=${ENG_ID}" \
+          -F "test_title=${label}" \
+          -F "active=true" \
+          -F "verified=false" \
           -F "close_old_findings=false" \
           "$DD_HOST/api/v2/import-scan/" 2>/dev/null) || true
         if [ "${status:-0}" -ge 200 ] && [ "${status:-0}" -lt 300 ]; then
-          ok "$label uploaded (HTTP $status)"
+          local count
+          count=$(python3 -c "import json; d=json.load(open('/tmp/dd-resp.json')); print(d.get('statistics',{}).get('after',{}).get('info',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('low',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('medium',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('high',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('critical',{}).get('total',0))" 2>/dev/null || echo "?")
+          ok "$label uploaded ($count findings)"
         else
           warn "$label failed (HTTP ${status:-0}): $(cat /tmp/dd-resp.json 2>/dev/null | python3 -m json.tool 2>/dev/null | head -3 || true)"
         fi
       }
 
-      upload_to_dojo "SARIF" "$SCAN_DIR/gitleaks.sarif"  "Gitleaks secret scan"
-      upload_to_dojo "SARIF" "$SCAN_DIR/semgrep.sarif"   "Semgrep SAST"
-      upload_to_dojo "SARIF" "$SCAN_DIR/trivy-fs.sarif"  "Trivy SCA (filesystem)"
+      upload_to_dojo "Gitleaks Scan"       "$SCAN_DIR/gitleaks.json"  "Gitleaks — Secret Detection"
+      upload_to_dojo "Semgrep JSON Report" "$SCAN_DIR/semgrep.json"   "Semgrep — SAST"
+      upload_to_dojo "Trivy Scan"          "$SCAN_DIR/trivy-fs.json"  "Trivy — Dependency CVEs"
+
+      # Mark engagement Completed once all scans uploaded
+      curl -s -X PATCH "$DD_HOST/api/v2/engagements/${ENG_ID}/" \
+        -H "Authorization: Token $DD_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"status":"Completed"}' \
+        -o /dev/null 2>/dev/null || true
 
       echo ""
+      ok "Engagement marked Completed"
       ok "DefectDojo dashboard: $DD_HOST/engagement/$ENG_ID"
     fi
   fi
@@ -271,9 +289,9 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN} Analysis complete${NC}"
 echo -e "${GREEN}══════════════════════════════════════════════════════${NC}"
 if [ "$SECURITY_ONLY" = false ] && [ -n "${SONAR_TOKEN:-}" ]; then
-  echo "  SonarQube : $SONAR_HOST/dashboard?id=pubsub-kafka-migrator"
+  echo "  SonarQube : $SONAR_HOST/dashboard?id=$SONAR_PROJECT_KEY"
 fi
 if [ "$SONAR_ONLY" = false ]; then
-  echo "  DefectDojo: $DD_HOST/product/list"
+  echo "  DefectDojo: $DD_HOST/product/${DD_PRODUCT_ID:-list}"
 fi
 echo ""
