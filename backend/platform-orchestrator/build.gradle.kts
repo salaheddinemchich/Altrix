@@ -50,8 +50,9 @@ dependencies {
     implementation("org.bsc.langgraph4j:langgraph4j-core:$langgraph4jVersion")
     implementation("org.bsc.langgraph4j:langgraph4j-langchain4j:$langgraph4jVersion")
 
-    // Redis — job status cache + LangGraph checkpoint persistence
+    // Redis — job status cache + LangGraph checkpoint persistence (commons-pool2 for Lettuce pooling)
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.apache.commons:commons-pool2")
 
     // Resilience4j — circuit breaker + retry per provider
     implementation("io.github.resilience4j:resilience4j-spring-boot3:$resilience4jVersion")

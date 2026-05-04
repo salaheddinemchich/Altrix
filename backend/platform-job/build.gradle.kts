@@ -20,8 +20,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("io.minio:minio:8.5.10")
 
-    // Redis — job status cache
+    // Redis — job status cache (commons-pool2 required for Lettuce connection pooling)
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.apache.commons:commons-pool2")
 
     // Kafka — consume project.registered, publish migration.job.created
     implementation("org.springframework.kafka:spring-kafka")

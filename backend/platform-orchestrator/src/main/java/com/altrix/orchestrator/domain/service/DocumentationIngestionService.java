@@ -22,12 +22,16 @@ import java.util.List;
  * <p>Documentation is fetched once per logical path; if the content hash already
  * exists the fetch is skipped entirely (no re-embedding cost).
  *
- * <p>Two corpora are ingested:
+ * <p>Four corpora are ingested:
  * <ul>
  *   <li><b>Apache Kafka</b> — producer/consumer API, topic config, consumer groups,
- *       Kafka Streams concepts — used by agents migrating from/to Kafka</li>
- *   <li><b>GCP Pub/Sub</b> — publisher, subscriber, push/pull delivery, ordering,
- *       dead-letter topics — used by agents migrating from/to GCP Pub/Sub</li>
+ *       Kafka Streams, Spring Kafka</li>
+ *   <li><b>GCP Pub/Sub</b> — publisher, subscriber, push/pull, ordering,
+ *       dead-letter topics, Spring Cloud GCP</li>
+ *   <li><b>Migration patterns</b> — Kafka-to-Pub/Sub guide, Spring Boot 3 migration</li>
+ *   <li><b>Jakarta EE / Java EE</b> — JMS 3.x, CDI Events, MicroProfile Reactive Messaging,
+ *       raw kafka-clients, GCP Java client, Quarkus+Kafka/PubSub, Open Liberty, GCP auth —
+ *       covers pure Java EE apps that do not use Spring</li>
  * </ul>
  */
 @Slf4j
@@ -78,7 +82,54 @@ public class DocumentationIngestionService {
         new DocPage("migration/kafka-to-pubsub",
                 "https://cloud.google.com/pubsub/docs/migrating-from-kafka-to-pubsub"),
         new DocPage("migration/spring-boot-3",
-                "https://spring.io/blog/2022/05/24/preparing-for-spring-boot-3-0")
+                "https://spring.io/blog/2022/05/24/preparing-for-spring-boot-3-0"),
+
+        // ── Jakarta EE / Java EE — messaging without Spring ───────────────────
+        // JMS 3.x (Jakarta Messaging) — the standard Java EE/Jakarta EE messaging API.
+        // Agents migrating from JMS to Kafka or Pub/Sub need this reference.
+        new DocPage("jakarta-ee/messaging-overview",
+                "https://jakarta.ee/specifications/messaging/3.1/"),
+        new DocPage("jakarta-ee/messaging-api",
+                "https://jakarta.ee/specifications/messaging/3.1/apidocs/"),
+
+        // CDI Events — the Jakarta EE in-process event bus; often confused with
+        // message brokers during migration analysis.
+        new DocPage("jakarta-ee/cdi-events",
+                "https://jakarta.ee/specifications/cdi/4.0/jakarta-cdi-spec-4.0.html#events"),
+
+        // MicroProfile Reactive Messaging — bridges Jakarta EE apps to Kafka/Pub/Sub
+        // via @Incoming / @Outgoing annotations (Quarkus, Open Liberty, Payara).
+        new DocPage("jakarta-ee/microprofile-reactive-messaging",
+                "https://download.eclipse.org/microprofile/microprofile-reactive-messaging-3.0/microprofile-reactive-messaging-spec-3.0.html"),
+
+        // Kafka with pure Jakarta EE (no Spring) — uses kafka-clients directly;
+        // agents must recognise both Spring-Kafka and raw kafka-clients patterns.
+        new DocPage("jakarta-ee/kafka-clients-producer",
+                "https://kafka.apache.org/documentation/#producerconfigs"),
+        new DocPage("jakarta-ee/kafka-clients-consumer",
+                "https://kafka.apache.org/documentation/#consumerconfigs"),
+
+        // GCP Pub/Sub Java client (pure Java, no framework) — used in Jakarta EE
+        // deployments that call Pub/Sub via the Google Cloud client library directly.
+        new DocPage("jakarta-ee/gcp-pubsub-java-client",
+                "https://cloud.google.com/pubsub/docs/reference/libraries#client-libraries-install-java"),
+
+        // Quarkus + Kafka — the most common Jakarta EE runtime for Kafka migrations.
+        new DocPage("jakarta-ee/quarkus-kafka",
+                "https://quarkus.io/guides/kafka"),
+
+        // Quarkus + GCP Pub/Sub via Reactive Messaging connector.
+        new DocPage("jakarta-ee/quarkus-pubsub",
+                "https://quarkus.io/guides/reactive-messaging-google-pubsub"),
+
+        // Open Liberty + Kafka (MicroProfile Reactive Messaging on Liberty).
+        new DocPage("jakarta-ee/openliberty-kafka",
+                "https://openliberty.io/docs/latest/reactive-messaging.html"),
+
+        // Jakarta EE + GCP configuration best practices (service accounts, ADC,
+        // workload identity) — agents need this for GCP authentication context.
+        new DocPage("jakarta-ee/gcp-auth-java",
+                "https://cloud.google.com/docs/authentication/client-libraries")
     );
 
     @Async
