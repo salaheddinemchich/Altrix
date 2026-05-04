@@ -4,6 +4,7 @@ import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.common.domain.enums.FileChangeType;
 import com.altrix.common.domain.port.MigrationAgent;
+import com.altrix.orchestrator.adapter.out.rag.CodeIndexingAgent;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
@@ -27,17 +28,18 @@ class OrchestratorServiceTest {
     @Mock JobStatusUpdatePort     jobStatusUpdatePort;
     @Mock MigratedFileStoragePort migratedFileStoragePort;
     @Mock ProgressNotifierPort    progressNotifierPort;
+    @Mock CodeIndexingAgent       codeIndexingAgent;
 
     private OrchestratorService service(List<AgentPort> agents) {
         return new OrchestratorService(
                 agents, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, 0L);
+                progressNotifierPort, codeIndexingAgent, 0L);
     }
 
     private OrchestratorService service(List<AgentPort> agents, long delayMs) {
         return new OrchestratorService(
                 agents, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, delayMs);
+                progressNotifierPort, codeIndexingAgent, delayMs);
     }
 
     @Test

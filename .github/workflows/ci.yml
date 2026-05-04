@@ -1,11 +1,13 @@
-name: CI/CD + DevSecOps Pipeline
+name: CI
 
+# ── Triggers ──────────────────────────────────────────────────────────────────
 on:
   push:
-    branches: [ main, "feature/**" ]
+    branches: [main, "feature/**"]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
+# ── Global env ────────────────────────────────────────────────────────────────
 env:
   JAVA_VERSION: "21"
   REGISTRY: ghcr.io
@@ -13,56 +15,54 @@ env:
 # Minimal global permissions — each job declares only what it needs
 permissions:
   contents: read
-  actions: read
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TIER 1  — run in parallel immediately on every push / PR
+# ══════════════════════════════════════════════════════════════════════════════
 jobs:
 
-  # ── 0. Secret Scan — Gitleaks ─────────────────────────────────────────────
+  # ── Secret Scan ─────────────────────────────────────────────────────────────
   secret-scan:
-    name: Secret Scan (Gitleaks)
+    name: Secret Scan
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
       pull-requests: read
-
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
+      - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
-      - name: Archive Gitleaks report
+      - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: gitleaks-report
+          name: report-gitleaks
           path: results.sarif
           if-no-files-found: ignore
           retention-days: 14
 
-  # ── 1. Build, Test & Coverage ─────────────────────────────────────────────
-  build-and-test:
+  # ── Build & Test ─────────────────────────────────────────────────────────────
+  build-test:
     name: Build & Test
     runs-on: ubuntu-latest
     outputs:
-      sha: ${{ steps.version.outputs.sha }}
-
+      sha: ${{ steps.sha.outputs.value }}
     defaults:
       run:
         working-directory: ./backend
-
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
@@ -70,14 +70,14 @@ jobs:
 
       - run: chmod +x gradlew
 
-      - id: version
+      - id: sha
         working-directory: .
-        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: echo "value=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build
         run: ./gradlew build -x test --parallel --no-daemon
 
-      - name: Test with JaCoCo coverage
+      - name: Test & Coverage
         run: |
           ./gradlew \
             :platform-common:test     :platform-common:jacocoTestReport \
@@ -87,40 +87,44 @@ jobs:
             --parallel --no-daemon --continue
 
       - name: Upload JARs
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: build-libs-${{ steps.version.outputs.sha }}
+          name: build-libs-${{ steps.sha.outputs.value }}
           path: "**/build/libs/*.jar"
           retention-days: 1
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: test-reports-${{ steps.version.outputs.sha }}
+          name: report-tests-${{ steps.sha.outputs.value }}
           path: "**/build/reports/tests/"
           retention-days: 14
 
       - name: Upload coverage reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: coverage-reports-${{ steps.version.outputs.sha }}
+          name: report-coverage-${{ steps.sha.outputs.value }}
           path: "**/build/reports/jacoco/"
           retention-days: 14
 
-  # ── 2. SAST — Semgrep ─────────────────────────────────────────────────────
+  # ── SAST — Semgrep ───────────────────────────────────────────────────────────
   sast:
-    name: SAST (Semgrep)
+    name: SAST
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
 
       - name: Install Semgrep
         run: pip install semgrep --quiet
 
-      - name: Run Semgrep SAST (JSON for DefectDojo native parser)
+      - name: Run Semgrep
         run: |
           semgrep scan \
             --config p/java \
@@ -130,26 +134,24 @@ jobs:
             --output semgrep.json \
             backend 2>&1 || true
 
-      - name: Archive Semgrep report
+      - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: semgrep-report
+          name: report-semgrep
           path: semgrep.json
           if-no-files-found: ignore
           retention-days: 14
 
-  # ── 3. SCA — Trivy filesystem (dependency CVEs) ───────────────────────────
+  # ── SCA — Dependency CVEs ────────────────────────────────────────────────────
   sca:
-    name: SCA (Trivy — Dependencies)
+    name: SCA
     runs-on: ubuntu-latest
-    needs: build-and-test
-
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - name: Run Trivy filesystem scan (JSON for DefectDojo native parser)
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: fs
           scan-ref: .
@@ -160,26 +162,27 @@ jobs:
           vuln-type: library
         continue-on-error: true
 
-      - name: Archive SCA report
+      - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: trivy-fs-report
+          name: report-trivy-fs
           path: trivy-fs.json
           if-no-files-found: ignore
           retention-days: 14
 
-  # ── 4. Docker Build & Push ────────────────────────────────────────────────
-  docker-build:
-    name: Docker — ${{ matrix.service.name }}
-    runs-on: ubuntu-latest
-    needs: [build-and-test, sast, sca]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+# ══════════════════════════════════════════════════════════════════════════════
+# TIER 2  — Docker build & push (main branch only, after Tier 1 passes)
+# ══════════════════════════════════════════════════════════════════════════════
 
+  docker:
+    name: Docker / ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    needs: [build-test, sast, sca]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: read
       packages: write
-
     strategy:
       fail-fast: false
       matrix:
@@ -190,26 +193,25 @@ jobs:
             dockerfile: backend/infra/docker/Dockerfile.platform-job
           - name: platform-orchestrator
             dockerfile: backend/infra/docker/Dockerfile.platform-orchestrator
-
     steps:
-      - uses: actions/checkout@v6
-      - uses: docker/setup-buildx-action@v4
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/altrix/${{ matrix.service.name }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable=true
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ${{ matrix.service.dockerfile }}
@@ -217,34 +219,33 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service.name }}
-          cache-to:   type=gha,mode=max,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
 
-  # ── 5. Container Scan — Trivy image ───────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# TIER 3  — Container scan (main branch only, after Docker push)
+# ══════════════════════════════════════════════════════════════════════════════
+
   container-scan:
-    name: Container Scan — ${{ matrix.service }}
+    name: Container Scan / ${{ matrix.service }}
     runs-on: ubuntu-latest
-    needs: docker-build
+    needs: docker
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
     permissions:
       contents: read
       packages: read
-
     strategy:
       fail-fast: false
       matrix:
         service: [platform-project, platform-job, platform-orchestrator]
-
     steps:
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Trivy image scan (JSON for DefectDojo native parser)
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/altrix/${{ matrix.service }}:latest
           format: json
@@ -253,117 +254,118 @@ jobs:
           ignore-unfixed: true
         continue-on-error: true
 
-      - name: Archive container scan report
+      - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: trivy-image-${{ matrix.service }}
+          name: report-trivy-image-${{ matrix.service }}
           path: trivy-image-${{ matrix.service }}.json
           if-no-files-found: ignore
           retention-days: 14
 
-  # ── 6. Deploy to Staging ──────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# TIER 4  — Staging deploy (main + STAGING_ENABLED=true)
+# ══════════════════════════════════════════════════════════════════════════════
+
   deploy-staging:
-    name: Deploy to Staging
+    name: Deploy / Staging
     runs-on: ubuntu-latest
-    needs: [docker-build, container-scan]
+    needs: [docker, container-scan]
     if: |
       github.ref == 'refs/heads/main' &&
       github.event_name == 'push' &&
       vars.STAGING_ENABLED == 'true'
     environment:
       name: staging
-
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key:      ${{ secrets.STAGING_SSH_KEY }}
-          envs:     DD_DB_PASSWORD,DD_SECRET_KEY,DD_AES_256_KEY,DD_ADMIN_PASSWORD
           script: |
             set -e
             cd /opt/altrix
 
-            # ── Application services ──────────────────────────────────────
             docker pull ghcr.io/${{ github.repository_owner }}/altrix/platform-project:latest
             docker pull ghcr.io/${{ github.repository_owner }}/altrix/platform-job:latest
             docker pull ghcr.io/${{ github.repository_owner }}/altrix/platform-orchestrator:latest
+
             docker compose up -d --no-deps --force-recreate \
               platform-project platform-job platform-orchestrator
 
-            # ── DefectDojo (CVE aggregation dashboard) ────────────────────
-            # Inject DefectDojo secrets into .env on staging
+            # Rotate DefectDojo secrets in .env before restarting it
             grep -v '^DD_' .env > .env.tmp && mv .env.tmp .env
-            echo "DD_DB_PASSWORD=${DD_DB_PASSWORD}"   >> .env
-            echo "DD_SECRET_KEY=${DD_SECRET_KEY}"     >> .env
-            echo "DD_AES_256_KEY=${DD_AES_256_KEY}"   >> .env
-            echo "DD_ADMIN_PASSWORD=${DD_ADMIN_PASSWORD}" >> .env
+            printf 'DD_DB_PASSWORD=%s\nDD_SECRET_KEY=%s\nDD_AES_256_KEY=%s\nDD_ADMIN_PASSWORD=%s\n' \
+              "${DD_DB_PASSWORD}" "${DD_SECRET_KEY}" "${DD_AES_256_KEY}" "${DD_ADMIN_PASSWORD}" >> .env
 
             docker pull defectdojo/defectdojo-django:latest
             docker compose up -d \
               defectdojo-db defectdojo-initializer \
               defectdojo defectdojo-celery-worker defectdojo-celery-beat
 
-            echo "Deployment complete — DefectDojo at http://${{ secrets.STAGING_HOST }}:8089"
+            echo "Deploy complete"
         env:
-          DD_DB_PASSWORD:   ${{ secrets.DD_DB_PASSWORD }}
-          DD_SECRET_KEY:    ${{ secrets.DD_SECRET_KEY }}
-          DD_AES_256_KEY:   ${{ secrets.DD_AES_256_KEY }}
+          DD_DB_PASSWORD:    ${{ secrets.DD_DB_PASSWORD }}
+          DD_SECRET_KEY:     ${{ secrets.DD_SECRET_KEY }}
+          DD_AES_256_KEY:    ${{ secrets.DD_AES_256_KEY }}
           DD_ADMIN_PASSWORD: ${{ secrets.DD_ADMIN_PASSWORD }}
 
-  # ── 7. DAST — OWASP ZAP baseline scan ────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# TIER 5  — DAST (after staging is live)
+# ══════════════════════════════════════════════════════════════════════════════
+
   dast:
-    name: DAST (OWASP ZAP)
+    name: DAST
     runs-on: ubuntu-latest
     needs: deploy-staging
     if: |
       github.ref == 'refs/heads/main' &&
       github.event_name == 'push' &&
       vars.STAGING_ENABLED == 'true'
-
     permissions:
       contents: read
       issues: write
-
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - name: Wait for staging to be ready
+      - name: Wait for staging health
         run: |
-          echo "Waiting for platform-project to be healthy..."
           for i in $(seq 1 18); do
             if curl -sf "http://${{ secrets.STAGING_HOST }}:8082/actuator/health" \
                 | grep -q '"status":"UP"'; then
-              echo "Service is UP"
-              break
+              echo "Staging is UP"; break
             fi
-            echo "  attempt $i/18 — sleeping 10s"
+            echo "  attempt $i/18 — waiting 10s"
             sleep 10
           done
 
-      - name: ZAP Baseline Scan — platform-project API
+      - name: ZAP baseline scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
-          target: 'http://${{ secrets.STAGING_HOST }}:8082'
-          rules_file_name: '.github/zap-rules.tsv'
-          cmd_options: '-I'
+          target: "http://${{ secrets.STAGING_HOST }}:8082"
+          rules_file_name: ".github/zap-rules.tsv"
+          cmd_options: "-I"
           allow_issue_writing: false
         continue-on-error: true
 
-      - name: Archive ZAP report
+      - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: zap-report
+          name: report-zap
           path: report_json.json
           if-no-files-found: ignore
           retention-days: 14
 
-  # ── 8. DefectDojo — Aggregate all findings ────────────────────────────────
-  defectdojo-upload:
-    name: Upload to DefectDojo
+# ══════════════════════════════════════════════════════════════════════════════
+# TIER 6  — Findings aggregation into DefectDojo (main only, always runs)
+# ══════════════════════════════════════════════════════════════════════════════
+
+  defectdojo:
+    name: Findings / DefectDojo
     runs-on: ubuntu-latest
     needs: [secret-scan, sast, sca, container-scan, dast]
     if: |
@@ -371,124 +373,103 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.event_name == 'push' &&
       vars.DEFECTDOJO_URL != ''
-
     steps:
-      - name: Download all scan artifacts
-        uses: actions/download-artifact@v8
+      - name: Download all scan reports
+        uses: actions/download-artifact@v4
         with:
-          pattern: '*report*'
-          merge-multiple: false
-          path: scan-artifacts
-
-      - name: Download Semgrep artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: semgrep-report
-          path: scan-artifacts/semgrep-report
-        continue-on-error: true
-
-      - name: Download container scan artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: 'trivy-image-*'
+          pattern: "report-*"
           merge-multiple: false
           path: scan-artifacts
         continue-on-error: true
 
       - name: Upload findings to DefectDojo
         env:
-          DD_URL: ${{ vars.DEFECTDOJO_URL }}
-          DD_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DD_URL:    ${{ vars.DEFECTDOJO_URL }}
+          DD_KEY:    ${{ secrets.DEFECTDOJO_API_KEY }}
           DD_PRODUCT: Altrix
-          DD_ENGAGEMENT: "CI-${{ github.run_number }}-${{ github.sha }}"
-          BRANCH: ${{ github.ref_name }}
-          COMMIT: ${{ github.sha }}
+          DD_ENG:    "CI-${{ github.run_number }}-${{ github.sha }}"
+          BRANCH:    ${{ github.ref_name }}
+          COMMIT:    ${{ github.sha }}
         run: |
           set -euo pipefail
           TODAY=$(date +%Y-%m-%d)
 
-          # ── Resolve product (create if missing) ─────────────────────────
-          curl -s -X POST "${DD_URL}/api/v2/products/" \
-            -H "Authorization: Token ${DD_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{\"name\":\"${DD_PRODUCT}\",\"description\":\"AI-powered migration platform — automated codebase analysis, planning, transformation, and validation across any stack.\",\"prod_type\":1}" \
-            -o /dev/null 2>/dev/null || true
+          # Resolve or create product
+          curl -sf -X POST "${DD_URL}/api/v2/products/" \
+            -H "Authorization: Token ${DD_KEY}" -H "Content-Type: application/json" \
+            -d "{\"name\":\"${DD_PRODUCT}\",\"description\":\"Altrix — AI migration platform\",\"prod_type\":1}" \
+            -o /dev/null || true
 
-          PRODUCT_ID=$(curl -s "${DD_URL}/api/v2/products/?name=${DD_PRODUCT}&limit=1" \
-            -H "Authorization: Token ${DD_API_KEY}" \
+          PRODUCT_ID=$(curl -sf "${DD_URL}/api/v2/products/?name=${DD_PRODUCT}&limit=1" \
+            -H "Authorization: Token ${DD_KEY}" \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
-          echo "Product '${DD_PRODUCT}' (id=${PRODUCT_ID})"
 
-          # ── Create engagement for this CI run ───────────────────────────
-          ENG_ID=$(curl -s -X POST "${DD_URL}/api/v2/engagements/" \
-            -H "Authorization: Token ${DD_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{\"name\":\"${DD_ENGAGEMENT}\",\"product\":${PRODUCT_ID},\"target_start\":\"${TODAY}\",\"target_end\":\"${TODAY}\",\"status\":\"In Progress\",\"engagement_type\":\"CI/CD\",\"commit_hash\":\"${COMMIT}\",\"branch_tag\":\"${BRANCH}\",\"build_id\":\"${{ github.run_id }}\"}" \
+          # Create engagement for this CI run
+          ENG_ID=$(curl -sf -X POST "${DD_URL}/api/v2/engagements/" \
+            -H "Authorization: Token ${DD_KEY}" -H "Content-Type: application/json" \
+            -d "{\"name\":\"${DD_ENG}\",\"product\":${PRODUCT_ID},\"target_start\":\"${TODAY}\",\"target_end\":\"${TODAY}\",\"status\":\"In Progress\",\"engagement_type\":\"CI/CD\",\"commit_hash\":\"${COMMIT}\",\"branch_tag\":\"${BRANCH}\",\"build_id\":\"${{ github.run_id }}\"}" \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-          echo "Engagement '${DD_ENGAGEMENT}' (id=${ENG_ID})"
 
-          upload_to_dojo() {
-            local scan_type="$1"
-            local file="$2"
-            local label="$3"
-
-            if [ ! -f "$file" ]; then
-              echo "  [SKIP] $label — file not found"
-              return 0
-            fi
-
-            HTTP_STATUS=$(curl -s -o /tmp/dd-response.json -w "%{http_code}" \
+          upload() {
+            local type="$1" file="$2" label="$3"
+            [ -f "$file" ] || { echo "  [SKIP] $label"; return; }
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
               --connect-timeout 10 --max-time 60 \
-              -H "Authorization: Token ${DD_API_KEY}" \
-              -F "scan_type=${scan_type}" \
-              -F "file=@${file}" \
-              -F "engagement=${ENG_ID}" \
-              -F "test_title=${label}" \
-              -F "active=true" \
-              -F "verified=false" \
-              -F "close_old_findings=false" \
-              "${DD_URL}/api/v2/import-scan/" 2>/dev/null) || true
-            HTTP_STATUS="${HTTP_STATUS:-0}"
-
-            if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
-              echo "  [OK]   $label (HTTP $HTTP_STATUS)"
-            else
-              echo "  [WARN] $label — HTTP $HTTP_STATUS"
-            fi
-            return 0
+              -H "Authorization: Token ${DD_KEY}" \
+              -F "scan_type=${type}" -F "file=@${file}" \
+              -F "engagement=${ENG_ID}" -F "test_title=${label}" \
+              -F "active=true" -F "verified=false" -F "close_old_findings=false" \
+              "${DD_URL}/api/v2/import-scan/" 2>/dev/null) || STATUS=0
+            echo "  [$STATUS] $label"
           }
 
-          echo "=== Uploading security findings to DefectDojo at ${DD_URL} ==="
-
-          # Native scan types — richer parsing than generic SARIF
-          upload_to_dojo "Gitleaks Scan" \
-            "scan-artifacts/gitleaks-report/results.sarif" \
-            "Gitleaks — Secret Detection"
-
-          upload_to_dojo "Semgrep JSON Report" \
-            "scan-artifacts/semgrep-report/semgrep.json" \
-            "Semgrep — SAST"
-
-          upload_to_dojo "Trivy Scan" \
-            "scan-artifacts/trivy-fs-report/trivy-fs.json" \
-            "Trivy — Dependency CVEs"
-
+          upload "Gitleaks Scan"       "scan-artifacts/report-gitleaks/results.sarif"         "Gitleaks"
+          upload "Semgrep JSON Report" "scan-artifacts/report-semgrep/semgrep.json"            "Semgrep SAST"
+          upload "Trivy Scan"          "scan-artifacts/report-trivy-fs/trivy-fs.json"          "Trivy FS"
           for svc in platform-project platform-job platform-orchestrator; do
-            upload_to_dojo "Trivy Scan" \
-              "scan-artifacts/trivy-image-${svc}/trivy-image-${svc}.json" \
-              "Trivy — Container (${svc})"
+            upload "Trivy Scan" "scan-artifacts/report-trivy-image-${svc}/trivy-image-${svc}.json" "Trivy Image (${svc})"
           done
+          upload "ZAP Scan"            "scan-artifacts/report-zap/report_json.json"            "OWASP ZAP"
 
-          upload_to_dojo "ZAP Scan" \
-            "scan-artifacts/zap-report/report_json.json" \
-            "OWASP ZAP — DAST"
+          curl -sf -X PATCH "${DD_URL}/api/v2/engagements/${ENG_ID}/" \
+            -H "Authorization: Token ${DD_KEY}" -H "Content-Type: application/json" \
+            -d '{"status":"Completed"}' -o /dev/null || true
 
-          # Mark engagement Completed
-          curl -s -X PATCH "${DD_URL}/api/v2/engagements/${ENG_ID}/" \
-            -H "Authorization: Token ${DD_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d '{"status":"Completed"}' \
-            -o /dev/null 2>/dev/null || true
+          echo "DefectDojo: ${DD_URL}/engagement/${ENG_ID}"
 
-          echo "=== DefectDojo upload complete ==="
-          echo "Dashboard: ${DD_URL}/engagement/${ENG_ID}"
+# ══════════════════════════════════════════════════════════════════════════════
+# STATUS GATE  — single required check for branch protection rules
+#
+# Set this as the only required status check in GitHub → Settings →
+# Branches → "Require status checks" → search "CI / Gate".
+# It passes only when all Tier-1 jobs succeed.
+# ══════════════════════════════════════════════════════════════════════════════
+
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    needs: [secret-scan, build-test, sast, sca]
+    if: always()
+    steps:
+      - name: Evaluate required checks
+        run: |
+          results=(
+            "secret-scan:${{ needs.secret-scan.result }}"
+            "build-test:${{ needs.build-test.result }}"
+            "sast:${{ needs.sast.result }}"
+            "sca:${{ needs.sca.result }}"
+          )
+          failed=0
+          for entry in "${results[@]}"; do
+            job="${entry%%:*}"
+            result="${entry##*:}"
+            if [[ "$result" != "success" ]]; then
+              echo "FAIL  $job ($result)"
+              failed=1
+            else
+              echo "OK    $job"
+            fi
+          done
+          [[ $failed -eq 0 ]] || { echo ""; echo "One or more required checks failed."; exit 1; }
+          echo ""
+          echo "All required checks passed."
