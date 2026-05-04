@@ -15,8 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class JobCommandService implements CreateJobUseCase, UpdateJobStatusUseCase {
 
-    private final JobRepository     jobRepository;
-    private final JobCachePort      jobCachePort;
+    private final JobRepository jobRepository;
+    private final JobCachePort jobCachePort;
     private final JobEventPublisher jobEventPublisher;
 
     @Override

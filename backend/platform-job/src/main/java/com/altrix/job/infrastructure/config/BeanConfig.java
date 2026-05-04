@@ -15,8 +15,8 @@ public class BeanConfig {
 
     @Bean
     public JobCommandService jobCommandService(
-            JobRepository     jobRepository,
-            JobCachePort      jobCachePort,
+            JobRepository jobRepository,
+            JobCachePort jobCachePort,
             JobEventPublisher jobEventPublisher
     ) {
         return new JobCommandService(jobRepository, jobCachePort, jobEventPublisher);

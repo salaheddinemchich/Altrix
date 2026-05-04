@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 public class JobStatusUpdateListener {
 
     private final UpdateJobStatusUseCase updateJobStatusUseCase;
-    private final JobRepository          jobRepository;
+    private final JobRepository jobRepository;
 
     @KafkaListener(
             topics  = "${kafka.topics.job-status-update}",

@@ -13,9 +13,9 @@ import java.time.Instant;
  */
 @Builder
 public record JobFilter(
-        String    userId,
-        String    projectId,
+        String userId,
+        String projectId,
         JobStatus status,
-        Instant   createdAfter,
-        Instant   createdBefore
+        Instant createdAfter,
+        Instant createdBefore
 ) {}

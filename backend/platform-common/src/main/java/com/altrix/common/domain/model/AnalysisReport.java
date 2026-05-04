@@ -24,9 +24,9 @@ public record AnalysisReport(
 
 ) {
     public AnalysisReport {
-        detectedComponents   = detectedComponents   != null ? List.copyOf(detectedComponents)   : List.of();
+        detectedComponents = detectedComponents != null ? List.copyOf(detectedComponents)   : List.of();
         detectedIntegrations = detectedIntegrations != null ? List.copyOf(detectedIntegrations) : List.of();
-        summary              = summary              != null ? summary : "";
+        summary = summary != null ? summary : "";
     }
 
     public static AnalysisReport empty(String projectId) {

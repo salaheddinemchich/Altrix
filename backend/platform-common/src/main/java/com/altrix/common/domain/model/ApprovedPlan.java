@@ -20,9 +20,9 @@ public record ApprovedPlan(
 
 ) {
     public ApprovedPlan {
-        if (plan == null)        throw new IllegalArgumentException("plan must not be null");
-        if (approvedBy == null)  approvedBy = "auto";
-        if (approvedAt == null)  approvedAt = Instant.EPOCH;
+        if (plan == null) throw new IllegalArgumentException("plan must not be null");
+        if (approvedBy == null) approvedBy = "auto";
+        if (approvedAt == null) approvedAt = Instant.EPOCH;
     }
 
     public static ApprovedPlan autoApproved(MigrationPlan plan) {

@@ -15,7 +15,7 @@ import java.util.Optional;
 public class JobPersistenceAdapter implements JobRepository {
 
     private final MigrationJobJpaRepository jpaRepository;
-    private final MigrationJobMapper        mapper;
+    private final MigrationJobMapper mapper;
 
     @Override
     public MigrationJob save(MigrationJob job) {

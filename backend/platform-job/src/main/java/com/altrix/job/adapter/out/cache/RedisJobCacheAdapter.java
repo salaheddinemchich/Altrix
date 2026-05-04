@@ -20,8 +20,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class RedisJobCacheAdapter implements JobCachePort {
 
-    private static final String  KEY_PREFIX = "job:status:";
-    private static final Duration TTL       = Duration.ofHours(24);
+    private static final String KEY_PREFIX = "job:status:";
+    private static final Duration TTL = Duration.ofHours(24);
 
     private final StringRedisTemplate redisTemplate;
 

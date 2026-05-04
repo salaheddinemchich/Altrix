@@ -15,20 +15,20 @@ import java.util.UUID;
 @With
 public final class MigrationJob {
 
-    private final String                 id;
-    private final String                 projectId;
-    private final String                 userId;
+    private final String id;
+    private final String projectId;
+    private final String userId;
 
     /** MinIO storage key of the uploaded project ZIP — needed by orchestrator. */
-    private final String                 projectStorageKey;
+    private final String projectStorageKey;
 
-    private final JobStatus              status;
+    private final JobStatus status;
     private final ConfigFormatPreference configFormatPreference;
-    private final String                 outputStorageKey;
-    private final String                 errorMessage;
-    private final Instant                createdAt;
-    private final Instant                updatedAt;
-    private final Instant                completedAt;
+    private final String outputStorageKey;
+    private final String errorMessage;
+    private final Instant createdAt;
+    private final Instant updatedAt;
+    private final Instant completedAt;
 
     public static MigrationJob create(
             String projectId,

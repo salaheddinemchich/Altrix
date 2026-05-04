@@ -8,10 +8,15 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "migration_jobs")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class MigrationJobJpaEntity {
 
-    @Id @Column(nullable = false, updatable = false, length = 36)
+    @Id
+    @Column(nullable = false, updatable = false, length = 36)
     private String id;
 
     @Column(name = "project_id", nullable = false, length = 36)
