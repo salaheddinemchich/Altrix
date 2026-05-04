@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.infrastructure.config;
 
+import com.altrix.orchestrator.adapter.out.rag.CodeIndexingAgent;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
 import com.altrix.orchestrator.domain.port.out.ApiKeyEncryptionPort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
@@ -15,10 +16,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 import java.util.List;
 
 @Configuration
+@EnableAsync
 @EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, EncryptionConfig.class, McpConfig.class})
 public class BeanConfig {
 
@@ -28,6 +31,7 @@ public class BeanConfig {
             JobStatusUpdatePort     jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
             ProgressNotifierPort    progressNotifierPort,
+            CodeIndexingAgent       codeIndexingAgent,
             @Value("${ai.inter-agent-delay-ms:0}") long interAgentDelayMs
     ) {
         return new OrchestratorService(
@@ -35,6 +39,7 @@ public class BeanConfig {
                 jobStatusUpdatePort,
                 migratedFileStoragePort,
                 progressNotifierPort,
+                codeIndexingAgent,
                 interAgentDelayMs
         );
     }

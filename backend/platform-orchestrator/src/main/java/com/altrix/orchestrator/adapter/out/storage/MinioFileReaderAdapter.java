@@ -87,6 +87,34 @@ public class MinioFileReaderAdapter implements FileReaderPort {
         return TARGET_EXTENSIONS.stream().anyMatch(lower::endsWith);
     }
 
+    @Override
+    public Map<String, String> readAllFiles(String storageKey) {
+        Map<String, String> files = new HashMap<>();
+        try (InputStream raw = minioClient.getObject(
+                GetObjectArgs.builder().bucket(bucket).object(storageKey).build());
+             ZipInputStream zip = new ZipInputStream(raw)) {
+
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (!entry.isDirectory() && !shouldSkip(entry.getName())) {
+                    byte[] bytes = zip.readNBytes(MAX_FILE_BYTES);
+                    // Only index files that decoded cleanly as UTF-8 text
+                    String content = new String(bytes, StandardCharsets.UTF_8);
+                    if (!content.isBlank()) {
+                        files.put(entry.getName(), content);
+                    }
+                }
+                zip.closeEntry();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Failed to read all files from storage key '" + storageKey + "': "
+                    + e.getMessage(), e);
+        }
+        log.info("Read {} total files from '{}' for RAG indexing", files.size(), storageKey);
+        return Map.copyOf(files);
+    }
+
     private boolean shouldSkip(String name) {
         String lower = name.toLowerCase();
         return SKIP_PATH_FRAGMENTS.stream().anyMatch(lower::contains);

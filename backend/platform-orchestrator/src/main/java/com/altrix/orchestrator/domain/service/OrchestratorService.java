@@ -2,6 +2,7 @@ package com.altrix.orchestrator.domain.service;
 
 import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.common.exception.AgentFailureException;
+import com.altrix.orchestrator.adapter.out.rag.CodeIndexingAgent;
 import com.altrix.orchestrator.domain.port.in.RunPipelineUseCase;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
@@ -20,6 +21,7 @@ public class OrchestratorService implements RunPipelineUseCase {
     private final JobStatusUpdatePort     jobStatusUpdatePort;
     private final MigratedFileStoragePort migratedFileStoragePort;
     private final ProgressNotifierPort    progressNotifierPort;
+    private final CodeIndexingAgent       codeIndexingAgent;
     private final long                    interAgentDelayMs;
 
     public OrchestratorService(
@@ -27,6 +29,7 @@ public class OrchestratorService implements RunPipelineUseCase {
             JobStatusUpdatePort     jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
             ProgressNotifierPort    progressNotifierPort,
+            CodeIndexingAgent       codeIndexingAgent,
             long                    interAgentDelayMs
     ) {
         this.agents                  = agents.stream()
@@ -35,6 +38,7 @@ public class OrchestratorService implements RunPipelineUseCase {
         this.jobStatusUpdatePort     = jobStatusUpdatePort;
         this.migratedFileStoragePort = migratedFileStoragePort;
         this.progressNotifierPort    = progressNotifierPort;
+        this.codeIndexingAgent       = codeIndexingAgent;
         this.interAgentDelayMs       = interAgentDelayMs;
         log.info("OrchestratorService initialized — {} agents, delay={}ms",
                 this.agents.size(), interAgentDelayMs);
@@ -47,6 +51,11 @@ public class OrchestratorService implements RunPipelineUseCase {
         ProjectContext context = initial;
 
         try {
+            // Phase 0 — index source files into vector store for RAG retrieval
+            progressNotifierPort.notify(jobId, "RAG Indexer", "RUNNING", null);
+            codeIndexingAgent.index(context);
+            progressNotifierPort.notify(jobId, "RAG Indexer", "DONE", null);
+
             for (int i = 0; i < agents.size(); i++) {
                 context = runAgent(agents.get(i), context);
 

@@ -143,3 +143,14 @@ management:
   endpoint:
     health:
       show-details: always
+
+# ── RAG / Embedding ────────────────────────────────────────────────────────────
+rag:
+  embedding:
+    provider: ${RAG_EMBEDDING_PROVIDER:openai}   # openai | ollama
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      model: ${RAG_EMBEDDING_MODEL:text-embedding-3-small}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      model: ${RAG_EMBEDDING_MODEL_OLLAMA:nomic-embed-text}

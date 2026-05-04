@@ -15,4 +15,13 @@ public interface FileReaderPort {
      * @return map of relative file path → file content as UTF-8 string
      */
     Map<String, String> readSourceFiles(String storageKey);
+
+    /**
+     * Reads ALL text files from the uploaded project ZIP (no extension filter).
+     * Used by the RAG indexer which decides per-extension what to embed.
+     *
+     * @param storageKey MinIO object key of the uploaded ZIP
+     * @return map of relative file path → file content as UTF-8 string
+     */
+    Map<String, String> readAllFiles(String storageKey);
 }
