@@ -1,6 +1,10 @@
 {
     "java.compile.nullAnalysis.mode": "automatic",
-    "java.project.outputPath": "build/vscode-bin",
+    "java.project.outputPath": ".gradle/vscode-bin",
     "java.autobuild.enabled": true,
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "files.exclude": {
+        "backend/platform-*/bin/": true,
+        "backend/platform-*/out/": true
+    }
 }
