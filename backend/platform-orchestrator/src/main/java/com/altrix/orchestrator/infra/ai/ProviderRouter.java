@@ -1,5 +1,7 @@
 package com.altrix.orchestrator.infra.ai;
 
+import com.altrix.orchestrator.domain.model.TokenUsageRecord;
+import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
 import com.altrix.orchestrator.infrastructure.config.McpConfig;
@@ -18,14 +20,24 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.output.Response;
+import dev.langchain4j.model.output.TokenUsage;
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.bulkhead.BulkheadConfig;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.core.IntervalFunction;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -37,27 +49,25 @@ import java.util.function.Supplier;
  * Routes an AI chat call to the best available provider using the configured
  * {@link ProviderSelectionStrategy}, falling back through the chain on failure.
  *
- * <p>Reads the live provider list from {@link ProviderRegistry} on every call,
- * so a config refresh takes effect immediately without restarting the router.
- *
- * <p>Circuit breakers are initialised lazily per provider ID via
- * {@link CircuitBreakerRegistry}, so new providers added via runtime refresh
- * automatically receive a CB with the shared configured policy.
+ * <h2>Resilience stack (per call)</h2>
+ * <pre>
+ *   Tier Bulkhead  — limits total concurrent ANALYSIS / MIGRATION calls
+ *     └─ per-provider Retry    — retries transient errors with exponential backoff
+ *          └─ per-provider CB  — short-circuits broken providers
+ *               └─ actual model.generate()
+ * </pre>
  *
  * <h2>Agentic mode (MCP tools)</h2>
  * <p>When {@code ai.mcp.enabled=true} and at least one MCP server is
- * reachable, {@link #chatAgentic} runs a tool-augmented generation loop:
- * the model may call tools via the Model Context Protocol before producing
- * its final text response. Regular {@link #chat} calls are unaffected.
+ * reachable, {@link #chatAgentic} runs a tool-augmented generation loop.
+ * Regular {@link #chat} calls are unaffected.
  *
  * <p>Security notes:
  * <ul>
  *   <li>Provider exceptions are wrapped in {@link ProviderCallException} so raw
  *       HTTP error bodies never reach callers.</li>
- *   <li>Circuit breakers prevent hammering a broken provider, limiting token
- *       waste and reducing exposure during any ongoing credential brute-force.</li>
- *   <li>The agentic loop is bounded by {@code ai.mcp.max-tool-iterations} to
- *       prevent runaway tool-call chains.</li>
+ *   <li>Circuit breakers prevent hammering a broken provider.</li>
+ *   <li>The agentic loop is bounded by {@code ai.mcp.max-tool-iterations}.</li>
  * </ul>
  */
 @Slf4j
@@ -67,6 +77,10 @@ public class ProviderRouter {
     private final ProviderRegistry          registry;
     private final ProviderSelectionStrategy strategy;
     private final CircuitBreakerRegistry    cbRegistry;
+    private final Retry                     retry;
+    private final Bulkhead                  analysisBulkhead;
+    private final Bulkhead                  migrationBulkhead;
+    private final TokenUsagePort            tokenUsagePort;
     private final McpToolsPort              mcpTools;       // null when MCP is disabled
     private final int                       maxToolIter;
 
@@ -74,13 +88,18 @@ public class ProviderRouter {
             ProviderRegistry         registry,
             AiRoutingConfig          routingCfg,
             McpConfig                mcpConfig,
-            Optional<McpToolsPort>   mcpTools) {
+            Optional<McpToolsPort>   mcpTools,
+            TokenUsagePort           tokenUsagePort) {
 
-        this.registry    = registry;
-        this.strategy    = buildStrategy(routingCfg);
-        this.cbRegistry  = buildCbRegistry(routingCfg.circuitBreaker());
-        this.mcpTools    = mcpTools.orElse(null);
-        this.maxToolIter = mcpConfig.maxToolIterations();
+        this.registry         = registry;
+        this.strategy         = buildStrategy(routingCfg);
+        this.cbRegistry       = buildCbRegistry(routingCfg.circuitBreaker());
+        this.retry            = buildRetry(routingCfg.retry());
+        this.analysisBulkhead = buildBulkhead("analysis",  routingCfg.bulkhead().analysisConcurrency(),  routingCfg.bulkhead().maxWaitMs());
+        this.migrationBulkhead= buildBulkhead("migration", routingCfg.bulkhead().migrationConcurrency(), routingCfg.bulkhead().maxWaitMs());
+        this.tokenUsagePort   = tokenUsagePort;
+        this.mcpTools         = mcpTools.orElse(null);
+        this.maxToolIter      = mcpConfig.maxToolIterations();
 
         log.info("ProviderRouter ready — strategy={} tierPreference={} mcp={}",
                 routingCfg.strategy(), routingCfg.tierPreference(),
@@ -94,6 +113,7 @@ public class ProviderRouter {
      * No tool calls — use {@link #chatAgentic} for MCP tool support.
      *
      * @throws AllProvidersUnavailableException if every provider fails or has an open CB
+     * @throws BulkheadFullException if the per-tier concurrency limit is exhausted
      */
     public String chat(ProviderTier tier, String systemPrompt, String userContent) {
         List<ChatMessage> messages = List.of(
@@ -111,15 +131,8 @@ public class ProviderRouter {
      * <p>If MCP is not configured or no tools are available, falls back to
      * {@link #chat} transparently — callers need not check.
      *
-     * <p>Loop contract:
-     * <ol>
-     *   <li>Send messages + tool specs to the model.</li>
-     *   <li>If the model returns tool calls, execute each via MCP and append results.</li>
-     *   <li>Repeat until the model returns a plain text response, or until
-     *       {@code max-tool-iterations} is reached.</li>
-     * </ol>
-     *
      * @throws AllProvidersUnavailableException if every provider fails
+     * @throws BulkheadFullException if the per-tier concurrency limit is exhausted
      */
     public String chatAgentic(ProviderTier tier, String systemPrompt, String userContent) {
         if (mcpTools == null) {
@@ -151,53 +164,63 @@ public class ProviderRouter {
     // ── provider routing ──────────────────────────────────────────────────────
 
     /**
-     * Tries each provider in order. If {@code tools} is non-null, runs the
-     * agentic loop; otherwise executes a plain generate call.
+     * Wraps the full provider-fallback loop in the tier's bulkhead.
+     * {@link BulkheadFullException} propagates immediately — the caller is at
+     * the concurrency ceiling for this tier and all providers share it.
      */
     private String routeToProvider(ProviderTier tier, List<ChatMessage> messages,
                                    List<ToolSpecification> tools) {
 
-        List<RegisteredProvider> ordered = strategy.order(registry.all(), tier);
+        Bulkhead bulkhead = tier == ProviderTier.ANALYSIS ? analysisBulkhead : migrationBulkhead;
 
-        for (RegisteredProvider provider : ordered) {
-            CircuitBreaker cb = cbRegistry.circuitBreaker(provider.id());
-            if (cb.getState() == CircuitBreaker.State.OPEN) {
-                log.debug("Skipping [{}] — circuit OPEN", provider.id());
-                continue;
+        Supplier<String> providerLoop = () -> {
+            List<RegisteredProvider> ordered = strategy.order(registry.all(), tier);
+
+            for (RegisteredProvider provider : ordered) {
+                CircuitBreaker cb = cbRegistry.circuitBreaker(provider.id());
+                if (cb.getState() == CircuitBreaker.State.OPEN) {
+                    log.debug("Skipping [{}] — circuit OPEN", provider.id());
+                    continue;
+                }
+
+                try {
+                    String result = tools == null
+                            ? callWithRetryAndCb(provider, tier, messages, cb)
+                            : agenticLoopWithCb(cb, provider, tier, messages, tools);
+                    log.info("Provider [{}] succeeded (tier={} agentic={})",
+                            provider.id(), tier, tools != null);
+                    return result;
+                } catch (CallNotPermittedException e) {
+                    log.debug("Provider [{}] CB rejected — trying next", provider.id());
+                } catch (ProviderCallException e) {
+                    log.warn("Provider [{}] failed (tier={}) — trying next: {}",
+                            provider.id(), tier, e.getMessage());
+                }
             }
 
-            try {
-                String result = tools == null
-                        ? callWithCb(cb, provider, tier, messages)
-                        : agenticLoopWithCb(cb, provider, tier, messages, tools);
-                log.info("Provider [{}] succeeded (tier={} agentic={})",
-                        provider.id(), tier, tools != null);
-                return result;
-            } catch (CallNotPermittedException e) {
-                log.debug("Provider [{}] CB rejected — trying next", provider.id());
-            } catch (ProviderCallException e) {
-                log.warn("Provider [{}] failed (tier={}) — trying next: {}",
-                        provider.id(), tier, e.getMessage());
-            }
-        }
+            throw new AllProvidersUnavailableException(tier, ordered);
+        };
 
-        throw new AllProvidersUnavailableException(tier, ordered);
+        return Bulkhead.decorateSupplier(bulkhead, providerLoop).get();
     }
 
-    // ── plain generate ────────────────────────────────────────────────────────
+    // ── plain generate with retry + CB ────────────────────────────────────────
 
-    private String callWithCb(CircuitBreaker cb, RegisteredProvider provider,
-                               ProviderTier tier, List<ChatMessage> messages) {
-        Supplier<String> call = CircuitBreaker.decorateSupplier(cb, () -> {
-            try {
-                Response<AiMessage> response = provider.modelFor(tier).generate(messages);
-                return response.content().text();
-            } catch (Exception e) {
-                log.debug("Provider [{}] detail: {}", provider.id(), e.getMessage());
-                throw new ProviderCallException(provider.id(), tier, e);
-            }
-        });
-        return call.get();
+    private String callWithRetryAndCb(RegisteredProvider provider, ProviderTier tier,
+                                      List<ChatMessage> messages, CircuitBreaker cb) {
+        // Retry wraps CB so each attempt counts independently against the CB
+        return Retry.decorateSupplier(retry,
+                CircuitBreaker.decorateSupplier(cb, () -> {
+                    try {
+                        Response<AiMessage> response = provider.modelFor(tier).generate(messages);
+                        recordTokenUsage(provider.id(), tier, response.tokenUsage());
+                        return response.content().text();
+                    } catch (Exception e) {
+                        log.debug("Provider [{}] detail: {}", provider.id(), e.getMessage());
+                        throw new ProviderCallException(provider.id(), tier, e);
+                    }
+                })
+        ).get();
     }
 
     // ── agentic loop ──────────────────────────────────────────────────────────
@@ -237,10 +260,10 @@ public class ProviderRouter {
 
             if (!aiMsg.hasToolExecutionRequests()) {
                 log.debug("Agentic loop completed in {} iteration(s) via [{}]", i + 1, provider.id());
+                recordTokenUsage(provider.id(), tier, response.tokenUsage());
                 return aiMsg.text();
             }
 
-            // Execute each requested tool and append results
             for (ToolExecutionRequest req : aiMsg.toolExecutionRequests()) {
                 String result = mcpTools.executeTool(req.name(), req.arguments());
                 log.debug("MCP tool [{}] returned {} char(s)", req.name(), result.length());
@@ -252,7 +275,37 @@ public class ProviderRouter {
                 new IllegalStateException("Agentic loop hit max " + maxToolIter + " iterations"));
     }
 
-    // ── strategy / CB factory ─────────────────────────────────────────────────
+    // ── token usage ───────────────────────────────────────────────────────────
+
+    private void recordTokenUsage(String providerId, ProviderTier tier, TokenUsage usage) {
+        if (usage == null) return;
+        try {
+            tokenUsagePort.record(new TokenUsageRecord(
+                    providerId,
+                    tier.name(),
+                    usage.inputTokenCount(),
+                    usage.outputTokenCount(),
+                    usage.totalTokenCount(),
+                    Instant.now()));
+        } catch (Exception e) {
+            // Token recording is best-effort — never fail a provider call over analytics
+            log.warn("Failed to record token usage for [{}]: {}", providerId, e.getMessage());
+        }
+    }
+
+    // ── transient-error predicate ─────────────────────────────────────────────
+
+    private static boolean isTransient(Throwable e) {
+        if (!(e instanceof ProviderCallException)) return false;
+        Throwable cause = e.getCause();
+        if (cause == null) return false;
+        if (cause instanceof IOException || cause instanceof SocketTimeoutException) return true;
+        String msg = cause.getMessage();
+        return msg != null && (msg.contains("429") || msg.contains("500")
+                || msg.contains("502") || msg.contains("503") || msg.contains("504"));
+    }
+
+    // ── strategy / resilience factory ────────────────────────────────────────
 
     private ProviderSelectionStrategy buildStrategy(AiRoutingConfig cfg) {
         if (cfg.strategy() == RoutingStrategy.EXPLICIT_ORDER && !cfg.explicitOrder().isEmpty()) {
@@ -269,6 +322,25 @@ public class ProviderRouter {
                 .permittedNumberOfCallsInHalfOpenState(s.permittedCallsHalfOpen())
                 .build();
         return CircuitBreakerRegistry.of(config);
+    }
+
+    private Retry buildRetry(AiRoutingConfig.RetrySettings s) {
+        RetryConfig config = RetryConfig.custom()
+                .maxAttempts(s.maxAttempts())
+                .intervalFunction(IntervalFunction.ofExponentialRandomBackoff(
+                        s.waitDurationMillis(), 1.5))
+                .retryOnException(ProviderRouter::isTransient)
+                .ignoreExceptions(CallNotPermittedException.class)
+                .build();
+        return Retry.of("provider-retry", config);
+    }
+
+    private static Bulkhead buildBulkhead(String name, int maxConcurrent, long maxWaitMs) {
+        BulkheadConfig config = BulkheadConfig.custom()
+                .maxConcurrentCalls(maxConcurrent)
+                .maxWaitDuration(Duration.ofMillis(maxWaitMs))
+                .build();
+        return Bulkhead.of(name, config);
     }
 
     // ── exceptions ────────────────────────────────────────────────────────────

@@ -21,7 +21,8 @@ public record AiRoutingConfig(
         @DefaultValue("PAID_FIRST")      TierPreference         tierPreference,
         @DefaultValue("")                List<String>           explicitOrder,
                                          CircuitBreakerSettings circuitBreaker,
-                                         RetrySettings          retry
+                                         RetrySettings          retry,
+                                         BulkheadSettings       bulkhead
 ) {
 
     public enum RoutingStrategy { TIER_PREFERENCE, EXPLICIT_ORDER }
@@ -37,5 +38,15 @@ public record AiRoutingConfig(
     public record RetrySettings(
             @DefaultValue("2")    int  maxAttempts,
             @DefaultValue("1000") long waitDurationMillis
+    ) {}
+
+    /** Per-tier semaphore bulkhead — limits concurrent AI calls to protect upstream rate limits. */
+    public record BulkheadSettings(
+            /** Max concurrent ANALYSIS (fast-model) calls across all agents. */
+            @DefaultValue("3") int analysisConcurrency,
+            /** Max concurrent MIGRATION (powerful-model) calls across all agents. */
+            @DefaultValue("5") int migrationConcurrency,
+            /** Max time a caller will wait for a permit before receiving BulkheadFullException. */
+            @DefaultValue("5000") long maxWaitMs
     ) {}
 }

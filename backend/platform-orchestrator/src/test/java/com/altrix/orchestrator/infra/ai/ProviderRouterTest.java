@@ -1,6 +1,8 @@
 package com.altrix.orchestrator.infra.ai;
 
+import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
+import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.BulkheadSettings;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.CircuitBreakerSettings;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RetrySettings;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
@@ -56,14 +58,16 @@ class ProviderRouterTest {
                 TierPreference.PAID_FIRST,
                 List.of(),
                 new CircuitBreakerSettings(10, 50f, 30L, 3),
-                new RetrySettings(2, 100L)
+                new RetrySettings(1, 10L),   // maxAttempts=1 → no retry in unit tests
+                new BulkheadSettings(10, 10, 5000L)
         );
     }
 
-    /** Builds a router with MCP disabled (Optional.empty). */
+    /** Builds a router with MCP disabled and a no-op token-usage sink. */
     private static ProviderRouter router(ProviderRegistry registry, AiRoutingConfig routing) {
-        McpConfig mcpCfg = new McpConfig(false, 5, List.of());
-        return new ProviderRouter(registry, routing, mcpCfg, Optional.empty());
+        McpConfig      mcpCfg       = new McpConfig(false, 5, List.of());
+        TokenUsagePort tokenUsage   = mock(TokenUsagePort.class);
+        return new ProviderRouter(registry, routing, mcpCfg, Optional.empty(), tokenUsage);
     }
 
     // ── tests ─────────────────────────────────────────────────────────────────
@@ -147,7 +151,8 @@ class ProviderRouterTest {
                 TierPreference.PAID_FIRST,
                 List.of("groq", "openai"),
                 new CircuitBreakerSettings(10, 50f, 30L, 3),
-                new RetrySettings(2, 100L)
+                new RetrySettings(1, 10L),
+                new BulkheadSettings(10, 10, 5000L)
         );
 
         ProviderRouter r = router(

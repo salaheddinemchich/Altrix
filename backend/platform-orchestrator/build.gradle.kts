@@ -54,10 +54,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.apache.commons:commons-pool2")
 
-    // Resilience4j — circuit breaker + retry per provider
+    // Resilience4j — circuit breaker + retry + bulkhead per provider
     implementation("io.github.resilience4j:resilience4j-spring-boot3:$resilience4jVersion")
     implementation("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4jVersion")
     implementation("io.github.resilience4j:resilience4j-retry:$resilience4jVersion")
+    implementation("io.github.resilience4j:resilience4j-bulkhead:$resilience4jVersion")
     implementation("org.springframework.boot:spring-boot-starter-aop")
 
     // Lombok

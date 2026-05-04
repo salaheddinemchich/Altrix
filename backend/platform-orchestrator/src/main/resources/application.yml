@@ -92,6 +92,8 @@ ai:
       model-analysis:  ${OLLAMA_MODEL_ANALYSIS:llama3.2:3b}
       model-migration: ${OLLAMA_MODEL_MIGRATION:llama3.1:8b}
       timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:300}
+      # Set to true to warm up Ollama models on startup (avoids first-call latency)
+      warmup: ${OLLAMA_WARMUP:false}
     # ── Paid providers (higher quality, per-token billing) ───────────────────
     openai:
       enabled: ${OPENAI_ENABLED:false}
@@ -124,6 +126,13 @@ ai:
     retry:
       max-attempts:        ${AI_RETRY_MAX:2}
       wait-duration-millis: ${AI_RETRY_WAIT_MS:1000}
+    bulkhead:
+      # Max concurrent ANALYSIS calls (fast-model) across all agents
+      analysis-concurrency:  ${AI_BULKHEAD_ANALYSIS:3}
+      # Max concurrent MIGRATION calls (powerful-model) across all agents
+      migration-concurrency: ${AI_BULKHEAD_MIGRATION:5}
+      # Max wait time (ms) for a bulkhead permit before BulkheadFullException
+      max-wait-ms: ${AI_BULKHEAD_MAX_WAIT_MS:5000}
 
   # Delay between agents in ms (0 = off; raise only for single-provider Groq free-tier)
   inter-agent-delay-ms: ${AI_INTER_AGENT_DELAY_MS:0}

@@ -8,8 +8,10 @@ import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import com.altrix.orchestrator.domain.port.out.ProviderConfigRepository;
 import com.altrix.orchestrator.domain.port.out.ProviderRefreshPort;
+import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
 import com.altrix.orchestrator.domain.service.OrchestratorService;
 import com.altrix.orchestrator.domain.service.ProviderConfigService;
+import com.altrix.orchestrator.domain.service.TokenUsageService;
 import com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory;
 import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +44,11 @@ public class BeanConfig {
                 codeIndexingAgent,
                 interAgentDelayMs
         );
+    }
+
+    @Bean
+    public TokenUsageService tokenUsageService(TokenUsagePort tokenUsagePort) {
+        return new TokenUsageService(tokenUsagePort);
     }
 
     @Bean

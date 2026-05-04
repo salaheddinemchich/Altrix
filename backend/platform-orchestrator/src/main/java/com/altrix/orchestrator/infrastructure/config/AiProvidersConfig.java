@@ -49,6 +49,7 @@ public record AiProvidersConfig(
             @DefaultValue("http://localhost:11434") String  baseUrl,
             @DefaultValue("llama3.2:3b")            String  modelAnalysis,
             @DefaultValue("llama3.1:8b")            String  modelMigration,
-            @DefaultValue("300")                    long    timeoutSeconds
+            @DefaultValue("300")                    long    timeoutSeconds,
+            @DefaultValue("false")                  boolean warmup
     ) {}
 }
