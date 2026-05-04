@@ -1,0 +1,51 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Profile: staging  (SPRING_PROFILES_ACTIVE=staging)
+# Pre-production on AWS EC2.
+# ──────────────────────────────────────────────────────────────────────────────
+
+logging:
+  level:
+    root: WARN
+    com.altrix: INFO
+
+spring:
+  datasource:
+    url:      jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT:5432}/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 3
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: HikariPool-orchestrator-staging
+
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    clean-disabled: true
+    clean-on-validation-error: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 2
+
+management:
+  endpoint:
+    health:
+      show-details: when-authorized
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,flyway

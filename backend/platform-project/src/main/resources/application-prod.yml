@@ -1,0 +1,52 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Profile: prod  (SPRING_PROFILES_ACTIVE=prod)
+# Production on AWS EC2 / ECS.  Zero defaults for secrets — startup fails fast
+# if any required env var is missing.
+# ──────────────────────────────────────────────────────────────────────────────
+
+logging:
+  level:
+    root: WARN
+    com.altrix: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+spring:
+  datasource:
+    url:      jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT:5432}/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 25
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      keepalive-time: 300000
+      leak-detection-threshold: 60000
+      pool-name: HikariPool-project-prod
+
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        # Batch inserts/updates — reduces round-trips for bulk ops
+        jdbc.batch_size: 25
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    clean-disabled: true
+    clean-on-validation-error: false
+    out-of-order: false
+
+management:
+  endpoint:
+    health:
+      show-details: never
+  endpoints:
+    web:
+      exposure:
+        include: health,info

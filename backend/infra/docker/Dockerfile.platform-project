@@ -24,4 +24,14 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 COPY --from=builder /workspace/platform-project/build/libs/*.jar app.jar
 EXPOSE 8082
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+
+# Active Spring profile — override at container runtime:
+#   docker run -e SPRING_PROFILES_ACTIVE=prod ...
+#   ECS task definition: environment: [{name: SPRING_PROFILES_ACTIVE, value: prod}]
+ENV SPRING_PROFILES_ACTIVE=prod
+
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-Dspring.profiles.active=${SPRING_PROFILES_ACTIVE}", \
+  "-jar", "app.jar"]

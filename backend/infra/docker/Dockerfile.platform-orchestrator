@@ -23,4 +23,11 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 COPY --from=builder /workspace/platform-orchestrator/build/libs/*.jar app.jar
 EXPOSE 8084
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+
+ENV SPRING_PROFILES_ACTIVE=prod
+
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-Dspring.profiles.active=${SPRING_PROFILES_ACTIVE}", \
+  "-jar", "app.jar"]

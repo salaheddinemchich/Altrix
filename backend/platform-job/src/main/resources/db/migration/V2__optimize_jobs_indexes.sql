@@ -1,15 +1,15 @@
 -- Composite index: user + status — covers "show all PENDING/ANALYZING jobs for user X"
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_user_status
+CREATE INDEX IF NOT EXISTS idx_jobs_user_status
     ON migration_jobs (user_id, status);
 
 -- Partial index: active jobs only — dashboard polling (excludes terminal states)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_active
+CREATE INDEX IF NOT EXISTS idx_jobs_active
     ON migration_jobs (user_id, created_at DESC)
     WHERE status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED');
 
 -- Covering index: list endpoint returns id + project_id + status + created_at
 -- Index-only scan avoids touching the heap for the list query
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_list_covering
+CREATE INDEX IF NOT EXISTS idx_jobs_list_covering
     ON migration_jobs (user_id, created_at DESC)
     INCLUDE (id, project_id, status, config_format_preference);
 
