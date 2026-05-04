@@ -95,6 +95,14 @@ ai:
       # Set to true to warm up Ollama models on startup (avoids first-call latency)
       warmup: ${OLLAMA_WARMUP:false}
     # ── Paid providers (higher quality, per-token billing) ───────────────────
+    nvidia:
+      enabled: ${NVIDIA_ENABLED:false}
+      api-key: ${NVIDIA_API_KEY:}
+      base-url: ${NVIDIA_BASE_URL:https://integrate.api.nvidia.com/v1}
+      model-analysis:  ${NVIDIA_MODEL_ANALYSIS:meta/llama-3.1-8b-instruct}
+      model-migration: ${NVIDIA_MODEL_MIGRATION:nvidia/llama-3.1-nemotron-70b-instruct}
+      timeout-seconds: ${NVIDIA_TIMEOUT_SECONDS:120}
+      temperature:     ${NVIDIA_TEMPERATURE:0.1}
     openai:
       enabled: ${OPENAI_ENABLED:false}
       api-key: ${OPENAI_API_KEY:}

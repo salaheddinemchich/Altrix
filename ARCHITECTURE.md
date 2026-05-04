@@ -45,20 +45,20 @@ Migrating a real codebase from one framework or stack to another is expensive, e
          │   Auth · CORS · Rate limiting · Routing   │
          └───┬──────────────┬──────────────┬─────────┘
              │              │              │
-    ┌────────▼──────┐ ┌─────▼──────┐ ┌───▼────────────────┐
+    ┌────────▼──────┐ ┌─────▼──────┐  ┌───▼────────────────┐
     │platform-project│ │platform-job│ │platform-orchestrator│
     │  port 8082     │ │  port 8083 │ │     port 8084       │
     └────────────────┘ └────────────┘ └────────────────────┘
              │              │              │
              └──────────────┴──────────────┘
                             │ Kafka events
-                    ┌───────▼────────┐
+                    ┌───────▼─────────┐
                     │  Infrastructure │
                     │  Postgres       │
                     │  Redis          │
                     │  MinIO          │
                     │  Kafka          │
-                    └────────────────┘
+                    └─────────────────┘
 ```
 
 ---
@@ -338,26 +338,39 @@ AiPort (domain port)
 LangChain4jAiAdapter
     │
 ProviderRouter  ──── reads live provider list on every call
+    │            ├── Tier Bulkhead   (semaphore: ANALYSIS=3, MIGRATION=5 concurrent)
+    │            ├── per-provider Retry  (exponential backoff + jitter, transient-only)
+    │            └── per-provider CircuitBreaker  (sliding window, lazy-init)
     │
 ProviderRegistry ─── AtomicReference<List<RegisteredProvider>> for lock-free refresh
     │
 ProviderFactory implementations (one @Component per provider):
-    ├── GroqProviderFactory
-    ├── AnthropicProviderFactory
-    ├── OpenAiProviderFactory
-    ├── DeepSeekProviderFactory
-    └── OllamaProviderFactory
+    ├── GroqProviderFactory          FREE   — Groq cloud (llama-3.x models)
+    ├── DeepSeekProviderFactory      FREE   — DeepSeek API
+    ├── OllamaProviderFactory        FREE   — local Ollama (warmup on startup optional)
+    ├── NvidiaProviderFactory        PAID   — NVIDIA NIM (integrate.api.nvidia.com/v1)
+    ├── OpenAiProviderFactory        PAID   — OpenAI
+    └── AnthropicProviderFactory     PAID   — Anthropic Claude
 ```
 
-**Two tiers:**
-- `ANALYSIS` — fast/cheap model (e.g. `llama3.2:3b`, `gemma2`) for quick structural scans
-- `MIGRATION` — powerful model (e.g. `claude-sonnet-4`, `gpt-4o`) for full code rewriting
+**Provider tiers:**
+- `ANALYSIS` — fast/cheap model (e.g. `llama3.2:3b`, `llama-3.1-8b-instruct`) for structural scans
+- `MIGRATION` — powerful model (e.g. `claude-sonnet-4-6`, `gpt-4o`, `nemotron-70b`) for code rewriting
+
+**Cost tiers:** `FREE` (Groq, DeepSeek, Ollama) vs `PAID` (NVIDIA, OpenAI, Anthropic) — used by routing strategies.
 
 **Routing strategies** (configured via `ai.routing.strategy`):
 - `TIER_PREFERENCE` (default): `PAID_FIRST` (quality) or `FREE_FIRST` (cost)
 - `EXPLICIT_ORDER`: fixed list in `ai.routing.explicit-order`
 
+**Resilience stack (per call, since Sprint 1):**
+- **Bulkhead** — semaphore limits concurrent AI calls per tier (`AI_BULKHEAD_ANALYSIS`, `AI_BULKHEAD_MIGRATION`)
+- **Retry** — retries transient errors (429, 5xx, I/O) with exponential backoff + jitter (`AI_RETRY_MAX`, `AI_RETRY_WAIT_MS`)
+- **CircuitBreaker** — short-circuits broken providers after N failures (`AI_CB_FAILURE_RATE`, `AI_CB_WAIT_SECONDS`)
+
 **Runtime config:** Users can override provider settings via `PUT /api/ai/providers/{providerId}` without restart. API keys stored AES-256-GCM encrypted in `provider_configs` table.
+
+**NVIDIA NIM:** get an API key at https://build.nvidia.com/models, set `NVIDIA_API_KEY` + `NVIDIA_ENABLED=true`.
 
 ---
 
@@ -387,12 +400,16 @@ Message format: pipe-delimited plain text — e.g. `"jobId|status|storageKey"`.
 
 Each service manages its own schema independently:
 
-| Service | Migration file | History table |
-|---------|---------------|---------------|
-| platform-project | `V1__create_projects.sql` | `flyway_schema_history_project` |
-| platform-job | `V1__create_migration_jobs.sql` | `flyway_schema_history_job` |
-| platform-orchestrator | `V1__create_provider_configs.sql` | `flyway_schema_history_orchestrator` |
-| platform-orchestrator | `V_pgvector__create_embeddings_table.sql` | (planned, #172) |
+| Service | Migration file | Purpose |
+|---------|---------------|---------|
+| platform-project | `V1__create_projects.sql` | Projects table |
+| platform-project | `V2__optimize_projects_indexes.sql` | Composite + partial + covering indexes |
+| platform-job | `V1__create_migration_jobs.sql` | Jobs table |
+| platform-job | `V2__optimize_jobs_indexes.sql` | Composite + partial + covering indexes |
+| platform-orchestrator | `V1__create_provider_configs.sql` | Provider config overrides (encrypted keys) |
+| platform-orchestrator | `V2__create_code_embeddings.sql` | pgvector embeddings table (RAG) |
+| platform-orchestrator | `V3__optimize_embeddings.sql` | BRIN + partial index on embeddings |
+| platform-orchestrator | `V4__create_token_usage.sql` | Token usage analytics per call |
 
 ---
 
@@ -406,7 +423,7 @@ Each service manages its own schema independently:
 | `/jobs` | Job list with status polling |
 | `/jobs/:id` | Real-time progress via WebSocket + diff viewer |
 | `/admin/providers` | AI provider config — keys, tiers, routing strategy |
-| `/admin/analytics` | Token usage, cost estimates (planned) |
+| `/admin/analytics` | Token usage analytics — `GET /api/ai/token-usage` |
 
 WebSocket endpoint: `ws://localhost:8084/ws/migration/{jobId}` — streams agent progress events in real-time.
 
