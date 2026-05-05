@@ -6,6 +6,7 @@ import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 
 @Component
@@ -15,7 +16,7 @@ public class TokenUsageJpaAdapter implements TokenUsagePort {
     private final TokenUsageJpaRepository repository;
 
     @Override
-    public void record(TokenUsageRecord usage) {
+    public void save(TokenUsageRecord usage) {
         repository.save(TokenUsageEntity.builder()
                 .providerId(usage.providerId())
                 .tier(usage.tier())
@@ -37,5 +38,10 @@ public class TokenUsageJpaAdapter implements TokenUsagePort {
                         p.getTotalTokens(),
                         p.getCallCount()))
                 .toList();
+    }
+
+    @Override
+    public long getTotalTokensSince(Instant since) {
+        return repository.sumTotalTokensSince(since);
     }
 }

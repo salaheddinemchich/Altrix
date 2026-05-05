@@ -5,10 +5,6 @@ import com.altrix.orchestrator.domain.port.out.DocumentationFetchPort;
 import com.altrix.orchestrator.domain.port.out.EmbeddingStorePort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -35,7 +31,6 @@ import java.util.List;
  * </ul>
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class DocumentationIngestionService {
 
@@ -132,8 +127,6 @@ public class DocumentationIngestionService {
                 "https://cloud.google.com/docs/authentication/client-libraries")
     );
 
-    @Async
-    @EventListener(ApplicationReadyEvent.class)
     public void ingestOnStartup() {
         log.info("Documentation ingestion started ({} pages)", PAGES.size());
         int ingested = 0;

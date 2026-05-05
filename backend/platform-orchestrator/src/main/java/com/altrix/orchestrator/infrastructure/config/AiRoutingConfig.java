@@ -22,7 +22,9 @@ public record AiRoutingConfig(
         @DefaultValue("")                List<String>           explicitOrder,
                                          CircuitBreakerSettings circuitBreaker,
                                          RetrySettings          retry,
-                                         BulkheadSettings       bulkhead
+                                         BulkheadSettings       bulkhead,
+        /** Monthly token budget across all providers. 0 = unlimited. */
+        @DefaultValue("0")               long                   monthlyTokenLimit
 ) {
 
     public enum RoutingStrategy { TIER_PREFERENCE, EXPLICIT_ORDER }

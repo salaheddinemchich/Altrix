@@ -1,4 +1,4 @@
-package com.altrix.orchestrator.domain.service;
+package com.altrix.orchestrator.domain.model;
 
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.ConfigFormatPreference;

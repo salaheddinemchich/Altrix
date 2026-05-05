@@ -4,10 +4,12 @@ import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.common.domain.enums.FileChangeType;
 import com.altrix.common.domain.port.MigrationAgent;
-import com.altrix.orchestrator.adapter.out.rag.CodeIndexingAgent;
+import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
+import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
+import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,19 +31,22 @@ class OrchestratorServiceTest {
     @Mock JobStatusUpdatePort     jobStatusUpdatePort;
     @Mock MigratedFileStoragePort migratedFileStoragePort;
     @Mock ProgressNotifierPort    progressNotifierPort;
-    @Mock CodeIndexingAgent       codeIndexingAgent;
+    @Mock CodeIndexingPort        codeIndexingPort;
+    @Mock MigrationPlanCachePort  migrationPlanCachePort;
 
     private OrchestratorService service(List<AgentPort> agents) {
         return new OrchestratorService(
                 agents, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, codeIndexingAgent, 0L);
+                progressNotifierPort, codeIndexingPort, migrationPlanCachePort, 0L);
     }
 
     private OrchestratorService service(List<AgentPort> agents, long delayMs) {
         return new OrchestratorService(
                 agents, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, codeIndexingAgent, delayMs);
+                progressNotifierPort, codeIndexingPort, migrationPlanCachePort, delayMs);
     }
+
+    // ── happy path ────────────────────────────────────────────────────────────
 
     @Test
     void run_executesAgentsInOrder_andMarksDone() {
@@ -69,7 +75,7 @@ class OrchestratorServiceTest {
         ProjectContext initial = ProjectContext.builder()
                 .jobId("job-1").projectId("proj-1").build();
 
-        ProjectContext result = service(List.of(agent3, agent1)).run(initial); // deliberate wrong order
+        ProjectContext result = service(List.of(agent3, agent1)).run(initial);
 
         assertThat(result.migratedFiles()).hasSize(1);
         verify(jobStatusUpdatePort).markAnalyzing("job-1");
@@ -77,6 +83,28 @@ class OrchestratorServiceTest {
         verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
         verify(progressNotifierPort).notify(eq("job-1"), eq("Pipeline"), eq("DONE"), any());
     }
+
+    @Test
+    void run_cachesResultAfterSuccess() {
+        AgentPort agent = mock(AgentPort.class);
+        when(agent.getOrder()).thenReturn(1);
+        when(agent.getName()).thenReturn("Analyzer");
+
+        MigratedFile file = MigratedFile.builder()
+                .originalPath("A.java").newPath("A.java").content("x")
+                .changeType(FileChangeType.MODIFIED).diffSummary("ok").build();
+        ProjectContext result = ProjectContext.builder()
+                .jobId("j").projectId("p").build()
+                .withMigratedFiles(List.of(file));
+        when(agent.execute(any())).thenReturn(result);
+        when(migratedFileStoragePort.storeMigratedZip(any(), any())).thenReturn("out.zip");
+
+        service(List.of(agent)).run(ProjectContext.builder().jobId("j").projectId("p").build());
+
+        verify(migrationPlanCachePort).store(eq("p"), any(), eq(List.of(file)));
+    }
+
+    // ── failure handling ──────────────────────────────────────────────────────
 
     @Test
     void run_marksFailedAndRethrows_whenAgentThrows() {
@@ -95,6 +123,54 @@ class OrchestratorServiceTest {
         verify(progressNotifierPort).notify(eq("job-1"), eq("Pipeline"), eq("FAILED"), any());
     }
 
+    // ── graceful degradation (#148) ───────────────────────────────────────────
+
+    @Test
+    void run_servesCache_whenAllProvidersUnavailableAndCacheHit() {
+        AgentPort failingAgent = mock(AgentPort.class);
+        when(failingAgent.getOrder()).thenReturn(1);
+        when(failingAgent.getName()).thenReturn("MigratorAgent");
+        when(failingAgent.execute(any()))
+                .thenThrow(new AiProviderUnavailableException("all providers down"));
+
+        MigratedFile cached = MigratedFile.builder()
+                .originalPath("A.java").newPath("A.java").content("cached")
+                .changeType(FileChangeType.MODIFIED).diffSummary("cached").build();
+        when(migrationPlanCachePort.loadLatest(eq("proj-1"), any()))
+                .thenReturn(Optional.of(List.of(cached)));
+        when(migratedFileStoragePort.storeMigratedZip(any(), any()))
+                .thenReturn("out.zip");
+
+        ProjectContext initial = ProjectContext.builder()
+                .jobId("job-1").projectId("proj-1").build();
+
+        ProjectContext result = service(List.of(failingAgent)).run(initial);
+
+        assertThat(result.migratedFiles()).containsExactly(cached);
+        verify(jobStatusUpdatePort).markDone(eq("job-1"), any());
+        verify(progressNotifierPort).notify(eq("job-1"), eq("Pipeline"), eq("DONE"), any());
+    }
+
+    @Test
+    void run_throwsAiUnavailable_whenProvidersDownAndNoCacheEntry() {
+        AgentPort failingAgent = mock(AgentPort.class);
+        when(failingAgent.getOrder()).thenReturn(1);
+        when(failingAgent.getName()).thenReturn("MigratorAgent");
+        when(failingAgent.execute(any()))
+                .thenThrow(new AiProviderUnavailableException("no providers"));
+        when(migrationPlanCachePort.loadLatest(any(), any())).thenReturn(Optional.empty());
+
+        ProjectContext initial = ProjectContext.builder()
+                .jobId("job-1").projectId("proj-1").build();
+
+        assertThatThrownBy(() -> service(List.of(failingAgent)).run(initial))
+                .isInstanceOf(AiProviderUnavailableException.class);
+
+        verify(jobStatusUpdatePort).markFailed(eq("job-1"), any());
+    }
+
+    // ── other invariants ──────────────────────────────────────────────────────
+
     @Test
     void run_withNoAgents_storeEmptyZipAndMarksDone() {
         when(migratedFileStoragePort.storeMigratedZip(eq("job-1"), any()))
@@ -108,10 +184,6 @@ class OrchestratorServiceTest {
         verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
     }
 
-    // -----------------------------------------------------------------------
-    // Type hierarchy: AgentPort must be a MigrationAgent<ProjectContext, ProjectContext>
-    // -----------------------------------------------------------------------
-
     @Test
     void agentPort_is_a_subtype_of_MigrationAgent() {
         assertThat(MigrationAgent.class).isAssignableFrom(AgentPort.class);
@@ -123,7 +195,6 @@ class OrchestratorServiceTest {
         when(agent.getName()).thenReturn("test-agent");
         when(agent.getOrder()).thenReturn(1);
 
-        // Cast must succeed — AgentPort IS-A MigrationAgent<ProjectContext, ProjectContext>
         MigrationAgent<ProjectContext, ProjectContext> typed = agent;
         assertThat(typed.getName()).isEqualTo("test-agent");
         assertThat(typed.getOrder()).isEqualTo(1);

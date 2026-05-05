@@ -1,9 +1,9 @@
 package com.altrix.job.adapter.out.persistence;
 
-import com.altrix.job.adapter.out.persistence.spec.JobFilter;
 import com.altrix.job.adapter.out.persistence.spec.JobSpecification;
 import com.altrix.job.domain.model.MigrationJob;
-import com.altrix.job.domain.port.out.JobRepository;
+import com.altrix.job.domain.port.in.JobFilter;
+import com.altrix.job.domain.port.out.JobRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -12,7 +12,7 @@ import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
-public class JobPersistenceAdapter implements JobRepository {
+public class JobPersistenceAdapter implements JobRepositoryPort {
 
     private final MigrationJobJpaRepository jpaRepository;
     private final MigrationJobMapper mapper;

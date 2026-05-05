@@ -1,7 +1,7 @@
 package com.altrix.job.adapter.in.rest;
 
 import com.altrix.common.domain.enums.JobStatus;
-import com.altrix.job.adapter.out.persistence.spec.JobFilter;
+import com.altrix.job.domain.port.in.JobFilter;
 import com.altrix.job.adapter.out.storage.MinioJobStorageAdapter;
 import com.altrix.job.domain.model.MigrationJob;
 import com.altrix.job.domain.port.in.GetJobQuery;

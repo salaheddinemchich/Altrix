@@ -1,6 +1,10 @@
 package com.altrix.orchestrator.infra.ai;
 
+import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
+import com.altrix.orchestrator.domain.exception.TokenBudgetExceededException;
 import com.altrix.orchestrator.domain.model.TokenUsageRecord;
+import com.altrix.orchestrator.domain.port.in.GetResilienceMetricsUseCase;
+import com.altrix.orchestrator.domain.port.in.ProviderResilienceStatus;
 import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
@@ -72,7 +76,7 @@ import java.util.function.Supplier;
  */
 @Slf4j
 @Component
-public class ProviderRouter {
+public class ProviderRouter implements GetResilienceMetricsUseCase {
 
     private final ProviderRegistry          registry;
     private final ProviderSelectionStrategy strategy;
@@ -81,7 +85,8 @@ public class ProviderRouter {
     private final Bulkhead                  analysisBulkhead;
     private final Bulkhead                  migrationBulkhead;
     private final TokenUsagePort            tokenUsagePort;
-    private final McpToolsPort              mcpTools;       // null when MCP is disabled
+    private final long                      monthlyTokenLimit; // 0 = unlimited
+    private final McpToolsPort              mcpTools;          // null when MCP is disabled
     private final int                       maxToolIter;
 
     public ProviderRouter(
@@ -97,9 +102,10 @@ public class ProviderRouter {
         this.retry            = buildRetry(routingCfg.retry());
         this.analysisBulkhead = buildBulkhead("analysis",  routingCfg.bulkhead().analysisConcurrency(),  routingCfg.bulkhead().maxWaitMs());
         this.migrationBulkhead= buildBulkhead("migration", routingCfg.bulkhead().migrationConcurrency(), routingCfg.bulkhead().maxWaitMs());
-        this.tokenUsagePort   = tokenUsagePort;
-        this.mcpTools         = mcpTools.orElse(null);
-        this.maxToolIter      = mcpConfig.maxToolIterations();
+        this.tokenUsagePort    = tokenUsagePort;
+        this.monthlyTokenLimit = routingCfg.monthlyTokenLimit();
+        this.mcpTools          = mcpTools.orElse(null);
+        this.maxToolIter       = mcpConfig.maxToolIterations();
 
         log.info("ProviderRouter ready — strategy={} tierPreference={} mcp={}",
                 routingCfg.strategy(), routingCfg.tierPreference(),
@@ -116,6 +122,7 @@ public class ProviderRouter {
      * @throws BulkheadFullException if the per-tier concurrency limit is exhausted
      */
     public String chat(ProviderTier tier, String systemPrompt, String userContent) {
+        enforceBudget();
         List<ChatMessage> messages = List.of(
                 SystemMessage.from(systemPrompt),
                 UserMessage.from(userContent)
@@ -159,6 +166,25 @@ public class ProviderRouter {
         registry.all().forEach(p ->
                 states.put(p.id(), cbRegistry.circuitBreaker(p.id()).getState()));
         return Map.copyOf(states);
+    }
+
+    @Override
+    public ProviderResilienceStatus getResilienceStatus() {
+        Map<String, String> cbStates = new java.util.LinkedHashMap<>();
+        registry.all().forEach(p ->
+                cbStates.put(p.id(), cbRegistry.circuitBreaker(p.id()).getState().name()));
+
+        Map<String, ProviderResilienceStatus.BulkheadSnapshot> bulkheads = Map.of(
+                "ANALYSIS",  snapshot(analysisBulkhead),
+                "MIGRATION", snapshot(migrationBulkhead)
+        );
+        return new ProviderResilienceStatus(Map.copyOf(cbStates), bulkheads);
+    }
+
+    private static ProviderResilienceStatus.BulkheadSnapshot snapshot(Bulkhead b) {
+        return new ProviderResilienceStatus.BulkheadSnapshot(
+                b.getBulkheadConfig().getMaxConcurrentCalls(),
+                b.getMetrics().getAvailableConcurrentCalls());
     }
 
     // ── provider routing ──────────────────────────────────────────────────────
@@ -275,12 +301,26 @@ public class ProviderRouter {
                 new IllegalStateException("Agentic loop hit max " + maxToolIter + " iterations"));
     }
 
+    // ── monthly budget enforcement ────────────────────────────────────────────
+
+    private void enforceBudget() {
+        if (monthlyTokenLimit <= 0) return;
+        Instant startOfMonth = Instant.now()
+                .atZone(java.time.ZoneOffset.UTC)
+                .withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
+                .toInstant();
+        long used = tokenUsagePort.getTotalTokensSince(startOfMonth);
+        if (used >= monthlyTokenLimit) {
+            throw new TokenBudgetExceededException(monthlyTokenLimit, used);
+        }
+    }
+
     // ── token usage ───────────────────────────────────────────────────────────
 
     private void recordTokenUsage(String providerId, ProviderTier tier, TokenUsage usage) {
         if (usage == null) return;
         try {
-            tokenUsagePort.record(new TokenUsageRecord(
+            tokenUsagePort.save(new TokenUsageRecord(
                     providerId,
                     tier.name(),
                     usage.inputTokenCount(),
@@ -345,7 +385,7 @@ public class ProviderRouter {
 
     // ── exceptions ────────────────────────────────────────────────────────────
 
-    public static final class AllProvidersUnavailableException extends RuntimeException {
+    public static final class AllProvidersUnavailableException extends AiProviderUnavailableException {
         public AllProvidersUnavailableException(ProviderTier tier, List<RegisteredProvider> tried) {
             super("All providers unavailable for tier " + tier
                     + ". Tried: " + tried.stream().map(RegisteredProvider::id).toList());

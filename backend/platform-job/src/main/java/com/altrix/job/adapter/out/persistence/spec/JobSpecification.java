@@ -1,6 +1,7 @@
 package com.altrix.job.adapter.out.persistence.spec;
 
 import com.altrix.job.adapter.out.persistence.MigrationJobJpaEntity;
+import com.altrix.job.domain.port.in.JobFilter;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 

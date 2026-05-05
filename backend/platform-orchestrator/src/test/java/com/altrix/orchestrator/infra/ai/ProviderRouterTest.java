@@ -59,7 +59,8 @@ class ProviderRouterTest {
                 List.of(),
                 new CircuitBreakerSettings(10, 50f, 30L, 3),
                 new RetrySettings(1, 10L),   // maxAttempts=1 → no retry in unit tests
-                new BulkheadSettings(10, 10, 5000L)
+                new BulkheadSettings(10, 10, 5000L),
+                0L
         );
     }
 
@@ -152,7 +153,8 @@ class ProviderRouterTest {
                 List.of("groq", "openai"),
                 new CircuitBreakerSettings(10, 50f, 30L, 3),
                 new RetrySettings(1, 10L),
-                new BulkheadSettings(10, 10, 5000L)
+                new BulkheadSettings(10, 10, 5000L),
+                0L
         );
 
         ProviderRouter r = router(

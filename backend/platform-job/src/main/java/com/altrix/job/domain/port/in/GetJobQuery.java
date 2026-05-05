@@ -1,7 +1,6 @@
 package com.altrix.job.domain.port.in;
 
 import com.altrix.job.domain.model.MigrationJob;
-import com.altrix.job.adapter.out.persistence.spec.JobFilter;
 
 import java.util.List;
 

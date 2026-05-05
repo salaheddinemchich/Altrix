@@ -1,10 +1,10 @@
 package com.altrix.job.domain.service;
 
 import com.altrix.common.exception.JobNotFoundException;
-import com.altrix.job.adapter.out.persistence.spec.JobFilter;
 import com.altrix.job.domain.model.MigrationJob;
+import com.altrix.job.domain.port.in.JobFilter;
 import com.altrix.job.domain.port.out.JobCachePort;
-import com.altrix.job.domain.port.out.JobRepository;
+import com.altrix.job.domain.port.out.JobRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class JobQueryServiceTest {
 
-    @Mock JobRepository jobRepository;
+    @Mock JobRepositoryPort jobRepository;
     @Mock JobCachePort  jobCachePort;
 
     JobQueryService queryService;

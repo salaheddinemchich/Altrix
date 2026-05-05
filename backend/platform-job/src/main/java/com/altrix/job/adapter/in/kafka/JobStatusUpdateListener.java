@@ -1,7 +1,7 @@
 package com.altrix.job.adapter.in.kafka;
 
 import com.altrix.job.domain.port.in.UpdateJobStatusUseCase;
-import com.altrix.job.domain.port.out.JobRepository;
+import com.altrix.job.domain.port.out.JobRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 public class JobStatusUpdateListener {
 
     private final UpdateJobStatusUseCase updateJobStatusUseCase;
-    private final JobRepository jobRepository;
+    private final JobRepositoryPort jobRepository;
 
     @KafkaListener(
             topics  = "${kafka.topics.job-status-update}",

@@ -1,7 +1,7 @@
 package com.altrix.project.adapter.out.messaging;
 
 import com.altrix.project.domain.model.Project;
-import com.altrix.project.domain.port.out.ProjectEventPublisher;
+import com.altrix.project.domain.port.out.ProjectEventPublisherPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class KafkaProjectEventAdapter implements ProjectEventPublisher {
+public class KafkaProjectEventAdapter implements ProjectEventPublisherPort {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
 

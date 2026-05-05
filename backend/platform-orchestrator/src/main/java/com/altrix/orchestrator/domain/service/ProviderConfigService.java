@@ -6,7 +6,7 @@ import com.altrix.orchestrator.domain.port.in.ProviderConfigView;
 import com.altrix.orchestrator.domain.port.in.SaveProviderConfigCommand;
 import com.altrix.orchestrator.domain.port.in.UpdateProviderConfigUseCase;
 import com.altrix.orchestrator.domain.port.out.ApiKeyEncryptionPort;
-import com.altrix.orchestrator.domain.port.out.ProviderConfigRepository;
+import com.altrix.orchestrator.domain.port.out.ProviderConfigRepositoryPort;
 import com.altrix.orchestrator.domain.port.out.ProviderRefreshPort;
 import com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ProviderConfigService implements UpdateProviderConfigUseCase, GetProviderConfigsUseCase {
 
-    private final ProviderConfigRepository configRepository;
+    private final ProviderConfigRepositoryPort configRepository;
     private final ApiKeyEncryptionPort     encryption;
     private final ProviderRefreshPort      providerRefresh;
     private final List<ProviderFactory>    factories;   // all known provider factories

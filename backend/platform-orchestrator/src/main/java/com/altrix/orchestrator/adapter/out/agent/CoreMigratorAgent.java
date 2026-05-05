@@ -9,7 +9,7 @@ import com.altrix.common.domain.enums.FileChangeType;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
 import com.altrix.orchestrator.domain.port.out.AiPort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
-import com.altrix.orchestrator.domain.service.ConfigFormatResolver;
+import com.altrix.orchestrator.domain.model.ConfigFormatResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

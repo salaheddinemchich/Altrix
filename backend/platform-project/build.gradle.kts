@@ -32,4 +32,5 @@ dependencies {
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
 }

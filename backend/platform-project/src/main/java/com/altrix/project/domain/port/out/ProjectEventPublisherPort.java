@@ -9,7 +9,7 @@ import com.altrix.project.domain.model.Project;
  * The domain service calls this after a project is registered.
  * The Kafka adapter implements this interface.
  */
-public interface ProjectEventPublisher {
+public interface ProjectEventPublisherPort {
 
     /**
      * Publishes a {@code project.registered} event so the job service

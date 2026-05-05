@@ -15,7 +15,7 @@ import java.util.Optional;
  * <p>This interface belongs to the domain layer. The implementation
  * ({@code ProjectPersistenceAdapter}) lives in the adapter layer.
  */
-public interface ProjectRepository {
+public interface ProjectRepositoryPort {
 
     /** Persists a new project or updates an existing one. Returns the saved entity. */
     Project save(Project project);

@@ -1,7 +1,7 @@
 package com.altrix.job.adapter.out.messaging;
 
 import com.altrix.job.domain.model.MigrationJob;
-import com.altrix.job.domain.port.out.JobEventPublisher;
+import com.altrix.job.domain.port.out.JobEventPublisherPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class KafkaJobEventAdapter implements JobEventPublisher {
+public class KafkaJobEventAdapter implements JobEventPublisherPort {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
 

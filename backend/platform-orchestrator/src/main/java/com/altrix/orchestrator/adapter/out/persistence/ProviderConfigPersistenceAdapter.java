@@ -1,7 +1,7 @@
 package com.altrix.orchestrator.adapter.out.persistence;
 
 import com.altrix.orchestrator.domain.model.provider.ProviderConfig;
-import com.altrix.orchestrator.domain.port.out.ProviderConfigRepository;
+import com.altrix.orchestrator.domain.port.out.ProviderConfigRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -10,7 +10,7 @@ import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
-public class ProviderConfigPersistenceAdapter implements ProviderConfigRepository {
+public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositoryPort {
 
     private final ProviderConfigJpaRepository jpaRepository;
 

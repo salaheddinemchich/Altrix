@@ -1,6 +1,7 @@
 package com.altrix.job.adapter.out.persistence.spec;
 
 import com.altrix.common.domain.enums.JobStatus;
+import com.altrix.job.domain.port.in.JobFilter;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

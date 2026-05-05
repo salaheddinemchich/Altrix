@@ -6,8 +6,8 @@ import com.altrix.project.domain.model.Project;
 import com.altrix.project.domain.port.in.GetProjectQuery;
 import com.altrix.project.domain.port.in.UploadProjectUseCase;
 import com.altrix.project.domain.port.out.FileStoragePort;
-import com.altrix.project.domain.port.out.ProjectEventPublisher;
-import com.altrix.project.domain.port.out.ProjectRepository;
+import com.altrix.project.domain.port.out.ProjectEventPublisherPort;
+import com.altrix.project.domain.port.out.ProjectRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -18,9 +18,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProjectService implements UploadProjectUseCase, GetProjectQuery {
 
-    private final ProjectRepository     projectRepository;
-    private final FileStoragePort       fileStoragePort;
-    private final ProjectEventPublisher eventPublisher;
+    private final ProjectRepositoryPort     projectRepository;
+    private final FileStoragePort           fileStoragePort;
+    private final ProjectEventPublisherPort eventPublisher;
     private final BuildSystemDetector   buildSystemDetector;
 
     @Override

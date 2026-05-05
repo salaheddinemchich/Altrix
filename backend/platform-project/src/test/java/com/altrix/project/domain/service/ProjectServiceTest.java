@@ -8,8 +8,8 @@ import com.altrix.common.exception.ProjectNotFoundException;
 import com.altrix.project.domain.model.Project;
 import com.altrix.project.domain.model.ProjectStatus;
 import com.altrix.project.domain.port.out.FileStoragePort;
-import com.altrix.project.domain.port.out.ProjectEventPublisher;
-import com.altrix.project.domain.port.out.ProjectRepository;
+import com.altrix.project.domain.port.out.ProjectEventPublisherPort;
+import com.altrix.project.domain.port.out.ProjectRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,9 +32,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ProjectServiceTest {
 
-    @Mock ProjectRepository    projectRepository;
-    @Mock FileStoragePort      fileStoragePort;
-    @Mock ProjectEventPublisher eventPublisher;
+    @Mock ProjectRepositoryPort     projectRepository;
+    @Mock FileStoragePort           fileStoragePort;
+    @Mock ProjectEventPublisherPort eventPublisher;
     @Mock BuildSystemDetector  buildSystemDetector;
 
     ProjectService projectService;

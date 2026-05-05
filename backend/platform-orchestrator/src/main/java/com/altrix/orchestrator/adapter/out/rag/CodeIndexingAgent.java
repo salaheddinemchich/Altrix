@@ -3,6 +3,7 @@ package com.altrix.orchestrator.adapter.out.rag;
 import com.altrix.common.domain.enums.DocumentType;
 import com.altrix.common.domain.model.DocumentChunk;
 import com.altrix.common.domain.model.ProjectContext;
+import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
 import com.altrix.orchestrator.domain.port.out.EmbeddingStorePort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +31,7 @@ import java.util.Set;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class CodeIndexingAgent {
+public class CodeIndexingAgent implements CodeIndexingPort {
 
     private static final int    CHUNK_SIZE_CHARS  = 1200;
     private static final int    CHUNK_OVERLAP_CHARS = 200;

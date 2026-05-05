@@ -1,8 +1,8 @@
 package com.altrix.job.infrastructure.config;
 
 import com.altrix.job.domain.port.out.JobCachePort;
-import com.altrix.job.domain.port.out.JobEventPublisher;
-import com.altrix.job.domain.port.out.JobRepository;
+import com.altrix.job.domain.port.out.JobEventPublisherPort;
+import com.altrix.job.domain.port.out.JobRepositoryPort;
 import com.altrix.job.domain.service.JobCommandService;
 import com.altrix.job.domain.service.JobQueryService;
 import io.minio.MinioClient;
@@ -15,17 +15,17 @@ public class BeanConfig {
 
     @Bean
     public JobCommandService jobCommandService(
-            JobRepository jobRepository,
-            JobCachePort jobCachePort,
-            JobEventPublisher jobEventPublisher
+            JobRepositoryPort    jobRepository,
+            JobCachePort         jobCachePort,
+            JobEventPublisherPort jobEventPublisher
     ) {
         return new JobCommandService(jobRepository, jobCachePort, jobEventPublisher);
     }
 
     @Bean
     public JobQueryService jobQueryService(
-            JobRepository jobRepository,
-            JobCachePort  jobCachePort
+            JobRepositoryPort jobRepository,
+            JobCachePort      jobCachePort
     ) {
         return new JobQueryService(jobRepository, jobCachePort);
     }

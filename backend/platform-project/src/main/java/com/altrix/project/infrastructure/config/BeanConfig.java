@@ -1,8 +1,8 @@
 package com.altrix.project.infrastructure.config;
 
 import com.altrix.project.domain.port.out.FileStoragePort;
-import com.altrix.project.domain.port.out.ProjectEventPublisher;
-import com.altrix.project.domain.port.out.ProjectRepository;
+import com.altrix.project.domain.port.out.ProjectEventPublisherPort;
+import com.altrix.project.domain.port.out.ProjectRepositoryPort;
 import com.altrix.project.domain.service.BuildSystemDetector;
 import com.altrix.project.domain.service.ProjectService;
 import io.minio.MinioClient;
@@ -30,9 +30,9 @@ public class BeanConfig {
 
     @Bean
     public ProjectService projectService(
-            ProjectRepository     projectRepository,
-            FileStoragePort       fileStoragePort,
-            ProjectEventPublisher eventPublisher,
+            ProjectRepositoryPort     projectRepository,
+            FileStoragePort           fileStoragePort,
+            ProjectEventPublisherPort eventPublisher,
             BuildSystemDetector   buildSystemDetector
     ) {
         return new ProjectService(

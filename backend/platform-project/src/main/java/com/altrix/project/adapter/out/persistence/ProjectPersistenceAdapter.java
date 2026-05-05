@@ -1,7 +1,7 @@
 package com.altrix.project.adapter.out.persistence;
 
 import com.altrix.project.domain.model.Project;
-import com.altrix.project.domain.port.out.ProjectRepository;
+import com.altrix.project.domain.port.out.ProjectRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -19,7 +19,7 @@ import java.util.Optional;
  */
 @Component
 @RequiredArgsConstructor
-public class ProjectPersistenceAdapter implements ProjectRepository {
+public class ProjectPersistenceAdapter implements ProjectRepositoryPort {
 
     private final ProjectJpaRepository jpaRepository;
     private final ProjectMapper        mapper;

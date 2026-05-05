@@ -6,8 +6,8 @@ import com.altrix.job.domain.model.MigrationJob;
 import com.altrix.job.domain.port.in.CreateJobUseCase;
 import com.altrix.job.domain.port.in.UpdateJobStatusUseCase;
 import com.altrix.job.domain.port.out.JobCachePort;
-import com.altrix.job.domain.port.out.JobEventPublisher;
-import com.altrix.job.domain.port.out.JobRepository;
+import com.altrix.job.domain.port.out.JobEventPublisherPort;
+import com.altrix.job.domain.port.out.JobRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,9 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class JobCommandService implements CreateJobUseCase, UpdateJobStatusUseCase {
 
-    private final JobRepository jobRepository;
-    private final JobCachePort jobCachePort;
-    private final JobEventPublisher jobEventPublisher;
+    private final JobRepositoryPort    jobRepository;
+    private final JobCachePort         jobCachePort;
+    private final JobEventPublisherPort jobEventPublisher;
 
     @Override
     public MigrationJob createJob(

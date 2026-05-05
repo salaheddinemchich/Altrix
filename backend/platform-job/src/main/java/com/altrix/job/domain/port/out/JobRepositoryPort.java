@@ -1,7 +1,7 @@
 package com.altrix.job.domain.port.out;
 
 import com.altrix.job.domain.model.MigrationJob;
-import com.altrix.job.adapter.out.persistence.spec.JobFilter;
+import com.altrix.job.domain.port.in.JobFilter;
 
 import java.util.List;
 import java.util.Optional;
@@ -10,7 +10,7 @@ import java.util.Optional;
  * Secondary port — persistence abstraction.
  * The domain never imports JPA or Hibernate.
  */
-public interface JobRepository {
+public interface JobRepositoryPort {
 
     MigrationJob save(MigrationJob job);
 

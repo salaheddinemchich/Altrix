@@ -69,4 +69,5 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
     testImplementation("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4jVersion")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
 }

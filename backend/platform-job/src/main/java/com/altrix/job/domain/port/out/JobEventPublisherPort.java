@@ -6,7 +6,7 @@ import com.altrix.job.domain.model.MigrationJob;
  * Secondary port — publishes job domain events.
  * The domain never imports Kafka.
  */
-public interface JobEventPublisher {
+public interface JobEventPublisherPort {
 
     /** Published when a job transitions to PENDING — triggers the orchestrator. */
     void publishJobCreated(MigrationJob job);

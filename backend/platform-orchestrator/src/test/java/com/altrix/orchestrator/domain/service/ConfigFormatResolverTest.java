@@ -2,6 +2,7 @@ package com.altrix.orchestrator.domain.service;
 
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.orchestrator.domain.model.ConfigFormatResolver;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

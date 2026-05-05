@@ -1,17 +1,22 @@
 package com.altrix.orchestrator.infrastructure.config;
 
-import com.altrix.orchestrator.adapter.out.rag.CodeIndexingAgent;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
+import com.altrix.orchestrator.domain.port.out.DocumentationFetchPort;
+import com.altrix.orchestrator.domain.port.out.EmbeddingStorePort;
 import com.altrix.orchestrator.domain.port.out.ApiKeyEncryptionPort;
+import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
+import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
-import com.altrix.orchestrator.domain.port.out.ProviderConfigRepository;
+import com.altrix.orchestrator.domain.port.out.ProviderConfigRepositoryPort;
 import com.altrix.orchestrator.domain.port.out.ProviderRefreshPort;
 import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
+import com.altrix.orchestrator.domain.service.DocumentationIngestionService;
 import com.altrix.orchestrator.domain.service.OrchestratorService;
 import com.altrix.orchestrator.domain.service.ProviderConfigService;
 import com.altrix.orchestrator.domain.service.TokenUsageService;
+import com.altrix.orchestrator.infrastructure.config.AiPricingConfig;
 import com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory;
 import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +29,7 @@ import java.util.List;
 
 @Configuration
 @EnableAsync
-@EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, EncryptionConfig.class, McpConfig.class})
+@EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class, EncryptionConfig.class, McpConfig.class})
 public class BeanConfig {
 
     @Bean
@@ -33,7 +38,8 @@ public class BeanConfig {
             JobStatusUpdatePort     jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
             ProgressNotifierPort    progressNotifierPort,
-            CodeIndexingAgent       codeIndexingAgent,
+            CodeIndexingPort        codeIndexingPort,
+            MigrationPlanCachePort  migrationPlanCachePort,
             @Value("${ai.inter-agent-delay-ms:0}") long interAgentDelayMs
     ) {
         return new OrchestratorService(
@@ -41,19 +47,29 @@ public class BeanConfig {
                 jobStatusUpdatePort,
                 migratedFileStoragePort,
                 progressNotifierPort,
-                codeIndexingAgent,
+                codeIndexingPort,
+                migrationPlanCachePort,
                 interAgentDelayMs
         );
     }
 
     @Bean
-    public TokenUsageService tokenUsageService(TokenUsagePort tokenUsagePort) {
-        return new TokenUsageService(tokenUsagePort);
+    public DocumentationIngestionService documentationIngestionService(
+            EmbeddingStorePort embeddingStore,
+            DocumentationFetchPort docFetch
+    ) {
+        return new DocumentationIngestionService(embeddingStore, docFetch);
+    }
+
+    @Bean
+    public TokenUsageService tokenUsageService(TokenUsagePort tokenUsagePort,
+                                               AiPricingConfig pricingConfig) {
+        return new TokenUsageService(tokenUsagePort, pricingConfig); // AiPricingConfig implements TokenPricingPort
     }
 
     @Bean
     public ProviderConfigService providerConfigService(
-            ProviderConfigRepository configRepository,
+            ProviderConfigRepositoryPort configRepository,
             ApiKeyEncryptionPort     encryption,
             ProviderRefreshPort      providerRefresh,
             List<ProviderFactory>    factories

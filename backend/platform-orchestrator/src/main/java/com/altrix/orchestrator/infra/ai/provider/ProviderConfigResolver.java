@@ -2,7 +2,7 @@ package com.altrix.orchestrator.infra.ai.provider;
 
 import com.altrix.orchestrator.domain.model.provider.ProviderConfig;
 import com.altrix.orchestrator.domain.port.out.ApiKeyEncryptionPort;
-import com.altrix.orchestrator.domain.port.out.ProviderConfigRepository;
+import com.altrix.orchestrator.domain.port.out.ProviderConfigRepositoryPort;
 import com.altrix.orchestrator.infrastructure.config.AiProvidersConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +22,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ProviderConfigResolver {
 
-    private final ProviderConfigRepository configRepository;
+    private final ProviderConfigRepositoryPort configRepository;
     private final ApiKeyEncryptionPort     encryption;
 
     public ResolvedProviderConfig resolveOpenAiCompatible(

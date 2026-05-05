@@ -2,10 +2,10 @@ package com.altrix.job.domain.service;
 
 import com.altrix.common.exception.JobNotFoundException;
 import com.altrix.job.domain.model.MigrationJob;
-import com.altrix.job.adapter.out.persistence.spec.JobFilter;
 import com.altrix.job.domain.port.in.GetJobQuery;
+import com.altrix.job.domain.port.in.JobFilter;
 import com.altrix.job.domain.port.out.JobCachePort;
-import com.altrix.job.domain.port.out.JobRepository;
+import com.altrix.job.domain.port.out.JobRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,8 +21,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class JobQueryService implements GetJobQuery {
 
-    private final JobRepository jobRepository;
-    private final JobCachePort jobCachePort;
+    private final JobRepositoryPort jobRepository;
+    private final JobCachePort      jobCachePort;
 
     @Override
     public MigrationJob findById(String jobId) {
