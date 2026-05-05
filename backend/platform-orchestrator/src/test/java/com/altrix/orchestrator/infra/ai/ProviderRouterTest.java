@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.infra.ai;
 
+import com.altrix.orchestrator.domain.port.out.AiCallLedgerPort;
 import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.BulkheadSettings;
@@ -66,9 +67,10 @@ class ProviderRouterTest {
 
     /** Builds a router with MCP disabled and a no-op token-usage sink. */
     private static ProviderRouter router(ProviderRegistry registry, AiRoutingConfig routing) {
-        McpConfig      mcpCfg       = new McpConfig(false, 5, List.of());
-        TokenUsagePort tokenUsage   = mock(TokenUsagePort.class);
-        return new ProviderRouter(registry, routing, mcpCfg, Optional.empty(), tokenUsage);
+        McpConfig          mcpCfg       = new McpConfig(false, 5, List.of());
+        TokenUsagePort     tokenUsage   = mock(TokenUsagePort.class);
+        AiCallLedgerPort   ledger       = mock(AiCallLedgerPort.class);
+        return new ProviderRouter(registry, routing, mcpCfg, Optional.empty(), tokenUsage, ledger);
     }
 
     // ── tests ─────────────────────────────────────────────────────────────────

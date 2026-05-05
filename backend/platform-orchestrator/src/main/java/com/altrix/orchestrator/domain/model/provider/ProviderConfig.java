@@ -22,12 +22,12 @@ import java.time.Instant;
 @With
 public final class ProviderConfig {
 
-    private final String  providerId;        // natural PK — e.g. "groq", "openai"
+    private final String providerId;        // natural PK — e.g. "groq", "openai"
     private final Boolean enabled;           // null = use system default
-    private final String  encryptedApiKey;   // null = use system default; never plaintext
-    private final String  baseUrl;           // null = use system default
-    private final String  modelAnalysis;     // null = use system default
-    private final String  modelMigration;    // null = use system default
+    private final String encryptedApiKey;   // null = use system default; never plaintext
+    private final String baseUrl;           // null = use system default
+    private final String modelAnalysis;     // null = use system default
+    private final String modelMigration;    // null = use system default
     private final Instant updatedAt;
 
     public static ProviderConfig createEmpty(String providerId) {

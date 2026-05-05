@@ -7,14 +7,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
- * Secondary adapter — broadcasts progress events via WebSocket.
+ * Secondary adapter — broadcasts {@link ProgressEvent} payloads via WebSocket.
  *
- * <p>Clients subscribe to {@code /topic/jobs/{jobId}} to receive
- * real-time agent progress updates.
+ * <p>Clients subscribe to {@code /topic/jobs/{jobId}} to receive real-time
+ * agent progress updates. The typed {@link ProgressEvent} record enforces the
+ * Angular contract: {@code {jobId, agentName, status, message?, timestamp}}.
  */
 @Slf4j
 @Component
@@ -27,13 +25,8 @@ public class WebSocketProgressAdapter implements ProgressNotifierPort {
     @Override
     public void notify(String jobId, String agentName, String status, String message) {
         try {
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("jobId",     jobId);
-            payload.put("agentName", agentName);
-            payload.put("status",    status);
-            payload.put("message",   message);
-
-            String json = objectMapper.writeValueAsString(payload);
+            ProgressEvent event = ProgressEvent.of(jobId, agentName, status, message);
+            String json = objectMapper.writeValueAsString(event);
             messagingTemplate.convertAndSend("/topic/jobs/" + jobId, json);
 
             log.debug("Progress sent — job='{}' agent='{}' status='{}'",

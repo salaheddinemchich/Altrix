@@ -44,7 +44,7 @@ class MigrationJobMapperTest {
 
     @Test
     void toJpaEntity_mapsAllFields() {
-        MigrationJob domain = MigrationJob.create("proj-1", "user-1", "uploads/proj.zip", ConfigFormatPreference.FORCE_YAML);
+        MigrationJob domain = MigrationJob.create("proj-1", "user-1", "uploads/proj.zip", ConfigFormatPreference.FORCE_YAML, null);
 
         MigrationJobJpaEntity entity = mapper.toJpaEntity(domain);
 
@@ -58,7 +58,7 @@ class MigrationJobMapperTest {
 
     @Test
     void roundTrip_preservesAllFields() {
-        MigrationJob original = MigrationJob.create("proj-1", "user-1", "key", null);
+        MigrationJob original = MigrationJob.create("proj-1", "user-1", "key", null, null);
         MigrationJobJpaEntity entity = mapper.toJpaEntity(original);
         MigrationJob restored = mapper.toDomain(entity);
 

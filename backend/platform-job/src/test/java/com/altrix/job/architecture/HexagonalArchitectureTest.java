@@ -57,6 +57,12 @@ class HexagonalArchitectureTest {
                     .should().haveSimpleNameEndingWith("Controller");
 
     @ArchTest
+    static final ArchRule domain_must_not_depend_on_jackson =
+            noClasses().that().resideInAPackage("..domain..")
+                    .should().dependOnClassesThat().resideInAPackage("com.fasterxml.jackson..")
+                    .because("domain layer must not depend on serialisation frameworks");
+
+    @ArchTest
     static final ArchRule outbound_ports_end_with_Port =
             classes().that().resideInAPackage("..domain.port.out..").and().areInterfaces()
                     .should().haveSimpleNameEndingWith("Port");

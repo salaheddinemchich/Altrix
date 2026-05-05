@@ -24,6 +24,10 @@ public final class MigrationJob {
 
     private final JobStatus status;
     private final ConfigFormatPreference configFormatPreference;
+
+    /** Controls which AI provider tier this job may use (default: {@link JobProviderProfile#DEFAULT}). */
+    private final JobProviderProfile providerProfile;
+
     private final String outputStorageKey;
     private final String errorMessage;
     private final Instant createdAt;
@@ -34,7 +38,8 @@ public final class MigrationJob {
             String projectId,
             String userId,
             String projectStorageKey,
-            ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference,
+            JobProviderProfile providerProfile
     ) {
         Instant now = Instant.now();
         return MigrationJob.builder()
@@ -47,6 +52,10 @@ public final class MigrationJob {
                         Objects.requireNonNullElse(
                                 configFormatPreference,
                                 ConfigFormatPreference.KEEP_ORIGINAL))
+                .providerProfile(
+                        Objects.requireNonNullElse(
+                                providerProfile,
+                                JobProviderProfile.DEFAULT))
                 .createdAt(now)
                 .updatedAt(now)
                 .build();

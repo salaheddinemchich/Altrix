@@ -1,6 +1,7 @@
 package com.altrix.job.domain.port.in;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.job.domain.model.JobProviderProfile;
 import com.altrix.job.domain.model.MigrationJob;
 
 public interface CreateJobUseCase {
@@ -9,6 +10,7 @@ public interface CreateJobUseCase {
             String projectId,
             String userId,
             String projectStorageKey,
-            ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference,
+            JobProviderProfile providerProfile
     );
 }

@@ -2,6 +2,7 @@ package com.altrix.job.adapter.in.rest;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.common.domain.enums.JobStatus;
+import com.altrix.job.domain.model.JobProviderProfile;
 import com.altrix.job.domain.model.MigrationJob;
 
 import java.time.Instant;
@@ -12,6 +13,7 @@ public record JobResponse(
         String                 userId,
         JobStatus              status,
         ConfigFormatPreference configFormatPreference,
+        JobProviderProfile     providerProfile,
         String                 outputStorageKey,
         String                 errorMessage,
         Instant                createdAt,
@@ -24,6 +26,7 @@ public record JobResponse(
                 job.getUserId(),
                 job.getStatus(),
                 job.getConfigFormatPreference(),
+                job.getProviderProfile(),
                 job.getOutputStorageKey(),
                 job.getErrorMessage(),
                 job.getCreatedAt(),

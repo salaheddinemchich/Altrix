@@ -2,6 +2,7 @@ package com.altrix.job.domain.service;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.common.exception.JobNotFoundException;
+import com.altrix.job.domain.model.JobProviderProfile;
 import com.altrix.job.domain.model.MigrationJob;
 import com.altrix.job.domain.port.in.CreateJobUseCase;
 import com.altrix.job.domain.port.in.UpdateJobStatusUseCase;
@@ -24,10 +25,13 @@ public class JobCommandService implements CreateJobUseCase, UpdateJobStatusUseCa
             String projectId,
             String userId,
             String projectStorageKey,
-            ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference,
+            JobProviderProfile providerProfile
     ) {
-        log.info("Creating job for project '{}' user '{}'", projectId, userId);
-        MigrationJob job = MigrationJob.create(projectId, userId, projectStorageKey, configFormatPreference);
+        log.info("Creating job for project '{}' user '{}' providerProfile={}",
+                projectId, userId, providerProfile);
+        MigrationJob job = MigrationJob.create(
+                projectId, userId, projectStorageKey, configFormatPreference, providerProfile);
         job = jobRepository.save(job);
         jobCachePort.putStatus(job.getId(), job.getStatus().name());
         jobEventPublisher.publishJobCreated(job);

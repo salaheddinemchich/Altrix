@@ -26,7 +26,8 @@ public class JobCommandController {
                 request.projectId(),
                 userId,
                 null, // storageKey comes from project-registered event in normal flow
-                request.configFormatPreference()
+                request.configFormatPreference(),
+                request.providerProfile()
         );
         return JobResponse.from(job);
     }

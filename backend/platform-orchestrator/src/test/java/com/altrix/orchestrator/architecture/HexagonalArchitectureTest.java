@@ -60,6 +60,15 @@ class HexagonalArchitectureTest {
                     .resideInAPackage("..infrastructure..")
                     .because("domain layer must not depend on Spring @Configuration classes");
 
+    // ── Domain: no Jackson ────────────────────────────────────────────────────
+
+    @ArchTest
+    static final ArchRule domain_must_not_depend_on_jackson =
+            noClasses().that().resideInAPackage("..domain..")
+                    .should().dependOnClassesThat()
+                    .resideInAPackage("com.fasterxml.jackson..")
+                    .because("domain layer must not depend on serialisation frameworks");
+
     // ── Inbound adapters must not reach into persistence directly ─────────────
 
     @ArchTest

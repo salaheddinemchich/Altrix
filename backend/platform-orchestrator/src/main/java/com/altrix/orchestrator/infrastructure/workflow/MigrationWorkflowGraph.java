@@ -1,0 +1,297 @@
+package com.altrix.orchestrator.infrastructure.workflow;
+
+import com.altrix.common.domain.model.AnalysisReport;
+import com.altrix.common.domain.model.ApprovedPlan;
+import com.altrix.common.domain.model.MigrationArtifact;
+import com.altrix.common.domain.model.MigrationPlan;
+import com.altrix.common.domain.model.MigrationReport;
+import com.altrix.common.domain.model.ProjectContext;
+import com.altrix.common.domain.model.ValidationReport;
+import com.altrix.common.domain.model.WorkflowOutcome;
+import com.altrix.common.domain.port.MigrationAgent;
+import com.altrix.common.exception.AgentFailureException;
+import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
+import com.altrix.orchestrator.domain.model.workflow.MigrationState;
+import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
+import com.altrix.orchestrator.domain.port.out.WorkflowExecutionPort;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.bsc.langgraph4j.CompileConfig;
+import org.bsc.langgraph4j.CompiledGraph;
+import org.bsc.langgraph4j.RunnableConfig;
+import org.bsc.langgraph4j.StateGraph;
+import org.bsc.langgraph4j.action.AsyncEdgeAction;
+import org.bsc.langgraph4j.action.AsyncNodeAction;
+import org.bsc.langgraph4j.checkpoint.BaseCheckpointSaver;
+import org.bsc.langgraph4j.checkpoint.MemorySaver;
+import org.bsc.langgraph4j.serializer.std.ObjectStreamStateSerializer;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static com.altrix.orchestrator.domain.model.workflow.MigrationState.*;
+import static org.bsc.langgraph4j.StateGraph.END;
+import static org.bsc.langgraph4j.StateGraph.START;
+import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
+import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
+
+/**
+ * LangGraph4j stateful migration workflow graph (#173).
+ *
+ * <p>Implements {@link WorkflowExecutionPort} so the domain service never
+ * imports LangGraph4j types directly.
+ *
+ * <p>Graph topology:
+ * <pre>
+ *  START
+ *   └─► context-analyzer
+ *         ├─► [no integrations found] ──► END   (no-op: nothing to migrate)
+ *         └─► migration-planner
+ *               └─► core-migrator ◄─────────────┐
+ *                     ├─► [empty artifact, retry &lt; 3] (injects error, retries)
+ *                     └─► sandbox-validator
+ *                           └─► report-generator
+ *                                 └─► END
+ * </pre>
+ *
+ * <p>After each node a WebSocket progress event is emitted.
+ * Checkpoints are persisted via the injected {@link BaseCheckpointSaver}
+ * (default: in-memory; swap for {@code RedisGraphCheckpointAdapter} in prod).
+ */
+@Slf4j
+@RequiredArgsConstructor
+public class MigrationWorkflowGraph implements WorkflowExecutionPort {
+
+    // ── node identifiers ─────────────────────────────────────────────────────
+    static final String NODE_CONTEXT_ANALYZER  = "context-analyzer";
+    static final String NODE_MIGRATION_PLANNER = "migration-planner";
+    static final String NODE_CORE_MIGRATOR     = "core-migrator";
+    static final String NODE_SANDBOX_VALIDATOR = "sandbox-validator";
+    static final String NODE_REPORT_GENERATOR  = "report-generator";
+
+    static final int MAX_RETRIES = 3;
+
+    private final MigrationAgent<ProjectContext,    AnalysisReport>    contextAnalyzer;
+    private final MigrationAgent<AnalysisReport,    MigrationPlan>     planner;
+    private final MigrationAgent<ApprovedPlan,      MigrationArtifact> migrator;
+    private final MigrationAgent<MigrationArtifact, ValidationReport>  validator;
+    private final MigrationAgent<WorkflowOutcome,   MigrationReport>   reporter;
+    private final ProgressNotifierPort                                  progressNotifier;
+    private final BaseCheckpointSaver                                   checkpointSaver;
+
+    /** Lazily compiled graph — built once on first call and reused thereafter. */
+    private volatile CompiledGraph<MigrationState> compiledGraph;
+
+    // ── WorkflowExecutionPort ────────────────────────────────────────────────
+
+    @Override
+    public MigrationState execute(ProjectContext context) {
+        CompiledGraph<MigrationState> graph = compiledGraph();
+
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId(context.jobId())
+                .build();
+
+        Optional<MigrationState> result = graph.invoke(
+                MigrationState.initial(context), config);
+
+        return result.orElseThrow(() ->
+                new AgentFailureException("MigrationWorkflowGraph",
+                        "Graph invocation returned no state for job " + context.jobId()));
+    }
+
+    // ── Graph construction ───────────────────────────────────────────────────
+
+    private CompiledGraph<MigrationState> compiledGraph() {
+        if (compiledGraph == null) {
+            synchronized (this) {
+                if (compiledGraph == null) {
+                    compiledGraph = buildGraph();
+                }
+            }
+        }
+        return compiledGraph;
+    }
+
+    private CompiledGraph<MigrationState> buildGraph() {
+        try {
+            StateGraph<MigrationState> graph = new StateGraph<>(
+                    new ObjectStreamStateSerializer<>(MigrationState::new));
+
+            graph
+                    .addNode(NODE_CONTEXT_ANALYZER,  nodeAction(this::runContextAnalyzer))
+                    .addNode(NODE_MIGRATION_PLANNER,  nodeAction(this::runMigrationPlanner))
+                    .addNode(NODE_CORE_MIGRATOR,      nodeAction(this::runCoreMigrator))
+                    .addNode(NODE_SANDBOX_VALIDATOR,  nodeAction(this::runSandboxValidator))
+                    .addNode(NODE_REPORT_GENERATOR,   nodeAction(this::runReportGenerator));
+
+            graph
+                    .addEdge(START, NODE_CONTEXT_ANALYZER)
+
+                    .addConditionalEdges(
+                            NODE_CONTEXT_ANALYZER,
+                            edgeAction(this::routeAfterAnalysis),
+                            Map.of(NODE_MIGRATION_PLANNER, NODE_MIGRATION_PLANNER, END, END))
+
+                    .addEdge(NODE_MIGRATION_PLANNER, NODE_CORE_MIGRATOR)
+
+                    .addConditionalEdges(
+                            NODE_CORE_MIGRATOR,
+                            edgeAction(this::routeAfterMigration),
+                            Map.of(NODE_CORE_MIGRATOR, NODE_CORE_MIGRATOR,
+                                    NODE_SANDBOX_VALIDATOR, NODE_SANDBOX_VALIDATOR))
+
+                    .addEdge(NODE_SANDBOX_VALIDATOR, NODE_REPORT_GENERATOR)
+                    .addEdge(NODE_REPORT_GENERATOR, END);
+
+            return graph.compile(CompileConfig.builder()
+                    .checkpointSaver(checkpointSaver)
+                    .build());
+
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build MigrationWorkflowGraph", e);
+        }
+    }
+
+    // ── Node actions ─────────────────────────────────────────────────────────
+
+    private Map<String, Object> runContextAnalyzer(MigrationState state) {
+        ProjectContext ctx = requireContext(state, NODE_CONTEXT_ANALYZER);
+
+        notifyRunning(ctx.jobId(), "Context Analyzer");
+        AnalysisReport report = contextAnalyzer.execute(ctx);
+        notifyDone(ctx.jobId(), "Context Analyzer");
+
+        log.info("[{}] job='{}' — {} components, {} integrations",
+                NODE_CONTEXT_ANALYZER, ctx.jobId(),
+                report.detectedComponents().size(), report.detectedIntegrations().size());
+
+        return Map.of(ANALYSIS_REPORT, report);
+    }
+
+    private Map<String, Object> runMigrationPlanner(MigrationState state) {
+        ProjectContext ctx   = requireContext(state, NODE_MIGRATION_PLANNER);
+        AnalysisReport input = state.analysisReport()
+                .orElseThrow(() -> new AgentFailureException(NODE_MIGRATION_PLANNER,
+                        "AnalysisReport missing from state"));
+
+        notifyRunning(ctx.jobId(), "Migration Planner");
+        MigrationPlan plan     = planner.execute(input);
+        ApprovedPlan  approved = ApprovedPlan.autoApproved(plan);
+        notifyDone(ctx.jobId(), "Migration Planner");
+
+        return Map.of(MIGRATION_PLAN, plan, APPROVED_PLAN, approved);
+    }
+
+    private Map<String, Object> runCoreMigrator(MigrationState state) {
+        ProjectContext ctx     = requireContext(state, NODE_CORE_MIGRATOR);
+        ApprovedPlan   approved = state.approvedPlan()
+                .orElseThrow(() -> new AgentFailureException(NODE_CORE_MIGRATOR,
+                        "ApprovedPlan missing from state"));
+
+        notifyRunning(ctx.jobId(), "Core Migrator");
+        try {
+            MigrationArtifact artifact = migrator.execute(approved);
+            notifyDone(ctx.jobId(), "Core Migrator");
+            return Map.of(MIGRATION_ARTIFACT, artifact);
+
+        } catch (AiProviderUnavailableException e) {
+            // Propagate immediately — outer OrchestratorService handles graceful degradation
+            throw e;
+        } catch (Exception e) {
+            List<String> history = new ArrayList<>(state.errorHistory());
+            history.add(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            int retries = state.retryCount() + 1;
+            notifyFailed(ctx.jobId(), "Core Migrator",
+                    "Attempt " + retries + "/" + MAX_RETRIES + ": " + e.getMessage());
+            log.warn("[{}] job='{}' attempt {}/{} failed: {}",
+                    NODE_CORE_MIGRATOR, ctx.jobId(), retries, MAX_RETRIES, e.getMessage());
+            return Map.of(ERROR_HISTORY, history, RETRY_COUNT, retries);
+        }
+    }
+
+    private Map<String, Object> runSandboxValidator(MigrationState state) {
+        ProjectContext    ctx      = requireContext(state, NODE_SANDBOX_VALIDATOR);
+        MigrationArtifact artifact = state.migrationArtifact()
+                .orElseThrow(() -> new AgentFailureException(NODE_SANDBOX_VALIDATOR,
+                        "MigrationArtifact missing from state"));
+
+        notifyRunning(ctx.jobId(), "Sandbox Validator");
+        ValidationReport report = validator.execute(artifact);
+        notifyDone(ctx.jobId(), "Sandbox Validator");
+
+        return Map.of(VALIDATION_REPORT, report);
+    }
+
+    private Map<String, Object> runReportGenerator(MigrationState state) {
+        ProjectContext ctx = requireContext(state, NODE_REPORT_GENERATOR);
+
+        WorkflowOutcome outcome = new WorkflowOutcome(
+                ctx.projectId(),
+                state.analysisReport().orElse(null),
+                state.migrationPlan().orElse(null),
+                state.migrationArtifact().orElse(null),
+                state.validationReport().orElse(null));
+
+        notifyRunning(ctx.jobId(), "Report Generator");
+        MigrationReport report = reporter.execute(outcome);
+        notifyDone(ctx.jobId(), "Report Generator");
+
+        return Map.of(MIGRATION_REPORT, report);
+    }
+
+    // ── Edge conditions ───────────────────────────────────────────────────────
+
+    private String routeAfterAnalysis(MigrationState state) {
+        boolean hasIntegrations = state.analysisReport()
+                .map(r -> !r.detectedIntegrations().isEmpty())
+                .orElse(false);
+        String next = hasIntegrations ? NODE_MIGRATION_PLANNER : END;
+        if (!hasIntegrations) {
+            state.projectContext().ifPresent(ctx ->
+                    progressNotifier.notify(ctx.jobId(), "Router",
+                            "DONE", "No integrations detected — skipping migration pipeline"));
+        }
+        return next;
+    }
+
+    private String routeAfterMigration(MigrationState state) {
+        boolean artifactEmpty = state.migrationArtifact()
+                .map(a -> a.files().isEmpty())
+                .orElse(true);
+        boolean canRetry = state.retryCount() < MAX_RETRIES;
+        return (artifactEmpty && canRetry) ? NODE_CORE_MIGRATOR : NODE_SANDBOX_VALIDATOR;
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static AsyncNodeAction<MigrationState> nodeAction(
+            org.bsc.langgraph4j.action.NodeAction<MigrationState> sync) {
+        return node_async(sync);
+    }
+
+    private static AsyncEdgeAction<MigrationState> edgeAction(
+            org.bsc.langgraph4j.action.EdgeAction<MigrationState> sync) {
+        return edge_async(sync);
+    }
+
+    private ProjectContext requireContext(MigrationState state, String nodeName) {
+        return state.projectContext()
+                .orElseThrow(() -> new AgentFailureException(nodeName,
+                        "ProjectContext missing from workflow state"));
+    }
+
+    private void notifyRunning(String jobId, String agent) {
+        progressNotifier.notify(jobId, agent, "RUNNING", null);
+    }
+
+    private void notifyDone(String jobId, String agent) {
+        progressNotifier.notify(jobId, agent, "DONE", null);
+    }
+
+    private void notifyFailed(String jobId, String agent, String message) {
+        progressNotifier.notify(jobId, agent, "FAILED", message);
+    }
+}

@@ -2,9 +2,11 @@ package com.altrix.orchestrator.infra.ai;
 
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
 import com.altrix.orchestrator.domain.exception.TokenBudgetExceededException;
+import com.altrix.orchestrator.domain.model.AiCallLedgerEntry;
 import com.altrix.orchestrator.domain.model.TokenUsageRecord;
 import com.altrix.orchestrator.domain.port.in.GetResilienceMetricsUseCase;
 import com.altrix.orchestrator.domain.port.in.ProviderResilienceStatus;
+import com.altrix.orchestrator.domain.port.out.AiCallLedgerPort;
 import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
 import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
@@ -85,6 +87,7 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
     private final Bulkhead                  analysisBulkhead;
     private final Bulkhead                  migrationBulkhead;
     private final TokenUsagePort            tokenUsagePort;
+    private final AiCallLedgerPort          aiCallLedgerPort;
     private final long                      monthlyTokenLimit; // 0 = unlimited
     private final McpToolsPort              mcpTools;          // null when MCP is disabled
     private final int                       maxToolIter;
@@ -94,7 +97,8 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
             AiRoutingConfig          routingCfg,
             McpConfig                mcpConfig,
             Optional<McpToolsPort>   mcpTools,
-            TokenUsagePort           tokenUsagePort) {
+            TokenUsagePort           tokenUsagePort,
+            AiCallLedgerPort         aiCallLedgerPort) {
 
         this.registry         = registry;
         this.strategy         = buildStrategy(routingCfg);
@@ -103,6 +107,7 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
         this.analysisBulkhead = buildBulkhead("analysis",  routingCfg.bulkhead().analysisConcurrency(),  routingCfg.bulkhead().maxWaitMs());
         this.migrationBulkhead= buildBulkhead("migration", routingCfg.bulkhead().migrationConcurrency(), routingCfg.bulkhead().maxWaitMs());
         this.tokenUsagePort    = tokenUsagePort;
+        this.aiCallLedgerPort  = aiCallLedgerPort;
         this.monthlyTokenLimit = routingCfg.monthlyTokenLimit();
         this.mcpTools          = mcpTools.orElse(null);
         this.maxToolIter       = mcpConfig.maxToolIterations();
@@ -319,6 +324,7 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
 
     private void recordTokenUsage(String providerId, ProviderTier tier, TokenUsage usage) {
         if (usage == null) return;
+        Instant now = Instant.now();
         try {
             tokenUsagePort.save(new TokenUsageRecord(
                     providerId,
@@ -326,11 +332,22 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
                     usage.inputTokenCount(),
                     usage.outputTokenCount(),
                     usage.totalTokenCount(),
-                    Instant.now()));
+                    now));
         } catch (Exception e) {
-            // Token recording is best-effort — never fail a provider call over analytics
             log.warn("Failed to record token usage for [{}]: {}", providerId, e.getMessage());
         }
+        // Best-effort ledger entry — cost is 0 until pricing is configured per provider/model
+        aiCallLedgerPort.record(new AiCallLedgerEntry(
+                null,
+                null,
+                providerId,
+                null,
+                tier.name(),
+                usage.inputTokenCount()  != null ? usage.inputTokenCount()  : 0L,
+                usage.outputTokenCount() != null ? usage.outputTokenCount() : 0L,
+                0.0,
+                false,
+                now));
     }
 
     // ── transient-error predicate ─────────────────────────────────────────────

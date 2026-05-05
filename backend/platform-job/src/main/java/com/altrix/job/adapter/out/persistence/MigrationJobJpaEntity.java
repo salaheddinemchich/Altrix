@@ -2,6 +2,7 @@ package com.altrix.job.adapter.out.persistence;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.common.domain.enums.JobStatus;
+import com.altrix.job.domain.model.JobProviderProfile;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.Instant;
@@ -36,6 +37,10 @@ public class MigrationJobJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "config_format_preference", nullable = false, length = 20)
     private ConfigFormatPreference configFormatPreference;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "provider_profile", nullable = false, length = 20)
+    private JobProviderProfile providerProfile;
 
     @Column(name = "output_storage_key")
     private String outputStorageKey;

@@ -1,10 +1,18 @@
 package com.altrix.orchestrator.infrastructure.config;
 
-import com.altrix.orchestrator.domain.port.out.AgentPort;
-import com.altrix.orchestrator.domain.port.out.DocumentationFetchPort;
-import com.altrix.orchestrator.domain.port.out.EmbeddingStorePort;
+import com.altrix.common.domain.model.AnalysisReport;
+import com.altrix.common.domain.model.ApprovedPlan;
+import com.altrix.common.domain.model.MigrationArtifact;
+import com.altrix.common.domain.model.MigrationPlan;
+import com.altrix.common.domain.model.MigrationReport;
+import com.altrix.common.domain.model.ProjectContext;
+import com.altrix.common.domain.model.ValidationReport;
+import com.altrix.common.domain.model.WorkflowOutcome;
+import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.orchestrator.domain.port.out.ApiKeyEncryptionPort;
 import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
+import com.altrix.orchestrator.domain.port.out.DocumentationFetchPort;
+import com.altrix.orchestrator.domain.port.out.EmbeddingStorePort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
 import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
@@ -12,13 +20,16 @@ import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import com.altrix.orchestrator.domain.port.out.ProviderConfigRepositoryPort;
 import com.altrix.orchestrator.domain.port.out.ProviderRefreshPort;
 import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
+import com.altrix.orchestrator.domain.port.out.WorkflowExecutionPort;
 import com.altrix.orchestrator.domain.service.DocumentationIngestionService;
 import com.altrix.orchestrator.domain.service.OrchestratorService;
 import com.altrix.orchestrator.domain.service.ProviderConfigService;
 import com.altrix.orchestrator.domain.service.TokenUsageService;
-import com.altrix.orchestrator.infrastructure.config.AiPricingConfig;
 import com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory;
+import com.altrix.orchestrator.infrastructure.workflow.MigrationWorkflowGraph;
 import io.minio.MinioClient;
+import org.bsc.langgraph4j.checkpoint.BaseCheckpointSaver;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -33,23 +44,36 @@ import java.util.List;
 public class BeanConfig {
 
     @Bean
+    public MigrationWorkflowGraph migrationWorkflowGraph(
+            @Qualifier("contextAnalyzerAgent")  MigrationAgent<ProjectContext,    AnalysisReport>    contextAnalyzer,
+            @Qualifier("migrationPlannerAgent") MigrationAgent<AnalysisReport,    MigrationPlan>     planner,
+            @Qualifier("typedCoreMigratorAgent") MigrationAgent<ApprovedPlan,     MigrationArtifact> migrator,
+            @Qualifier("sandboxValidatorAgent") MigrationAgent<MigrationArtifact, ValidationReport>  validator,
+            @Qualifier("reportGeneratorAgent")  MigrationAgent<WorkflowOutcome,   MigrationReport>   reporter,
+            ProgressNotifierPort                progressNotifier,
+            BaseCheckpointSaver                 checkpointSaver
+    ) {
+        return new MigrationWorkflowGraph(
+                contextAnalyzer, planner, migrator, validator, reporter,
+                progressNotifier, checkpointSaver);
+    }
+
+    @Bean
     public OrchestratorService orchestratorService(
-            List<AgentPort>         agents,
+            WorkflowExecutionPort   workflowExecution,
             JobStatusUpdatePort     jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
             ProgressNotifierPort    progressNotifierPort,
             CodeIndexingPort        codeIndexingPort,
-            MigrationPlanCachePort  migrationPlanCachePort,
-            @Value("${ai.inter-agent-delay-ms:0}") long interAgentDelayMs
+            MigrationPlanCachePort  migrationPlanCachePort
     ) {
         return new OrchestratorService(
-                agents,
+                workflowExecution,
                 jobStatusUpdatePort,
                 migratedFileStoragePort,
                 progressNotifierPort,
                 codeIndexingPort,
-                migrationPlanCachePort,
-                interAgentDelayMs
+                migrationPlanCachePort
         );
     }
 

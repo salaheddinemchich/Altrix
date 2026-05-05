@@ -1,22 +1,26 @@
 package com.altrix.orchestrator.domain.service;
 
-import com.altrix.common.domain.model.MigratedFile;
-import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.common.domain.enums.FileChangeType;
+import com.altrix.common.domain.model.MigratedFile;
+import com.altrix.common.domain.model.MigrationArtifact;
+import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
+import com.altrix.orchestrator.domain.model.workflow.MigrationState;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
 import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
 import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
+import com.altrix.orchestrator.domain.port.out.WorkflowExecutionPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,56 +32,44 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrchestratorServiceTest {
 
-    @Mock JobStatusUpdatePort     jobStatusUpdatePort;
+    @Mock WorkflowExecutionPort  workflowExecution;
+    @Mock JobStatusUpdatePort    jobStatusUpdatePort;
     @Mock MigratedFileStoragePort migratedFileStoragePort;
-    @Mock ProgressNotifierPort    progressNotifierPort;
-    @Mock CodeIndexingPort        codeIndexingPort;
-    @Mock MigrationPlanCachePort  migrationPlanCachePort;
+    @Mock ProgressNotifierPort   progressNotifierPort;
+    @Mock CodeIndexingPort       codeIndexingPort;
+    @Mock MigrationPlanCachePort migrationPlanCachePort;
 
-    private OrchestratorService service(List<AgentPort> agents) {
+    private OrchestratorService service() {
         return new OrchestratorService(
-                agents, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, codeIndexingPort, migrationPlanCachePort, 0L);
-    }
-
-    private OrchestratorService service(List<AgentPort> agents, long delayMs) {
-        return new OrchestratorService(
-                agents, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, codeIndexingPort, migrationPlanCachePort, delayMs);
+                workflowExecution, jobStatusUpdatePort, migratedFileStoragePort,
+                progressNotifierPort, codeIndexingPort, migrationPlanCachePort);
     }
 
     // ── happy path ────────────────────────────────────────────────────────────
 
     @Test
-    void run_executesAgentsInOrder_andMarksDone() {
+    void run_invokesWorkflow_andMarksDone() {
         MigratedFile file = MigratedFile.builder()
                 .originalPath("A.java").newPath("A.java")
                 .content("content").changeType(FileChangeType.MODIFIED)
                 .diffSummary("migrated").build();
 
-        AgentPort agent1 = mock(AgentPort.class);
-        AgentPort agent3 = mock(AgentPort.class);
-        when(agent1.getOrder()).thenReturn(1);
-        when(agent3.getOrder()).thenReturn(3);
-        when(agent1.getName()).thenReturn("Analyzer");
-        when(agent3.getName()).thenReturn("Migrator");
-
-        ProjectContext after1 = ProjectContext.builder()
-                .jobId("job-1").projectId("proj-1").build()
-                .withPubSubTopics(List.of("orders.created"));
-        ProjectContext after3 = after1.withMigratedFiles(List.of(file));
-
-        when(agent1.execute(any())).thenReturn(after1);
-        when(agent3.execute(any())).thenReturn(after3);
-        when(migratedFileStoragePort.storeMigratedZip(eq("job-1"), any()))
-                .thenReturn("migrated/job-1/output.zip");
-
         ProjectContext initial = ProjectContext.builder()
                 .jobId("job-1").projectId("proj-1").build();
 
-        ProjectContext result = service(List.of(agent3, agent1)).run(initial);
+        MigrationArtifact artifact = new MigrationArtifact("proj-1", List.of(file), "done");
+        MigrationState result = new MigrationState(Map.of(
+                MigrationState.PROJECT_CONTEXT,    initial,
+                MigrationState.MIGRATION_ARTIFACT, artifact,
+                MigrationState.RETRY_COUNT,        0));
 
-        assertThat(result.migratedFiles()).hasSize(1);
+        when(workflowExecution.execute(initial)).thenReturn(result);
+        when(migratedFileStoragePort.storeMigratedZip(eq("job-1"), any()))
+                .thenReturn("migrated/job-1/output.zip");
+
+        ProjectContext outcome = service().run(initial);
+
+        assertThat(outcome.migratedFiles()).hasSize(1);
         verify(jobStatusUpdatePort).markAnalyzing("job-1");
         verify(jobStatusUpdatePort).markMigrating("job-1");
         verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
@@ -86,20 +78,22 @@ class OrchestratorServiceTest {
 
     @Test
     void run_cachesResultAfterSuccess() {
-        AgentPort agent = mock(AgentPort.class);
-        when(agent.getOrder()).thenReturn(1);
-        when(agent.getName()).thenReturn("Analyzer");
-
         MigratedFile file = MigratedFile.builder()
                 .originalPath("A.java").newPath("A.java").content("x")
                 .changeType(FileChangeType.MODIFIED).diffSummary("ok").build();
-        ProjectContext result = ProjectContext.builder()
-                .jobId("j").projectId("p").build()
-                .withMigratedFiles(List.of(file));
-        when(agent.execute(any())).thenReturn(result);
+        ProjectContext initial = ProjectContext.builder()
+                .jobId("j").projectId("p").build();
+
+        MigrationArtifact artifact = new MigrationArtifact("p", List.of(file), "ok");
+        MigrationState state = new MigrationState(Map.of(
+                MigrationState.PROJECT_CONTEXT,    initial,
+                MigrationState.MIGRATION_ARTIFACT, artifact,
+                MigrationState.RETRY_COUNT,        0));
+
+        when(workflowExecution.execute(initial)).thenReturn(state);
         when(migratedFileStoragePort.storeMigratedZip(any(), any())).thenReturn("out.zip");
 
-        service(List.of(agent)).run(ProjectContext.builder().jobId("j").projectId("p").build());
+        service().run(initial);
 
         verify(migrationPlanCachePort).store(eq("p"), any(), eq(List.of(file)));
     }
@@ -107,16 +101,12 @@ class OrchestratorServiceTest {
     // ── failure handling ──────────────────────────────────────────────────────
 
     @Test
-    void run_marksFailedAndRethrows_whenAgentThrows() {
-        AgentPort failingAgent = mock(AgentPort.class);
-        when(failingAgent.getOrder()).thenReturn(1);
-        when(failingAgent.getName()).thenReturn("BrokenAgent");
-        when(failingAgent.execute(any())).thenThrow(new RuntimeException("AI down"));
-
+    void run_marksFailedAndRethrows_whenWorkflowThrows() {
         ProjectContext initial = ProjectContext.builder()
                 .jobId("job-1").projectId("proj-1").build();
+        when(workflowExecution.execute(any())).thenThrow(new RuntimeException("AI down"));
 
-        assertThatThrownBy(() -> service(List.of(failingAgent)).run(initial))
+        assertThatThrownBy(() -> service().run(initial))
                 .isInstanceOf(RuntimeException.class);
 
         verify(jobStatusUpdatePort).markFailed(eq("job-1"), any());
@@ -127,10 +117,7 @@ class OrchestratorServiceTest {
 
     @Test
     void run_servesCache_whenAllProvidersUnavailableAndCacheHit() {
-        AgentPort failingAgent = mock(AgentPort.class);
-        when(failingAgent.getOrder()).thenReturn(1);
-        when(failingAgent.getName()).thenReturn("MigratorAgent");
-        when(failingAgent.execute(any()))
+        when(workflowExecution.execute(any()))
                 .thenThrow(new AiProviderUnavailableException("all providers down"));
 
         MigratedFile cached = MigratedFile.builder()
@@ -144,7 +131,7 @@ class OrchestratorServiceTest {
         ProjectContext initial = ProjectContext.builder()
                 .jobId("job-1").projectId("proj-1").build();
 
-        ProjectContext result = service(List.of(failingAgent)).run(initial);
+        ProjectContext result = service().run(initial);
 
         assertThat(result.migratedFiles()).containsExactly(cached);
         verify(jobStatusUpdatePort).markDone(eq("job-1"), any());
@@ -153,36 +140,40 @@ class OrchestratorServiceTest {
 
     @Test
     void run_throwsAiUnavailable_whenProvidersDownAndNoCacheEntry() {
-        AgentPort failingAgent = mock(AgentPort.class);
-        when(failingAgent.getOrder()).thenReturn(1);
-        when(failingAgent.getName()).thenReturn("MigratorAgent");
-        when(failingAgent.execute(any()))
+        when(workflowExecution.execute(any()))
                 .thenThrow(new AiProviderUnavailableException("no providers"));
         when(migrationPlanCachePort.loadLatest(any(), any())).thenReturn(Optional.empty());
 
         ProjectContext initial = ProjectContext.builder()
                 .jobId("job-1").projectId("proj-1").build();
 
-        assertThatThrownBy(() -> service(List.of(failingAgent)).run(initial))
+        assertThatThrownBy(() -> service().run(initial))
                 .isInstanceOf(AiProviderUnavailableException.class);
 
         verify(jobStatusUpdatePort).markFailed(eq("job-1"), any());
     }
 
-    // ── other invariants ──────────────────────────────────────────────────────
+    // ── empty-artifact path ───────────────────────────────────────────────────
 
     @Test
-    void run_withNoAgents_storeEmptyZipAndMarksDone() {
+    void run_withEmptyArtifact_storesEmptyZipAndMarksDone() {
+        ProjectContext initial = ProjectContext.builder()
+                .jobId("job-1").projectId("proj-1").build();
+        MigrationState emptyState = new MigrationState(Map.of(
+                MigrationState.PROJECT_CONTEXT, initial,
+                MigrationState.RETRY_COUNT,     0));
+
+        when(workflowExecution.execute(initial)).thenReturn(emptyState);
         when(migratedFileStoragePort.storeMigratedZip(eq("job-1"), any()))
                 .thenReturn("migrated/job-1/output.zip");
 
-        ProjectContext initial = ProjectContext.builder()
-                .jobId("job-1").projectId("proj-1").build();
-
-        service(List.of()).run(initial);
+        service().run(initial);
 
         verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
+        verify(jobStatusUpdatePort, never()).markMigrating(any());
     }
+
+    // ── AgentPort type invariants ─────────────────────────────────────────────
 
     @Test
     void agentPort_is_a_subtype_of_MigrationAgent() {
@@ -198,26 +189,5 @@ class OrchestratorServiceTest {
         MigrationAgent<ProjectContext, ProjectContext> typed = agent;
         assertThat(typed.getName()).isEqualTo("test-agent");
         assertThat(typed.getOrder()).isEqualTo(1);
-    }
-
-    @Test
-    void run_pausesBetweenAgents_whenDelayIsPositive() {
-        AgentPort a1 = mock(AgentPort.class);
-        AgentPort a2 = mock(AgentPort.class);
-        when(a1.getOrder()).thenReturn(2);
-        when(a2.getOrder()).thenReturn(4);
-        when(a1.getName()).thenReturn("A");
-        when(a2.getName()).thenReturn("B");
-
-        ProjectContext ctx = ProjectContext.builder().jobId("job-1").projectId("p").build();
-        when(a1.execute(any())).thenReturn(ctx);
-        when(a2.execute(any())).thenReturn(ctx);
-        when(migratedFileStoragePort.storeMigratedZip(any(), any())).thenReturn("out.zip");
-
-        service(List.of(a1, a2), 1L).run(ctx);
-
-        verify(a1).execute(any());
-        verify(a2).execute(any());
-        verify(jobStatusUpdatePort).markDone("job-1", "out.zip");
     }
 }

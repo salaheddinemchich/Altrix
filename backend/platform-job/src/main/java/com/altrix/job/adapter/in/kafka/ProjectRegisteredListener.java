@@ -32,6 +32,6 @@ public class ProjectRegisteredListener {
         log.info("Creating job for project '{}' user '{}' storageKey='{}'",
                 projectId, userId, storageKey);
 
-        createJobUseCase.createJob(projectId, userId, storageKey, null);
+        createJobUseCase.createJob(projectId, userId, storageKey, null, null);
     }
 }
