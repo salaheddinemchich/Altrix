@@ -73,7 +73,7 @@ public class MinioFileReaderAdapter implements FileReaderPort {
         } catch (Exception e) {
             throw new RuntimeException(
                     "Failed to read source files from storage key '" + storageKey + "': "
-                    + e.getMessage(), e);
+                            + e.getMessage(), e);
         }
 
         log.info("Read {} source files from '{}'", files.size(), storageKey);
@@ -109,7 +109,7 @@ public class MinioFileReaderAdapter implements FileReaderPort {
         } catch (Exception e) {
             throw new RuntimeException(
                     "Failed to read all files from storage key '" + storageKey + "': "
-                    + e.getMessage(), e);
+                            + e.getMessage(), e);
         }
         log.info("Read {} total files from '{}' for RAG indexing", files.size(), storageKey);
         return Map.copyOf(files);

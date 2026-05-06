@@ -21,9 +21,11 @@ import com.altrix.orchestrator.domain.port.out.ProviderConfigRepositoryPort;
 import com.altrix.orchestrator.domain.port.out.ProviderRefreshPort;
 import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
 import com.altrix.orchestrator.domain.port.out.WorkflowExecutionPort;
+import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import com.altrix.orchestrator.domain.service.DocumentationIngestionService;
 import com.altrix.orchestrator.domain.service.OrchestratorService;
 import com.altrix.orchestrator.domain.service.ProviderConfigService;
+import com.altrix.orchestrator.domain.service.SessionManagementService;
 import com.altrix.orchestrator.domain.service.TokenUsageService;
 import com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory;
 import com.altrix.orchestrator.infrastructure.workflow.MigrationWorkflowGraph;
@@ -35,12 +37,15 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.util.List;
 
 @Configuration
 @EnableAsync
-@EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class, EncryptionConfig.class, McpConfig.class})
+@EnableScheduling
+@EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class,
+        EncryptionConfig.class, McpConfig.class, ApprovalConfig.class})
 public class BeanConfig {
 
     @Bean
@@ -60,12 +65,13 @@ public class BeanConfig {
 
     @Bean
     public OrchestratorService orchestratorService(
-            WorkflowExecutionPort   workflowExecution,
-            JobStatusUpdatePort     jobStatusUpdatePort,
-            MigratedFileStoragePort migratedFileStoragePort,
-            ProgressNotifierPort    progressNotifierPort,
-            CodeIndexingPort        codeIndexingPort,
-            MigrationPlanCachePort  migrationPlanCachePort
+            WorkflowExecutionPort     workflowExecution,
+            JobStatusUpdatePort       jobStatusUpdatePort,
+            MigratedFileStoragePort   migratedFileStoragePort,
+            ProgressNotifierPort      progressNotifierPort,
+            CodeIndexingPort          codeIndexingPort,
+            MigrationPlanCachePort    migrationPlanCachePort,
+            WorkflowSessionRepository workflowSessionRepository
     ) {
         return new OrchestratorService(
                 workflowExecution,
@@ -73,7 +79,8 @@ public class BeanConfig {
                 migratedFileStoragePort,
                 progressNotifierPort,
                 codeIndexingPort,
-                migrationPlanCachePort
+                migrationPlanCachePort,
+                workflowSessionRepository
         );
     }
 
@@ -99,6 +106,13 @@ public class BeanConfig {
             List<ProviderFactory>    factories
     ) {
         return new ProviderConfigService(configRepository, encryption, providerRefresh, factories);
+    }
+
+    @Bean
+    public SessionManagementService sessionManagementService(
+            WorkflowSessionRepository workflowSessionRepository
+    ) {
+        return new SessionManagementService(workflowSessionRepository);
     }
 
     @Bean

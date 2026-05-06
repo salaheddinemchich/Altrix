@@ -1,0 +1,104 @@
+package com.altrix.orchestrator.domain.service;
+
+import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
+import com.altrix.orchestrator.domain.model.session.SessionStatus;
+import com.altrix.orchestrator.domain.model.session.WorkflowSession;
+import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
+import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
+import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
+import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import java.time.Instant;
+import java.util.List;
+
+/**
+ * Domain service that handles session lifecycle operations driven by external actors:
+ * plan approval/rejection (#64 #65), pause/resume (#69 #70), and batch timeout
+ * rejection called by the scheduler (#68).
+ *
+ * <p>Each method is a simple load → mutate → save. State-transition guards are
+ * enforced inside the aggregate; this service only decides WHICH transition to apply.
+ */
+@Slf4j
+@RequiredArgsConstructor
+public class SessionManagementService
+        implements HandleApprovalUseCase, PauseResumeSessionUseCase {
+
+    private final WorkflowSessionRepository sessionRepository;
+
+    // ── HandleApprovalUseCase ─────────────────────────────────────────────────
+
+    @Override
+    public WorkflowSession approve(WorkflowSessionId sessionId) {
+        WorkflowSession session = load(sessionId);
+        session.startMigration();
+        WorkflowSession saved = sessionRepository.save(session);
+        log.info("Plan approved — session '{}' → MIGRATING", sessionId);
+        return saved;
+    }
+
+    @Override
+    public WorkflowSession reject(WorkflowSessionId sessionId, String reason) {
+        WorkflowSession session = load(sessionId);
+        session.fail(reason);
+        WorkflowSession saved = sessionRepository.save(session);
+        log.info("Plan rejected — session '{}' → FAILED (reason: {})", sessionId, reason);
+        return saved;
+    }
+
+    // ── PauseResumeSessionUseCase ─────────────────────────────────────────────
+
+    @Override
+    public WorkflowSession pause(WorkflowSessionId sessionId) {
+        WorkflowSession session = load(sessionId);
+        session.pause();
+        WorkflowSession saved = sessionRepository.save(session);
+        log.info("Session paused — '{}' (was: {})", sessionId, saved.pausedFrom());
+        return saved;
+    }
+
+    @Override
+    public WorkflowSession resume(WorkflowSessionId sessionId) {
+        WorkflowSession session = load(sessionId);
+        session.resume();
+        WorkflowSession saved = sessionRepository.save(session);
+        log.info("Session resumed — '{}' → {}", sessionId, saved.status());
+        return saved;
+    }
+
+    // ── Approval timeout batch (called by ApprovalTimeoutScheduler) ───────────
+
+    /**
+     * Finds all sessions stuck in {@code AWAITING_APPROVAL} since before the cutoff
+     * and auto-rejects them with a timeout message (#68).
+     *
+     * @param cutoff sessions whose {@code updatedAt} is before this instant are expired
+     * @return number of sessions expired
+     */
+    public int expireStaleApprovals(Instant cutoff) {
+        List<WorkflowSession> stale = sessionRepository.findByStatusAndUpdatedAtBefore(
+                SessionStatus.AWAITING_APPROVAL, cutoff);
+
+        int count = 0;
+        for (WorkflowSession session : stale) {
+            try {
+                session.fail("Approval timeout — no response within the configured window");
+                sessionRepository.save(session);
+                count++;
+                log.warn("Auto-rejected stale approval — session '{}'", session.id());
+            } catch (Exception e) {
+                log.error("Failed to auto-reject session '{}': {}", session.id(), e.getMessage());
+            }
+        }
+        return count;
+    }
+
+    // ── private ───────────────────────────────────────────────────────────────
+
+    private WorkflowSession load(WorkflowSessionId id) {
+        return sessionRepository.findById(id)
+                .orElseThrow(() -> new SessionNotFoundException(id));
+    }
+}

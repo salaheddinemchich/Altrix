@@ -1,6 +1,8 @@
 package com.altrix.orchestrator.adapter.out.persistence;
 
-/** Spring Data closed-projection for the aggregated token-usage summary query. */
+/**
+ * Spring Data closed-projection for the aggregated token-usage summary query.
+ */
 public interface TokenUsageSummaryProjection {
     String getProviderId();
     String getTier();

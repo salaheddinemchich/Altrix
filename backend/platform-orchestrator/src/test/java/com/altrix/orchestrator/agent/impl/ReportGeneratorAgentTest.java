@@ -25,11 +25,12 @@ class ReportGeneratorAgentTest {
     }
 
     @Test
-    void stub_producesReportContainingPlanSummaryAndValidationVerdict() {
+    void execute_producesMarkdownContainingAllSections() {
         WorkflowOutcome outcome = new WorkflowOutcome(
                 "p1",
                 AnalysisReport.empty("p1"),
-                new MigrationPlan("p1", List.of(), "the plan"),
+                new MigrationPlan("p1", "", "Spring Boot 3 + Kafka", List.of("Step 1: replace PubSub"),
+                        "MEDIUM", "3 days", "the plan"),
                 MigrationArtifact.empty("p1"),
                 ValidationReport.pending("p1"));
 
@@ -37,13 +38,30 @@ class ReportGeneratorAgentTest {
 
         assertThat(report.projectId()).isEqualTo("p1");
         assertThat(report.content())
+                .contains("# Migration Report")
                 .contains("p1")
                 .contains("the plan")
-                .contains("passed");
+                .contains("PASSED")
+                .contains("Spring Boot 3 + Kafka")
+                .contains("MEDIUM")
+                .contains("Step 1: replace PubSub");
+        assertThat(report.generatedAt()).isNotNull();
     }
 
     @Test
-    void execute_nullInput_throws() {
+    void execute_failedValidation_containsIssues() {
+        ValidationReport failed = new ValidationReport("p1", false,
+                List.of("Listener.java: Pub/Sub import not removed"), "1 issue found");
+        WorkflowOutcome outcome = new WorkflowOutcome("p1", null, null, null, failed);
+
+        MigrationReport report = agent.execute(outcome);
+
+        assertThat(report.content()).contains("FAILED");
+        assertThat(report.content()).contains("Pub/Sub import not removed");
+    }
+
+    @Test
+    void execute_nullInput_throwsAgentFailureException() {
         assertThatThrownBy(() -> agent.execute(null))
                 .isInstanceOf(AgentFailureException.class);
     }

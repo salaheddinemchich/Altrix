@@ -52,7 +52,7 @@ public class MinioMigratedFileStorageAdapter implements MigratedFileStoragePort 
         } catch (Exception e) {
             throw new RuntimeException(
                     "Failed to store migrated ZIP for job '" + jobId + "': "
-                    + e.getMessage(), e);
+                            + e.getMessage(), e);
         }
     }
 

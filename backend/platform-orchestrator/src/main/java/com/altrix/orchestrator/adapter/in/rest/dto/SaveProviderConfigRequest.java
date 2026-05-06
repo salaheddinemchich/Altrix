@@ -23,4 +23,5 @@ public record SaveProviderConfigRequest(
 
         @Size(max = 200, message = "Model name must not exceed 200 characters")
         String modelMigration
-) {}
+) {
+}

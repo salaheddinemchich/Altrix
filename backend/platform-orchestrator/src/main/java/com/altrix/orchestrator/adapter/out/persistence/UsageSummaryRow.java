@@ -1,11 +1,14 @@
 package com.altrix.orchestrator.adapter.out.persistence;
 
-/** JPQL constructor-expression projection for ai_call_ledger aggregate queries (#53). */
+/**
+ * JPQL constructor-expression projection for ai_call_ledger aggregate queries (#53).
+ */
 record UsageSummaryRow(
         String agentName,
         String providerName,
-        long   totalInputTokens,
-        long   totalOutputTokens,
+        long totalInputTokens,
+        long totalOutputTokens,
         double totalCostUsd,
-        long   callCount
-) {}
+        long callCount
+) {
+}

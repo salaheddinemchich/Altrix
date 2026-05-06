@@ -1,11 +1,11 @@
 package com.altrix.orchestrator.adapter.out.agent;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
 import com.altrix.orchestrator.domain.port.out.AiPort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -19,21 +19,21 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ArchitectureAnalyzerAgent implements AgentPort {
 
-    private final AiPort         aiPort;
-    private final FileReaderPort  fileReaderPort;
-    private final ObjectMapper    objectMapper;
+    private final AiPort aiPort;
+    private final FileReaderPort fileReaderPort;
+    private final ObjectMapper objectMapper;
 
     private static final String SYSTEM_PROMPT = """
             You are a Java expert analyzing a Spring Boot application that uses Google Cloud PubSub.
             Identify every PubSub component in the source files provided.
-
+            
             Look for:
             - PubSubTemplate usages and .publish() calls
             - @ServiceActivator on message handler methods
             - PubSubInboundChannelAdapter beans
             - Topic and subscription string literals
             - Classes that import com.google.cloud.spring.pubsub
-
+            
             Respond ONLY with valid JSON — no markdown, no explanation:
             {
               "pubSubTopics":        ["topic-name"],
@@ -44,10 +44,14 @@ public class ArchitectureAnalyzerAgent implements AgentPort {
             """;
 
     @Override
-    public String getName()  { return "Architecture Analyzer"; }
+    public String getName() {
+        return "Architecture Analyzer";
+    }
 
     @Override
-    public int getOrder()    { return 1; }
+    public int getOrder() {
+        return 1;
+    }
 
     @Override
     public ProjectContext execute(ProjectContext context) {
@@ -67,7 +71,7 @@ public class ArchitectureAnalyzerAgent implements AgentPort {
         StringBuilder userContent = new StringBuilder("Analyze these source files:\n\n");
         sourceFiles.forEach((path, content) ->
                 userContent.append("// FILE: ").append(path).append("\n")
-                           .append(content).append("\n\n"));
+                        .append(content).append("\n\n"));
 
         log.info("Sending {} files to AI (fast model)", sourceFiles.size());
 
@@ -84,10 +88,10 @@ public class ArchitectureAnalyzerAgent implements AgentPort {
                     .strip();
             JsonNode root = objectMapper.readTree(cleaned);
 
-            List<String> topics        = readStringList(root, "pubSubTopics");
+            List<String> topics = readStringList(root, "pubSubTopics");
             List<String> subscriptions = readStringList(root, "pubSubSubscriptions");
-            List<String> listeners     = readStringList(root, "listenerClasses");
-            List<String> publishers    = readStringList(root, "publisherClasses");
+            List<String> listeners = readStringList(root, "listenerClasses");
+            List<String> publishers = readStringList(root, "publisherClasses");
 
             log.info("Agent 1 found: topics={} subs={} listeners={} publishers={}",
                     topics, subscriptions, listeners, publishers);

@@ -1,7 +1,7 @@
 package com.altrix.orchestrator.adapter.out.websocket;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 public class WebSocketProgressAdapter implements ProgressNotifierPort {
 
     private final SimpMessagingTemplate messagingTemplate;
-    private final ObjectMapper          objectMapper;
+    private final ObjectMapper objectMapper;
 
     @Override
     public void notify(String jobId, String agentName, String status, String message) {

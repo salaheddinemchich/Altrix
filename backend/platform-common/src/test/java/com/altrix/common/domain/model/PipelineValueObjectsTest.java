@@ -14,9 +14,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Covers the value objects added to support the typed agent pipeline:
  * AnalysisReport · MigrationPlan · ApprovedPlan · MigrationArtifact ·
  * ValidationReport · WorkflowOutcome · MigrationReport.
- *
- * <p>Each one defends against null collections / null fields and exposes a
- * {@code static empty(...)} (or equivalent) factory the stub agents rely on.
  */
 class PipelineValueObjectsTest {
 
@@ -24,7 +21,8 @@ class PipelineValueObjectsTest {
 
     @Test
     void analysisReport_replacesNullListsWithEmpty() {
-        AnalysisReport r = new AnalysisReport("p1", null, null, null);
+        AnalysisReport r = new AnalysisReport("p1", null, null, null, null);
+        assertThat(r.storageKey()).isEmpty();
         assertThat(r.detectedComponents()).isEmpty();
         assertThat(r.detectedIntegrations()).isEmpty();
         assertThat(r.summary()).isEmpty();
@@ -33,7 +31,7 @@ class PipelineValueObjectsTest {
     @Test
     void analysisReport_isDefensivelyImmutable() {
         List<String> mutable = new ArrayList<>(List.of("a"));
-        AnalysisReport r = new AnalysisReport("p1", mutable, List.of(), "");
+        AnalysisReport r = new AnalysisReport("p1", null, mutable, List.of(), "");
         assertThatThrownBy(() -> r.detectedComponents().add("b"))
                 .isInstanceOf(UnsupportedOperationException.class);
         mutable.add("post-construction");
@@ -41,9 +39,16 @@ class PipelineValueObjectsTest {
     }
 
     @Test
+    void analysisReport_propagatesStorageKey() {
+        AnalysisReport r = new AnalysisReport("p1", "uploads/p1.zip", List.of(), List.of(), "");
+        assertThat(r.storageKey()).isEqualTo("uploads/p1.zip");
+    }
+
+    @Test
     void analysisReport_emptyFactory() {
         AnalysisReport r = AnalysisReport.empty("p1");
         assertThat(r.projectId()).isEqualTo("p1");
+        assertThat(r.storageKey()).isEmpty();
         assertThat(r.detectedComponents()).isEmpty();
     }
 
@@ -51,14 +56,33 @@ class PipelineValueObjectsTest {
 
     @Test
     void migrationPlan_handlesNullsAndDefensiveCopy() {
-        MigrationPlan p = new MigrationPlan("p1", null, null);
+        MigrationPlan p = new MigrationPlan("p1", null, null, null, null, null, null);
+        assertThat(p.storageKey()).isEmpty();
+        assertThat(p.targetStack()).isEmpty();
         assertThat(p.steps()).isEmpty();
+        assertThat(p.riskLevel()).isEmpty();
+        assertThat(p.estimatedEffort()).isEmpty();
         assertThat(p.summary()).isEmpty();
     }
 
     @Test
+    void migrationPlan_preservesAllFields() {
+        MigrationPlan p = new MigrationPlan("p1", "uploads/p1.zip", "Spring Boot 3 + Kafka",
+                List.of("Step 1"), "MEDIUM", "2 days", "migrate messaging layer");
+        assertThat(p.storageKey()).isEqualTo("uploads/p1.zip");
+        assertThat(p.targetStack()).isEqualTo("Spring Boot 3 + Kafka");
+        assertThat(p.steps()).containsExactly("Step 1");
+        assertThat(p.riskLevel()).isEqualTo("MEDIUM");
+        assertThat(p.estimatedEffort()).isEqualTo("2 days");
+        assertThat(p.summary()).isEqualTo("migrate messaging layer");
+    }
+
+    @Test
     void migrationPlan_emptyFactory() {
-        assertThat(MigrationPlan.empty("p1").projectId()).isEqualTo("p1");
+        MigrationPlan p = MigrationPlan.empty("p1");
+        assertThat(p.projectId()).isEqualTo("p1");
+        assertThat(p.storageKey()).isEmpty();
+        assertThat(p.steps()).isEmpty();
     }
 
     // ── ApprovedPlan ────────────────────────────────────────────────────────

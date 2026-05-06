@@ -5,10 +5,10 @@ import com.altrix.orchestrator.domain.port.in.TokenUsageSummary;
 public record TokenUsageSummaryResponse(
         String providerId,
         String tier,
-        long   inputTokens,
-        long   outputTokens,
-        long   totalTokens,
-        long   callCount,
+        long inputTokens,
+        long outputTokens,
+        long totalTokens,
+        long callCount,
         double estimatedCostUsd
 ) {
     public static TokenUsageSummaryResponse from(TokenUsageSummary s) {

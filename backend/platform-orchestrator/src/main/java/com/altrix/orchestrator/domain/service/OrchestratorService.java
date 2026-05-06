@@ -12,7 +12,9 @@ import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
 import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
+import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.port.out.WorkflowExecutionPort;
+import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -35,27 +37,30 @@ import java.util.Optional;
 @Slf4j
 public class OrchestratorService implements RunPipelineUseCase {
 
-    private final WorkflowExecutionPort    workflowExecution;
-    private final JobStatusUpdatePort      jobStatusUpdatePort;
-    private final MigratedFileStoragePort  migratedFileStoragePort;
-    private final ProgressNotifierPort     progressNotifierPort;
-    private final CodeIndexingPort         codeIndexingPort;
-    private final MigrationPlanCachePort   planCachePort;
+    private final WorkflowExecutionPort     workflowExecution;
+    private final JobStatusUpdatePort       jobStatusUpdatePort;
+    private final MigratedFileStoragePort   migratedFileStoragePort;
+    private final ProgressNotifierPort      progressNotifierPort;
+    private final CodeIndexingPort          codeIndexingPort;
+    private final MigrationPlanCachePort    planCachePort;
+    private final WorkflowSessionRepository sessionRepository;
 
     public OrchestratorService(
-            WorkflowExecutionPort   workflowExecution,
-            JobStatusUpdatePort     jobStatusUpdatePort,
-            MigratedFileStoragePort migratedFileStoragePort,
-            ProgressNotifierPort    progressNotifierPort,
-            CodeIndexingPort        codeIndexingPort,
-            MigrationPlanCachePort  planCachePort
+            WorkflowExecutionPort     workflowExecution,
+            JobStatusUpdatePort       jobStatusUpdatePort,
+            MigratedFileStoragePort   migratedFileStoragePort,
+            ProgressNotifierPort      progressNotifierPort,
+            CodeIndexingPort          codeIndexingPort,
+            MigrationPlanCachePort    planCachePort,
+            WorkflowSessionRepository sessionRepository
     ) {
-        this.workflowExecution        = workflowExecution;
-        this.jobStatusUpdatePort      = jobStatusUpdatePort;
-        this.migratedFileStoragePort  = migratedFileStoragePort;
-        this.progressNotifierPort     = progressNotifierPort;
-        this.codeIndexingPort         = codeIndexingPort;
-        this.planCachePort            = planCachePort;
+        this.workflowExecution    = workflowExecution;
+        this.jobStatusUpdatePort  = jobStatusUpdatePort;
+        this.migratedFileStoragePort = migratedFileStoragePort;
+        this.progressNotifierPort = progressNotifierPort;
+        this.codeIndexingPort     = codeIndexingPort;
+        this.planCachePort        = planCachePort;
+        this.sessionRepository    = sessionRepository;
         log.info("OrchestratorService initialised — typed LangGraph4j workflow");
     }
 
@@ -63,6 +68,9 @@ public class OrchestratorService implements RunPipelineUseCase {
     public ProjectContext run(ProjectContext initial) {
         String jobId = initial.jobId();
         log.info("Starting pipeline for job '{}'", jobId);
+
+        WorkflowSession session = sessionRepository.save(
+                WorkflowSession.create(jobId, initial.projectId()));
 
         try {
             // ── Phase 0: RAG indexing ────────────────────────────────────────
@@ -72,6 +80,9 @@ public class OrchestratorService implements RunPipelineUseCase {
 
             // ── Phase 1–5: typed agent workflow ─────────────────────────────
             jobStatusUpdatePort.markAnalyzing(jobId);
+            session.startMigration();                           // PENDING → MIGRATING
+            session = sessionRepository.save(session);
+
             MigrationState result = workflowExecution.execute(initial);
 
             List<MigratedFile> files = result.migrationArtifact()
@@ -84,6 +95,9 @@ public class OrchestratorService implements RunPipelineUseCase {
 
             String outputKey = migratedFileStoragePort.storeMigratedZip(jobId, files);
             cachePlanBestEffort(initial, files);
+
+            session.complete();                                 // MIGRATING → DONE
+            sessionRepository.save(session);
 
             jobStatusUpdatePort.markDone(jobId, outputKey);
             progressNotifierPort.notify(jobId, "Pipeline", "DONE",
@@ -102,6 +116,8 @@ public class OrchestratorService implements RunPipelineUseCase {
                 log.info("Serving cached migration plan for job '{}' ({} file(s))",
                         jobId, cached.get().size());
                 String outputKey = migratedFileStoragePort.storeMigratedZip(jobId, cached.get());
+                session.complete();
+                sessionRepository.save(session);
                 jobStatusUpdatePort.markDone(jobId, outputKey);
                 progressNotifierPort.notify(jobId, "Pipeline", "DONE",
                         "Serving cached migration plan — AI providers are currently unavailable.");
@@ -109,6 +125,7 @@ public class OrchestratorService implements RunPipelineUseCase {
             }
 
             log.error("Pipeline FAILED for job '{}' (no cached plan available): {}", jobId, e.getMessage());
+            failSessionBestEffort(session, e.getMessage());
             jobStatusUpdatePort.markFailed(jobId, e.getMessage());
             progressNotifierPort.notify(jobId, "Pipeline", "FAILED",
                     "All AI providers unavailable. No cached plan found.");
@@ -116,6 +133,7 @@ public class OrchestratorService implements RunPipelineUseCase {
 
         } catch (Exception e) {
             log.error("Pipeline FAILED for job '{}': {}", jobId, e.getMessage(), e);
+            failSessionBestEffort(session, e.getMessage());
             jobStatusUpdatePort.markFailed(jobId, e.getMessage());
             progressNotifierPort.notify(jobId, "Pipeline", "FAILED", e.getMessage());
             throw new AgentFailureException("Pipeline", e.getMessage());
@@ -123,6 +141,16 @@ public class OrchestratorService implements RunPipelineUseCase {
     }
 
     // ── private helpers ───────────────────────────────────────────────────────
+
+    private void failSessionBestEffort(WorkflowSession session, String reason) {
+        try {
+            session.fail(reason);
+            sessionRepository.save(session);
+        } catch (Exception ex) {
+            log.warn("Could not persist FAILED state for session '{}' (non-fatal): {}",
+                    session.id(), ex.getMessage());
+        }
+    }
 
     private void cachePlanBestEffort(ProjectContext initial, List<MigratedFile> files) {
         if (files == null || files.isEmpty()) return;

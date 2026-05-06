@@ -1,48 +1,129 @@
 package com.altrix.orchestrator.agent.impl;
 
+import com.altrix.common.domain.enums.FileChangeType;
 import com.altrix.common.domain.model.ApprovedPlan;
 import com.altrix.common.domain.model.MigrationArtifact;
+import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
+import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.domain.port.out.FileReaderPort;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Agent 3 — Core Migrator (typed pipeline variant).
  *
- * <p>Consumes an {@link ApprovedPlan} and produces a {@link MigrationArtifact}
- * containing the rewritten files. Until issue #35 wires the typed pipeline,
- * this class coexists with the older
- * {@code adapter.out.agent.CoreMigratorAgent} which still runs the
- * {@code ProjectContext}-based path — hence the explicit Spring bean name to
- * avoid collisions.
+ * <p>Reads source files from MinIO via the {@code storageKey} stored in
+ * the approved plan, then rewrites each Java file that contains Pub/Sub code
+ * using the powerful AI model. Non-Java files and files without Pub/Sub code
+ * are passed through unchanged.
+ *
+ * <p>Per-file AI failures are non-fatal: the original file is kept and the
+ * migration summary notes the skip, so the pipeline completes even when the
+ * AI is intermittently unavailable.
  */
 @Slf4j
 @Component("typedCoreMigratorAgent")
+@RequiredArgsConstructor
 public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, MigrationArtifact> {
 
-    @Override public String getName() { return "Core Migrator"; }
+    private static final String SYSTEM_PROMPT = """
+            You are a Java migration expert. Rewrite the following Java source file to migrate from
+            Google Cloud Pub/Sub to Apache Kafka (Spring Kafka).
 
-    @Override public int getOrder() { return 3; }
+            Rules:
+            - Preserve ALL business logic exactly.
+            - Replace @SubscriberHandler / @PubSubListener with @KafkaListener.
+            - Replace PubSubTemplate / MessagePublisher with KafkaTemplate<String, String>.
+            - Update imports: remove google.cloud.pubsub, add org.springframework.kafka.
+            - Preserve package declarations, class names, and method signatures.
+            - If the file contains no Pub/Sub code, return it exactly as provided.
+
+            Return ONLY the complete rewritten Java file content. No explanations.
+            """;
+
+    private final AiPort         aiPort;
+    private final FileReaderPort fileReader;
+
+    @Override public String getName()  { return "Core Migrator"; }
+    @Override public int    getOrder() { return 3; }
 
     @Override
     public MigrationArtifact execute(ApprovedPlan input) {
-        if (input == null) {
-            throw new AgentFailureException(getName(), "input ApprovedPlan was null");
+        if (input == null) throw new AgentFailureException(getName(), "input ApprovedPlan was null");
+
+        String projectId  = input.plan().projectId();
+        String storageKey = input.plan().storageKey();
+        log.info("[{}] migrating project '{}' (approved by '{}')", getName(), projectId, input.approvedBy());
+
+        if (storageKey == null || storageKey.isBlank()) {
+            log.warn("[{}] no storageKey in plan — returning empty artifact", getName());
+            return new MigrationArtifact(projectId, List.of(), "No files to migrate (storageKey missing)");
         }
-        String projectId = input.plan().projectId();
-        log.info("[{}] migrating project '{}' (plan approved by '{}')",
-                getName(), projectId, input.approvedBy());
 
-        // Real migration logic lands when #35 retires the legacy AgentPort path.
-        // For now: return an empty artifact carrying the plan's summary so
-        // downstream stub agents have a stable shape to operate on.
-        String summary = input.plan().summary().isBlank()
-                ? "Artifact stub — no files generated"
-                : "Artifact stub — plan: " + input.plan().summary();
+        try {
+            Map<String, String> sourceFiles = fileReader.readSourceFiles(storageKey);
+            List<MigratedFile>  migrated    = migrateFiles(sourceFiles);
+            long modifiedCount = migrated.stream()
+                    .filter(f -> f.changeType() == FileChangeType.MODIFIED).count();
+            String summary = "Migrated %d/%d file(s) for project '%s'"
+                    .formatted(modifiedCount, migrated.size(), projectId);
+            return new MigrationArtifact(projectId, migrated, summary);
+        } catch (Exception e) {
+            log.error("[{}] migration failed for project '{}': {}", getName(), projectId, e.getMessage());
+            throw new AgentFailureException(getName(), "file migration failed: " + e.getMessage());
+        }
+    }
 
-        return new MigrationArtifact(projectId, List.of(), summary);
+    private List<MigratedFile> migrateFiles(Map<String, String> sourceFiles) {
+        List<MigratedFile> result = new ArrayList<>();
+        for (Map.Entry<String, String> entry : sourceFiles.entrySet()) {
+            String path    = entry.getKey();
+            String content = entry.getValue();
+
+            if (!path.endsWith(".java")) {
+                result.add(unchanged(path, content, "Not a Java source file"));
+                continue;
+            }
+            if (!hasPubSubCode(content)) {
+                result.add(unchanged(path, content, "No Pub/Sub code detected"));
+                continue;
+            }
+
+            try {
+                String migrated = aiPort.chat(SYSTEM_PROMPT, "File: " + path + "\n\n" + content);
+                FileChangeType changeType = migrated.equals(content)
+                        ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
+                result.add(MigratedFile.builder()
+                        .originalPath(path).newPath(path).content(migrated)
+                        .changeType(changeType).diffSummary("Migrated Pub/Sub → Kafka")
+                        .build());
+            } catch (Exception e) {
+                log.warn("[{}] AI failed for '{}', keeping original: {}", getName(), path, e.getMessage());
+                result.add(unchanged(path, content, "Migration skipped — AI unavailable"));
+            }
+        }
+        return result;
+    }
+
+    private static MigratedFile unchanged(String path, String content, String reason) {
+        return MigratedFile.builder()
+                .originalPath(path).newPath(path).content(content)
+                .changeType(FileChangeType.UNCHANGED).diffSummary(reason)
+                .build();
+    }
+
+    private static boolean hasPubSubCode(String content) {
+        return content.contains("google.cloud.pubsub")
+            || content.contains("PubSubTemplate")
+            || content.contains("SubscriberHandler")
+            || content.contains("PubSubListener")
+            || content.contains("MessagePublisher");
     }
 }

@@ -1,15 +1,15 @@
 package com.altrix.orchestrator.adapter.out.agent;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.altrix.common.domain.enums.ConfigFormat;
+import com.altrix.common.domain.enums.FileChangeType;
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.ProjectContext;
-import com.altrix.common.domain.enums.FileChangeType;
+import com.altrix.orchestrator.domain.model.ConfigFormatResolver;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
 import com.altrix.orchestrator.domain.port.out.AiPort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
-import com.altrix.orchestrator.domain.model.ConfigFormatResolver;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -42,20 +42,20 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CoreMigratorAgent implements AgentPort {
 
-    private final AiPort        aiPort;
+    private final AiPort aiPort;
     private final FileReaderPort fileReaderPort;
-    private final ObjectMapper  objectMapper;
+    private final ObjectMapper objectMapper;
 
     private static final String SYSTEM_PROMPT = """
             You are an expert Java developer migrating a Spring Boot application
             from Google Cloud PubSub to Apache Kafka.
-
+            
             You will receive:
             1. A list of PubSub components found in the project (topics, subscriptions, classes)
             2. The content of source files that need migration
-
+            
             Your task: rewrite each file to use Apache Kafka.
-
+            
             Migration rules:
             - @PubSubListener → @KafkaListener(topics = "topic-name", groupId = "migrated-group")
             - PubSubTemplate → KafkaTemplate<String, String>
@@ -65,11 +65,11 @@ public class CoreMigratorAgent implements AgentPort {
             - ProjectSubscriptionName → remove entirely, use plain string in @KafkaListener
             - GCP credentials in application.yml → remove GCP block, add spring.kafka.bootstrap-servers
             - In build files: remove spring-cloud-gcp-starter-pubsub, add spring-kafka
-
+            
             CONFIG FORMAT: preserve the original format exactly.
             If the file is .properties, keep .properties syntax.
             If the file is .yml, keep .yml syntax.
-
+            
             Respond ONLY with a valid JSON array — no markdown, no explanation:
             [
               {
@@ -83,10 +83,14 @@ public class CoreMigratorAgent implements AgentPort {
             """;
 
     @Override
-    public String getName()  { return "Core Migrator"; }
+    public String getName() {
+        return "Core Migrator";
+    }
 
     @Override
-    public int getOrder()    { return 3; }
+    public int getOrder() {
+        return 3;
+    }
 
     @Override
     public ProjectContext execute(ProjectContext context) {
@@ -150,7 +154,8 @@ public class CoreMigratorAgent implements AgentPort {
 
             List<Map<String, String>> rawList = objectMapper.readValue(
                     cleaned,
-                    new TypeReference<>() {}
+                    new TypeReference<>() {
+                    }
             );
 
             List<MigratedFile> result = new ArrayList<>();
@@ -173,7 +178,10 @@ public class CoreMigratorAgent implements AgentPort {
 
     private FileChangeType parseChangeType(String value) {
         if (value == null) return FileChangeType.MODIFIED;
-        try { return FileChangeType.valueOf(value); }
-        catch (IllegalArgumentException e) { return FileChangeType.MODIFIED; }
+        try {
+            return FileChangeType.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return FileChangeType.MODIFIED;
+        }
     }
 }

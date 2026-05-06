@@ -1,6 +1,5 @@
 package com.altrix.orchestrator.adapter.out.rag;
 
-import com.altrix.common.domain.enums.DocumentType;
 import com.altrix.common.domain.model.DocumentChunk;
 import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
@@ -12,11 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Reads the uploaded project ZIP, chunks every source file, embeds the chunks,
@@ -33,8 +28,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class CodeIndexingAgent implements CodeIndexingPort {
 
-    private static final int    CHUNK_SIZE_CHARS  = 1200;
-    private static final int    CHUNK_OVERLAP_CHARS = 200;
+    private static final int CHUNK_SIZE_CHARS = 1200;
+    private static final int CHUNK_OVERLAP_CHARS = 200;
     private static final Set<String> INDEXABLE_EXTENSIONS = Set.of(
             ".java", ".kt", ".groovy",
             ".yml", ".yaml", ".properties", ".xml",
@@ -42,17 +37,19 @@ public class CodeIndexingAgent implements CodeIndexingPort {
             ".sql", ".md"
     );
 
-    private final FileReaderPort    fileReader;
+    private final FileReaderPort fileReader;
     private final EmbeddingStorePort embeddingStore;
 
-    /** Index the project — called by OrchestratorService before the agent pipeline. */
+    /**
+     * Index the project — called by OrchestratorService before the agent pipeline.
+     */
     public void index(ProjectContext context) {
         log.info("Job '{}' — indexing source files for RAG", context.jobId());
         Map<String, String> files = fileReader.readAllFiles(context.storageKey());
 
         List<DocumentChunk> chunks = new ArrayList<>();
         for (Map.Entry<String, String> entry : files.entrySet()) {
-            String path    = entry.getKey();
+            String path = entry.getKey();
             String content = entry.getValue();
             if (!isIndexable(path) || content.isBlank()) continue;
 
@@ -69,7 +66,9 @@ public class CodeIndexingAgent implements CodeIndexingPort {
         embeddingStore.upsert(chunks);
     }
 
-    /** Sliding-window chunker with overlap so context isn't lost at boundaries. */
+    /**
+     * Sliding-window chunker with overlap so context isn't lost at boundaries.
+     */
     private List<String> splitIntoChunks(String text) {
         List<String> chunks = new ArrayList<>();
         int start = 0;

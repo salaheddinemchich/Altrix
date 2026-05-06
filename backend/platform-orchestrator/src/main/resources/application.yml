@@ -163,8 +163,15 @@ ai:
     #     timeout-seconds: 15
     servers: ${AI_MCP_SERVERS:}
 
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:4200,http://localhost:8080}
+
 websocket:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:4200,http://localhost:8080}
+
+approval:
+  timeout: ${APPROVAL_TIMEOUT:30m}
+  scheduler-cron: ${APPROVAL_SCHEDULER_CRON:"0 * * * * *"}
 
 management:
   endpoints:

@@ -24,10 +24,10 @@ import java.util.Optional;
 public class RedisMigrationPlanCacheAdapter implements MigrationPlanCachePort {
 
     private static final String KEY_PREFIX = "migration-plan:";
-    private static final Duration TTL      = Duration.ofDays(7);
+    private static final Duration TTL = Duration.ofDays(7);
 
     private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper        objectMapper;
+    private final ObjectMapper objectMapper;
 
     @Override
     public void store(String projectId, String targetStack, List<MigratedFile> files) {
@@ -48,7 +48,8 @@ public class RedisMigrationPlanCacheAdapter implements MigrationPlanCachePort {
         try {
             String json = redisTemplate.opsForValue().get(key);
             if (json == null) return Optional.empty();
-            List<MigratedFile> files = objectMapper.readValue(json, new TypeReference<>() {});
+            List<MigratedFile> files = objectMapper.readValue(json, new TypeReference<>() {
+            });
             log.info("Cache HIT — returning {} file(s) for project={} stack={}", files.size(), projectId, targetStack);
             return Optional.of(files);
         } catch (Exception e) {

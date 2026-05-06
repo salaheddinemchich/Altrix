@@ -4,7 +4,10 @@ import com.altrix.orchestrator.domain.model.AiCallUsageSummary;
 import com.altrix.orchestrator.domain.port.out.AiCallLedgerPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -32,7 +35,7 @@ public class BillingController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to
     ) {
         Instant resolvedFrom = from != null ? from : startOfCurrentMonth();
-        Instant resolvedTo   = to   != null ? to   : Instant.now();
+        Instant resolvedTo = to != null ? to : Instant.now();
         return aiCallLedgerPort.queryUsage(resolvedFrom, resolvedTo);
     }
 

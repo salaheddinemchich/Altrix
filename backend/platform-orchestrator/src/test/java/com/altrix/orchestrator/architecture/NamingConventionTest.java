@@ -54,9 +54,9 @@ class NamingConventionTest {
                     .because("domain service implementations must be named *Service");
 
     @ArchTest
-    static final ArchRule outbound_ports_end_with_Port =
+    static final ArchRule outbound_ports_end_with_Port_or_Repository =
             classes().that().resideInAPackage("..domain.port.out..")
                     .and().areInterfaces()
-                    .should().haveSimpleNameEndingWith("Port")
-                    .because("driven ports must be named *Port");
+                    .should().haveNameMatching(".*Port$|.*Repository$")
+                    .because("driven ports must be named *Port; aggregate-repository ports may use *Repository");
 }

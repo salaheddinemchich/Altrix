@@ -35,14 +35,14 @@ import java.util.stream.Collectors;
 @Component
 public class RedisGraphCheckpointAdapter implements BaseCheckpointSaver {
 
-    private static final String KEY_PREFIX   = "migraph:cp:";
-    private static final Duration TTL        = Duration.ofHours(24);
+    private static final String KEY_PREFIX = "migraph:cp:";
+    private static final Duration TTL = Duration.ofHours(24);
 
     private final StringRedisTemplate redis;
-    private final ObjectMapper        mapper;
+    private final ObjectMapper mapper;
 
     public RedisGraphCheckpointAdapter(StringRedisTemplate redis) {
-        this.redis  = redis;
+        this.redis = redis;
         this.mapper = buildMapper();
     }
 
@@ -81,7 +81,7 @@ public class RedisGraphCheckpointAdapter implements BaseCheckpointSaver {
 
     @Override
     public RunnableConfig put(RunnableConfig config, Checkpoint checkpoint) {
-        String key  = key(config);
+        String key = key(config);
         String json = serialize(checkpoint);
         if (json == null) {
             log.warn("Could not serialise checkpoint {} for key '{}' — skipping persist",

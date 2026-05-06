@@ -12,9 +12,14 @@ public class TokenBudgetExceededException extends AiProviderUnavailableException
     public TokenBudgetExceededException(long limit, long used) {
         super("Monthly token budget exceeded: " + used + " / " + limit + " tokens used");
         this.limit = limit;
-        this.used  = used;
+        this.used = used;
     }
 
-    public long limit() { return limit; }
-    public long used()  { return used;  }
+    public long limit() {
+        return limit;
+    }
+
+    public long used() {
+        return used;
+    }
 }

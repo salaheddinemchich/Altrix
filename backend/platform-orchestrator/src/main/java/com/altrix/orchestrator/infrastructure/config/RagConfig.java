@@ -32,9 +32,14 @@ public class RagConfig {
             @Value("${rag.embedding.openai.api-key:${OPENAI_API_KEY:}}") String apiKey,
             @Value("${rag.embedding.openai.model:text-embedding-3-small}") String model
     ) {
+        if (apiKey.isBlank()) {
+            log.warn("RAG: rag.embedding.openai.api-key is not set — embedding calls will fail at runtime. "
+                    + "Set OPENAI_API_KEY or rag.embedding.openai.api-key, "
+                    + "or switch to rag.embedding.provider=ollama for a local model.");
+        }
         log.info("RAG embedding model: OpenAI {}", model);
         return OpenAiEmbeddingModel.builder()
-                .apiKey(apiKey.isBlank() ? "placeholder" : apiKey)
+                .apiKey(apiKey)
                 .modelName(model)
                 .timeout(Duration.ofSeconds(30))
                 .build();

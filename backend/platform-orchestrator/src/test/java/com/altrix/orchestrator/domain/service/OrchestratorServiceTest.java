@@ -7,6 +7,7 @@ import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
 import com.altrix.orchestrator.domain.model.workflow.MigrationState;
+import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.port.out.AgentPort;
 import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
@@ -14,6 +15,7 @@ import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
 import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowExecutionPort;
+import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -32,17 +34,22 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrchestratorServiceTest {
 
-    @Mock WorkflowExecutionPort  workflowExecution;
-    @Mock JobStatusUpdatePort    jobStatusUpdatePort;
+    @Mock WorkflowExecutionPort   workflowExecution;
+    @Mock JobStatusUpdatePort     jobStatusUpdatePort;
     @Mock MigratedFileStoragePort migratedFileStoragePort;
-    @Mock ProgressNotifierPort   progressNotifierPort;
-    @Mock CodeIndexingPort       codeIndexingPort;
-    @Mock MigrationPlanCachePort migrationPlanCachePort;
+    @Mock ProgressNotifierPort    progressNotifierPort;
+    @Mock CodeIndexingPort        codeIndexingPort;
+    @Mock MigrationPlanCachePort  migrationPlanCachePort;
+    @Mock WorkflowSessionRepository sessionRepository;
 
     private OrchestratorService service() {
+        // save() returns the same session object so state transitions continue to work
+        lenient().when(sessionRepository.save(any(WorkflowSession.class)))
+                 .thenAnswer(inv -> inv.getArgument(0));
         return new OrchestratorService(
                 workflowExecution, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, codeIndexingPort, migrationPlanCachePort);
+                progressNotifierPort, codeIndexingPort, migrationPlanCachePort,
+                sessionRepository);
     }
 
     // ── happy path ────────────────────────────────────────────────────────────

@@ -21,7 +21,9 @@ public interface TokenUsageJpaRepository extends JpaRepository<TokenUsageEntity,
             """)
     List<TokenUsageSummaryProjection> findSummary();
 
-    /** Total tokens consumed on or after {@code since} — used for monthly budget enforcement. */
+    /**
+     * Total tokens consumed on or after {@code since} — used for monthly budget enforcement.
+     */
     @Query("SELECT COALESCE(SUM(t.totalTokens), 0) FROM TokenUsageEntity t WHERE t.recordedAt >= :since")
     long sumTotalTokensSince(Instant since);
 }

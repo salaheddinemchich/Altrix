@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -18,41 +17,44 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PgVectorEmbeddingStoreAdapter implements EmbeddingStorePort {
 
-    private final JdbcTemplate  jdbc;
+    private final JdbcTemplate jdbc;
     private final EmbeddingModel embeddingModel;
 
     @Override
     public void upsert(List<DocumentChunk> chunks) {
         if (chunks.isEmpty()) return;
         int skipped = 0;
-        int stored  = 0;
+        int stored = 0;
 
         for (DocumentChunk chunk : chunks) {
             // Skip if this exact chunk (same project + path + index) hasn't changed
-            if (chunkExists(chunk)) { skipped++; continue; }
+            if (chunkExists(chunk)) {
+                skipped++;
+                continue;
+            }
 
             float[] vector = embed(chunk.text());
             jdbc.update("""
-                INSERT INTO code_embeddings
-                    (project_id, document_type, file_path, chunk_index,
-                     chunk_text, content_hash, embedding, source_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?::vector, ?)
-                ON CONFLICT (project_id, file_path, chunk_index)
-                    WHERE project_id IS NOT NULL
-                DO UPDATE SET
-                    chunk_text   = EXCLUDED.chunk_text,
-                    content_hash = EXCLUDED.content_hash,
-                    embedding    = EXCLUDED.embedding,
-                    created_at   = NOW()
-                """,
-                chunk.projectId(),
-                chunk.documentType().name(),
-                chunk.filePath(),
-                chunk.chunkIndex(),
-                chunk.text(),
-                chunk.contentHash(),
-                toVectorLiteral(vector),
-                chunk.sourceUrl()
+                            INSERT INTO code_embeddings
+                                (project_id, document_type, file_path, chunk_index,
+                                 chunk_text, content_hash, embedding, source_url)
+                            VALUES (?, ?, ?, ?, ?, ?, ?::vector, ?)
+                            ON CONFLICT (project_id, file_path, chunk_index)
+                                WHERE project_id IS NOT NULL
+                            DO UPDATE SET
+                                chunk_text   = EXCLUDED.chunk_text,
+                                content_hash = EXCLUDED.content_hash,
+                                embedding    = EXCLUDED.embedding,
+                                created_at   = NOW()
+                            """,
+                    chunk.projectId(),
+                    chunk.documentType().name(),
+                    chunk.filePath(),
+                    chunk.chunkIndex(),
+                    chunk.text(),
+                    chunk.contentHash(),
+                    toVectorLiteral(vector),
+                    chunk.sourceUrl()
             );
             stored++;
         }
@@ -61,7 +63,7 @@ public class PgVectorEmbeddingStoreAdapter implements EmbeddingStorePort {
 
     @Override
     public List<DocumentChunk> findRelevant(String query, String projectId,
-                                             List<DocumentType> types, int topK) {
+                                            List<DocumentType> types, int topK) {
         float[] queryVector = embed(query);
         String typeList = types.stream()
                 .map(Enum::name)

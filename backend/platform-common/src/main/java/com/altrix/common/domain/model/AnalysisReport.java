@@ -13,6 +13,9 @@ public record AnalysisReport(
 
         String projectId,
 
+        /** MinIO storage key of the uploaded ZIP — propagated to MigrationPlan for CoreMigratorAgent. */
+        String storageKey,
+
         /** Detected source components (topics, queues, listeners, publishers, services, etc.). */
         List<String> detectedComponents,
 
@@ -24,12 +27,13 @@ public record AnalysisReport(
 
 ) {
     public AnalysisReport {
-        detectedComponents = detectedComponents != null ? List.copyOf(detectedComponents)   : List.of();
+        storageKey           = storageKey           != null ? storageKey           : "";
+        detectedComponents   = detectedComponents   != null ? List.copyOf(detectedComponents)   : List.of();
         detectedIntegrations = detectedIntegrations != null ? List.copyOf(detectedIntegrations) : List.of();
-        summary = summary != null ? summary : "";
+        summary              = summary              != null ? summary              : "";
     }
 
     public static AnalysisReport empty(String projectId) {
-        return new AnalysisReport(projectId, List.of(), List.of(), "");
+        return new AnalysisReport(projectId, "", List.of(), List.of(), "");
     }
 }

@@ -5,28 +5,43 @@ import java.util.List;
 /**
  * Output of {@code MigrationPlannerAgent} (Agent 2).
  *
- * <p>Minimal placeholder — the rich schema (steps, file ops, transformations,
- * risks, estimated effort) lands in issue #5. This shape is enough for
- * Agent 3 to consume an {@link ApprovedPlan} wrapper without forcing the
- * planner sub-issues to depend on a finalised schema.
+ * <p>Carries the full migration specification: what to migrate, how risky it is,
+ * how much effort is expected, and the {@code storageKey} the Core Migrator needs
+ * to read the source files from MinIO (issue #5).
  */
 public record MigrationPlan(
 
         String projectId,
 
-        /** Ordered, free-form description of each migration step. */
+        /** MinIO storage key of the uploaded ZIP — required by CoreMigratorAgent to read source files. */
+        String storageKey,
+
+        /** Target technology stack after migration, e.g. "Spring Boot 3 + Apache Kafka". */
+        String targetStack,
+
+        /** Ordered, human-readable description of each migration step. */
         List<String> steps,
 
-        /** Short summary the orchestrator persists alongside the job. */
+        /** Assessed risk level: {@code LOW}, {@code MEDIUM}, or {@code HIGH}. */
+        String riskLevel,
+
+        /** Rough effort estimate, e.g. "3–5 days". */
+        String estimatedEffort,
+
+        /** Short summary persisted alongside the job and displayed in reports. */
         String summary
 
 ) {
     public MigrationPlan {
-        steps   = steps   != null ? List.copyOf(steps) : List.of();
-        summary = summary != null ? summary : "";
+        storageKey      = storageKey      != null ? storageKey      : "";
+        targetStack     = targetStack     != null ? targetStack     : "";
+        steps           = steps           != null ? List.copyOf(steps) : List.of();
+        riskLevel       = riskLevel       != null ? riskLevel       : "";
+        estimatedEffort = estimatedEffort != null ? estimatedEffort : "";
+        summary         = summary         != null ? summary         : "";
     }
 
     public static MigrationPlan empty(String projectId) {
-        return new MigrationPlan(projectId, List.of(), "");
+        return new MigrationPlan(projectId, "", "", List.of(), "", "", "");
     }
 }
