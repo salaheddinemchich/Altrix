@@ -24,7 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class JobQueryController {
 
-    private final GetJobQuery           getJobQuery;
+    private final GetJobQuery getJobQuery;
     private final MinioJobStorageAdapter minioStorage;
 
     @GetMapping("/{jobId}")

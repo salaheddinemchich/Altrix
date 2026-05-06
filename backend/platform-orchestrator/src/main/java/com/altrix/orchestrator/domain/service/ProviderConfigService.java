@@ -23,9 +23,9 @@ import java.util.stream.Collectors;
 public class ProviderConfigService implements UpdateProviderConfigUseCase, GetProviderConfigsUseCase {
 
     private final ProviderConfigRepositoryPort configRepository;
-    private final ApiKeyEncryptionPort     encryption;
-    private final ProviderRefreshPort      providerRefresh;
-    private final List<ProviderFactory>    factories;   // all known provider factories
+    private final ApiKeyEncryptionPort encryption;
+    private final ProviderRefreshPort providerRefresh;
+    private final List<ProviderFactory> factories;   // all known provider factories
 
     @Override
     public void updateProviderConfig(SaveProviderConfigCommand command) {

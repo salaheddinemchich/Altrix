@@ -24,7 +24,7 @@ public record ApprovalConfig(
         String schedulerCron
 ) {
     public ApprovalConfig {
-        if (timeout == null)       timeout       = Duration.ofMinutes(30);
+        if (timeout == null) timeout = Duration.ofMinutes(30);
         if (schedulerCron == null) schedulerCron = "0 * * * * *";
     }
 }

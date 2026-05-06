@@ -20,18 +20,18 @@ public class OllamaProviderFactory implements ProviderFactory {
     public static final String ID = "ollama";
 
     private final AiProvidersConfig.OllamaConfig systemCfg;
-    private final ProviderConfigResolver         resolver;
+    private final ProviderConfigResolver resolver;
 
     public OllamaProviderFactory(AiProvidersConfig config, ProviderConfigResolver resolver) {
         this.systemCfg = config.ollama();
-        this.resolver  = resolver;
+        this.resolver = resolver;
         log.info("OllamaProviderFactory ready — url={}", systemCfg.baseUrl());
     }
 
-    @Override public String          providerId()           { return ID; }
+    @Override public String providerId()           { return ID; }
     @Override public ProviderCostTier costTier()            { return ProviderCostTier.FREE; }
-    @Override public String          defaultModelAnalysis() { return systemCfg.modelAnalysis(); }
-    @Override public String          defaultModelMigration(){ return systemCfg.modelMigration(); }
+    @Override public String defaultModelAnalysis() { return systemCfg.modelAnalysis(); }
+    @Override public String defaultModelMigration(){ return systemCfg.modelMigration(); }
 
     @Override
     public boolean isEnabled() {

@@ -34,7 +34,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DocumentationIngestionService {
 
-    private final EmbeddingStorePort    embeddingStore;
+    private final EmbeddingStorePort embeddingStore;
     private final DocumentationFetchPort docFetch;
 
     /** Documentation pages to ingest — logical path + canonical URL pairs. */

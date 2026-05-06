@@ -23,7 +23,7 @@ import java.util.Optional;
 public class ProviderConfigResolver {
 
     private final ProviderConfigRepositoryPort configRepository;
-    private final ApiKeyEncryptionPort     encryption;
+    private final ApiKeyEncryptionPort encryption;
 
     public ResolvedProviderConfig resolveOpenAiCompatible(
             String providerId,

@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 public class OllamaWarmupService {
 
     private final AiProvidersConfig aiProvidersConfig;
-    private final ProviderRouter    providerRouter;
+    private final ProviderRouter providerRouter;
 
     @Async
     @EventListener(ApplicationReadyEvent.class)

@@ -58,11 +58,11 @@ public class MigrationState extends AgentState {
 
     public Optional<ProjectContext> projectContext()       { return value(PROJECT_CONTEXT); }
     public Optional<AnalysisReport> analysisReport()       { return value(ANALYSIS_REPORT); }
-    public Optional<MigrationPlan>  migrationPlan()        { return value(MIGRATION_PLAN); }
-    public Optional<ApprovedPlan>   approvedPlan()         { return value(APPROVED_PLAN); }
+    public Optional<MigrationPlan> migrationPlan()        { return value(MIGRATION_PLAN); }
+    public Optional<ApprovedPlan> approvedPlan()         { return value(APPROVED_PLAN); }
     public Optional<MigrationArtifact> migrationArtifact() { return value(MIGRATION_ARTIFACT); }
-    public Optional<ValidationReport>  validationReport()  { return value(VALIDATION_REPORT); }
-    public Optional<MigrationReport>   migrationReport()   { return value(MIGRATION_REPORT); }
+    public Optional<ValidationReport> validationReport()  { return value(VALIDATION_REPORT); }
+    public Optional<MigrationReport> migrationReport()   { return value(MIGRATION_REPORT); }
 
     public List<String> errorHistory() {
         return this.<List<String>>value(ERROR_HISTORY).orElse(List.of());

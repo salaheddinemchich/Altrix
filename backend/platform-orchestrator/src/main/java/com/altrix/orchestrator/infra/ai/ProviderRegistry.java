@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Component
 public class ProviderRegistry implements ProviderRefreshPort {
 
-    private final List<ProviderFactory>               factories;
+    private final List<ProviderFactory> factories;
     private final AtomicReference<List<RegisteredProvider>> providers;
 
     public ProviderRegistry(List<ProviderFactory> factories) {

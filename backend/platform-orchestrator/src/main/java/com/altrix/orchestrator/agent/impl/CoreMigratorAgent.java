@@ -48,11 +48,11 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             Return ONLY the complete rewritten Java file content. No explanations.
             """;
 
-    private final AiPort         aiPort;
+    private final AiPort aiPort;
     private final FileReaderPort fileReader;
 
     @Override public String getName()  { return "Core Migrator"; }
-    @Override public int    getOrder() { return 3; }
+    @Override public int getOrder() { return 3; }
 
     @Override
     public MigrationArtifact execute(ApprovedPlan input) {

@@ -15,11 +15,11 @@ public class GroqProviderFactory implements ProviderFactory {
     public static final String ID = "groq";
 
     private final AiProvidersConfig.OpenAiCompatibleConfig systemCfg;
-    private final ProviderConfigResolver                   resolver;
+    private final ProviderConfigResolver resolver;
 
     public GroqProviderFactory(AiProvidersConfig config, ProviderConfigResolver resolver) {
         this.systemCfg = config.groq();
-        this.resolver  = resolver;
+        this.resolver = resolver;
         if (systemCfg.enabled() && systemCfg.apiKey().isBlank()) {
             log.warn("ai.providers.groq.enabled=true but GROQ_API_KEY is not set — " +
                      "provider will be skipped unless a key override is stored in the database.");
@@ -28,10 +28,10 @@ public class GroqProviderFactory implements ProviderFactory {
                 systemCfg.apiKey().isBlank() ? "[NOT SET]" : "[CONFIGURED]");
     }
 
-    @Override public String          providerId()           { return ID; }
+    @Override public String providerId()           { return ID; }
     @Override public ProviderCostTier costTier()            { return ProviderCostTier.FREE; }
-    @Override public String          defaultModelAnalysis() { return systemCfg.modelAnalysis(); }
-    @Override public String          defaultModelMigration(){ return systemCfg.modelMigration(); }
+    @Override public String defaultModelAnalysis() { return systemCfg.modelAnalysis(); }
+    @Override public String defaultModelMigration(){ return systemCfg.modelMigration(); }
 
     @Override
     public boolean isEnabled() {

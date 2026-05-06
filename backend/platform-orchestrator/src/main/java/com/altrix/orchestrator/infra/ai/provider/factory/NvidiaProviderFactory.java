@@ -20,11 +20,11 @@ public class NvidiaProviderFactory implements ProviderFactory {
     public static final String ID = "nvidia";
 
     private final AiProvidersConfig.OpenAiCompatibleConfig systemCfg;
-    private final ProviderConfigResolver                   resolver;
+    private final ProviderConfigResolver resolver;
 
     public NvidiaProviderFactory(AiProvidersConfig config, ProviderConfigResolver resolver) {
         this.systemCfg = config.nvidia();
-        this.resolver  = resolver;
+        this.resolver = resolver;
         if (systemCfg.enabled() && systemCfg.apiKey().isBlank()) {
             log.warn("ai.providers.nvidia.enabled=true but NVIDIA_API_KEY is not set — " +
                      "provider will be skipped unless a key override is stored in the database.");
@@ -33,10 +33,10 @@ public class NvidiaProviderFactory implements ProviderFactory {
                 systemCfg.apiKey().isBlank() ? "[NOT SET]" : "[CONFIGURED]");
     }
 
-    @Override public String          providerId()            { return ID; }
+    @Override public String providerId()            { return ID; }
     @Override public ProviderCostTier costTier()             { return ProviderCostTier.PAID; }
-    @Override public String          defaultModelAnalysis()  { return systemCfg.modelAnalysis(); }
-    @Override public String          defaultModelMigration() { return systemCfg.modelMigration(); }
+    @Override public String defaultModelAnalysis()  { return systemCfg.modelAnalysis(); }
+    @Override public String defaultModelMigration() { return systemCfg.modelMigration(); }
 
     @Override
     public boolean isEnabled() {

@@ -73,13 +73,13 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
 
     static final int MAX_RETRIES = 3;
 
-    private final MigrationAgent<ProjectContext,    AnalysisReport>    contextAnalyzer;
-    private final MigrationAgent<AnalysisReport,    MigrationPlan>     planner;
-    private final MigrationAgent<ApprovedPlan,      MigrationArtifact> migrator;
+    private final MigrationAgent<ProjectContext, AnalysisReport>    contextAnalyzer;
+    private final MigrationAgent<AnalysisReport, MigrationPlan>     planner;
+    private final MigrationAgent<ApprovedPlan, MigrationArtifact> migrator;
     private final MigrationAgent<MigrationArtifact, ValidationReport>  validator;
-    private final MigrationAgent<WorkflowOutcome,   MigrationReport>   reporter;
-    private final ProgressNotifierPort                                  progressNotifier;
-    private final BaseCheckpointSaver                                   checkpointSaver;
+    private final MigrationAgent<WorkflowOutcome, MigrationReport>   reporter;
+    private final ProgressNotifierPort progressNotifier;
+    private final BaseCheckpointSaver checkpointSaver;
 
     /** Lazily compiled graph — built once on first call and reused thereafter. */
     private volatile CompiledGraph<MigrationState> compiledGraph;

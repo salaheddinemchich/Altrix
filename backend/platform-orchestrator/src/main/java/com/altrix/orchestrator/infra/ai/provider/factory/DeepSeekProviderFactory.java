@@ -20,19 +20,19 @@ public class DeepSeekProviderFactory implements ProviderFactory {
     public static final String ID = "deepseek";
 
     private final AiProvidersConfig.OpenAiCompatibleConfig systemCfg;
-    private final ProviderConfigResolver                   resolver;
+    private final ProviderConfigResolver resolver;
 
     public DeepSeekProviderFactory(AiProvidersConfig config, ProviderConfigResolver resolver) {
         this.systemCfg = config.deepseek();
-        this.resolver  = resolver;
+        this.resolver = resolver;
         log.info("DeepSeekProviderFactory ready — system key={}",
                 systemCfg.apiKey().isBlank() ? "[NOT SET]" : "[CONFIGURED]");
     }
 
-    @Override public String          providerId()           { return ID; }
+    @Override public String providerId()           { return ID; }
     @Override public ProviderCostTier costTier()            { return ProviderCostTier.FREE; }
-    @Override public String          defaultModelAnalysis() { return systemCfg.modelAnalysis(); }
-    @Override public String          defaultModelMigration(){ return systemCfg.modelMigration(); }
+    @Override public String defaultModelAnalysis() { return systemCfg.modelAnalysis(); }
+    @Override public String defaultModelMigration(){ return systemCfg.modelMigration(); }
 
     @Override
     public boolean isEnabled() {

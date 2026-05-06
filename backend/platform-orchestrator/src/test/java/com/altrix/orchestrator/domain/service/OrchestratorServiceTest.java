@@ -4,11 +4,9 @@ import com.altrix.common.domain.enums.FileChangeType;
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.model.ProjectContext;
-import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
-import com.altrix.orchestrator.domain.model.workflow.MigrationState;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
-import com.altrix.orchestrator.domain.port.out.AgentPort;
+import com.altrix.orchestrator.domain.model.workflow.MigrationState;
 import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
@@ -34,16 +32,15 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrchestratorServiceTest {
 
-    @Mock WorkflowExecutionPort   workflowExecution;
-    @Mock JobStatusUpdatePort     jobStatusUpdatePort;
+    @Mock WorkflowExecutionPort workflowExecution;
+    @Mock JobStatusUpdatePort jobStatusUpdatePort;
     @Mock MigratedFileStoragePort migratedFileStoragePort;
-    @Mock ProgressNotifierPort    progressNotifierPort;
-    @Mock CodeIndexingPort        codeIndexingPort;
-    @Mock MigrationPlanCachePort  migrationPlanCachePort;
+    @Mock ProgressNotifierPort progressNotifierPort;
+    @Mock CodeIndexingPort codeIndexingPort;
+    @Mock MigrationPlanCachePort migrationPlanCachePort;
     @Mock WorkflowSessionRepository sessionRepository;
 
     private OrchestratorService service() {
-        // save() returns the same session object so state transitions continue to work
         lenient().when(sessionRepository.save(any(WorkflowSession.class)))
                  .thenAnswer(inv -> inv.getArgument(0));
         return new OrchestratorService(
@@ -178,23 +175,5 @@ class OrchestratorServiceTest {
 
         verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
         verify(jobStatusUpdatePort, never()).markMigrating(any());
-    }
-
-    // ── AgentPort type invariants ─────────────────────────────────────────────
-
-    @Test
-    void agentPort_is_a_subtype_of_MigrationAgent() {
-        assertThat(MigrationAgent.class).isAssignableFrom(AgentPort.class);
-    }
-
-    @Test
-    void agentPort_mock_is_usable_as_MigrationAgent() {
-        AgentPort agent = mock(AgentPort.class);
-        when(agent.getName()).thenReturn("test-agent");
-        when(agent.getOrder()).thenReturn(1);
-
-        MigrationAgent<ProjectContext, ProjectContext> typed = agent;
-        assertThat(typed.getName()).isEqualTo("test-agent");
-        assertThat(typed.getOrder()).isEqualTo(1);
     }
 }

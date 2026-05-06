@@ -28,7 +28,7 @@ import java.util.List;
 public class SandboxValidatorAgent implements MigrationAgent<MigrationArtifact, ValidationReport> {
 
     @Override public String getName()  { return "Sandbox Validator"; }
-    @Override public int    getOrder() { return 4; }
+    @Override public int getOrder() { return 4; }
 
     @Override
     public ValidationReport execute(MigrationArtifact input) {

@@ -34,8 +34,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class ContextAnalyzerAgent implements MigrationAgent<ProjectContext, AnalysisReport> {
 
-    private static final int    MAX_PROMPT_FILES = 10;
-    private static final int    MAX_FILE_CHARS   = 4_000;
+    private static final int MAX_PROMPT_FILES = 10;
+    private static final int MAX_FILE_CHARS   = 4_000;
     private static final String SYSTEM_PROMPT    = """
             You are a software architect analysing a Java project for migration assessment.
             Examine the provided source files and identify:
@@ -49,11 +49,11 @@ public class ContextAnalyzerAgent implements MigrationAgent<ProjectContext, Anal
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private final AiPort         aiPort;
+    private final AiPort aiPort;
     private final FileReaderPort fileReader;
 
     @Override public String getName()  { return "Context Analyzer"; }
-    @Override public int    getOrder() { return 1; }
+    @Override public int getOrder() { return 1; }
 
     @Override
     public AnalysisReport execute(ProjectContext input) {

@@ -18,10 +18,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProjectService implements UploadProjectUseCase, GetProjectQuery {
 
-    private final ProjectRepositoryPort     projectRepository;
-    private final FileStoragePort           fileStoragePort;
+    private final ProjectRepositoryPort projectRepository;
+    private final FileStoragePort fileStoragePort;
     private final ProjectEventPublisherPort eventPublisher;
-    private final BuildSystemDetector   buildSystemDetector;
+    private final BuildSystemDetector buildSystemDetector;
 
     @Override
     public Project upload(

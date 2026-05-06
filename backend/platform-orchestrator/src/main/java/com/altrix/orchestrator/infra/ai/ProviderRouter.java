@@ -80,17 +80,17 @@ import java.util.function.Supplier;
 @Component
 public class ProviderRouter implements GetResilienceMetricsUseCase {
 
-    private final ProviderRegistry          registry;
+    private final ProviderRegistry registry;
     private final ProviderSelectionStrategy strategy;
-    private final CircuitBreakerRegistry    cbRegistry;
-    private final Retry                     retry;
-    private final Bulkhead                  analysisBulkhead;
-    private final Bulkhead                  migrationBulkhead;
-    private final TokenUsagePort            tokenUsagePort;
-    private final AiCallLedgerPort          aiCallLedgerPort;
-    private final long                      monthlyTokenLimit; // 0 = unlimited
-    private final McpToolsPort              mcpTools;          // null when MCP is disabled
-    private final int                       maxToolIter;
+    private final CircuitBreakerRegistry cbRegistry;
+    private final Retry retry;
+    private final Bulkhead analysisBulkhead;
+    private final Bulkhead migrationBulkhead;
+    private final TokenUsagePort tokenUsagePort;
+    private final AiCallLedgerPort aiCallLedgerPort;
+    private final long monthlyTokenLimit; // 0 = unlimited
+    private final McpToolsPort mcpTools;          // null when MCP is disabled
+    private final int maxToolIter;
 
     public ProviderRouter(
             ProviderRegistry         registry,
@@ -100,17 +100,17 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
             TokenUsagePort           tokenUsagePort,
             AiCallLedgerPort         aiCallLedgerPort) {
 
-        this.registry         = registry;
-        this.strategy         = buildStrategy(routingCfg);
-        this.cbRegistry       = buildCbRegistry(routingCfg.circuitBreaker());
-        this.retry            = buildRetry(routingCfg.retry());
+        this.registry = registry;
+        this.strategy = buildStrategy(routingCfg);
+        this.cbRegistry = buildCbRegistry(routingCfg.circuitBreaker());
+        this.retry = buildRetry(routingCfg.retry());
         this.analysisBulkhead = buildBulkhead("analysis",  routingCfg.bulkhead().analysisConcurrency(),  routingCfg.bulkhead().maxWaitMs());
         this.migrationBulkhead= buildBulkhead("migration", routingCfg.bulkhead().migrationConcurrency(), routingCfg.bulkhead().maxWaitMs());
-        this.tokenUsagePort    = tokenUsagePort;
-        this.aiCallLedgerPort  = aiCallLedgerPort;
+        this.tokenUsagePort = tokenUsagePort;
+        this.aiCallLedgerPort = aiCallLedgerPort;
         this.monthlyTokenLimit = routingCfg.monthlyTokenLimit();
-        this.mcpTools          = mcpTools.orElse(null);
-        this.maxToolIter       = mcpConfig.maxToolIterations();
+        this.mcpTools = mcpTools.orElse(null);
+        this.maxToolIter = mcpConfig.maxToolIterations();
 
         log.info("ProviderRouter ready — strategy={} tierPreference={} mcp={}",
                 routingCfg.strategy(), routingCfg.tierPreference(),

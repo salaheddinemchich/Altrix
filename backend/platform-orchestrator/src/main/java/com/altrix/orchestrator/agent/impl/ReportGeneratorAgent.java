@@ -25,7 +25,7 @@ import java.time.Instant;
 public class ReportGeneratorAgent implements MigrationAgent<WorkflowOutcome, MigrationReport> {
 
     @Override public String getName()  { return "Report Generator"; }
-    @Override public int    getOrder() { return 5; }
+    @Override public int getOrder() { return 5; }
 
     @Override
     public MigrationReport execute(WorkflowOutcome input) {

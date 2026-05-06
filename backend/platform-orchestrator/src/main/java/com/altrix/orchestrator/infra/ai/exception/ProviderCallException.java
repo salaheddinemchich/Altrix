@@ -12,15 +12,15 @@ import com.altrix.orchestrator.infra.ai.provider.ProviderTier;
  */
 public final class ProviderCallException extends RuntimeException {
 
-    private final String       providerId;
+    private final String providerId;
     private final ProviderTier tier;
 
     public ProviderCallException(String providerId, ProviderTier tier, Throwable cause) {
         super("Provider [" + providerId + "] failed for tier " + tier, cause);
         this.providerId = providerId;
-        this.tier       = tier;
+        this.tier = tier;
     }
 
-    public String       providerId() { return providerId; }
+    public String providerId() { return providerId; }
     public ProviderTier tier()       { return tier; }
 }

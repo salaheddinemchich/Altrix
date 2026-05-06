@@ -48,7 +48,7 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
     private final AiPort aiPort;
 
     @Override public String getName()  { return "Migration Planner"; }
-    @Override public int    getOrder() { return 2; }
+    @Override public int getOrder() { return 2; }
 
     @Override
     public MigrationPlan execute(AnalysisReport input) {

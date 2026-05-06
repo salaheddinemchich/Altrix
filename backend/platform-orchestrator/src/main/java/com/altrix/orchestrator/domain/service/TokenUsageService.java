@@ -9,12 +9,12 @@ import java.util.List;
 
 public class TokenUsageService implements GetTokenUsageUseCase {
 
-    private final TokenUsagePort   tokenUsagePort;
+    private final TokenUsagePort tokenUsagePort;
     private final TokenPricingPort pricingPort;
 
     public TokenUsageService(TokenUsagePort tokenUsagePort, TokenPricingPort pricingPort) {
         this.tokenUsagePort = tokenUsagePort;
-        this.pricingPort    = pricingPort;
+        this.pricingPort = pricingPort;
     }
 
     @Override

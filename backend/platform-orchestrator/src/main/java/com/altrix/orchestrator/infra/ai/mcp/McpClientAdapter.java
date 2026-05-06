@@ -58,9 +58,9 @@ public class McpClientAdapter implements McpToolsPort {
     private static final String CLIENT_NAME   = "platform-orchestrator";
     private static final String CLIENT_VER    = "1.0";
 
-    private final McpConfig    config;
+    private final McpConfig config;
     private final ObjectMapper objectMapper;
-    private final HttpClient   http;
+    private final HttpClient http;
 
     /** tool name → owning server name (used to route {@code tools/call} requests) */
     private final Map<String, String>                  toolToServer = new ConcurrentHashMap<>();
@@ -70,9 +70,9 @@ public class McpClientAdapter implements McpToolsPort {
     private final AtomicInteger idSeq = new AtomicInteger(0);
 
     public McpClientAdapter(McpConfig config, ObjectMapper objectMapper) {
-        this.config       = config;
+        this.config = config;
         this.objectMapper = objectMapper;
-        this.http         = HttpClient.newBuilder()
+        this.http = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();

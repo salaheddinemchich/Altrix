@@ -27,7 +27,7 @@ import java.time.Instant;
 public class ApprovalTimeoutScheduler {
 
     private final SessionManagementService sessionManagementService;
-    private final ApprovalConfig           approvalConfig;
+    private final ApprovalConfig approvalConfig;
 
     @Scheduled(cron = "${approval.scheduler-cron:0 * * * * *}")
     public void expireStaleApprovals() {

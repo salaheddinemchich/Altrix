@@ -22,7 +22,7 @@ import java.util.Optional;
 public class ProjectPersistenceAdapter implements ProjectRepositoryPort {
 
     private final ProjectJpaRepository jpaRepository;
-    private final ProjectMapper        mapper;
+    private final ProjectMapper mapper;
 
     @Override
     public Project save(Project project) {

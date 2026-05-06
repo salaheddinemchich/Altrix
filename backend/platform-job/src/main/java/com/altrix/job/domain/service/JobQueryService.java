@@ -22,7 +22,7 @@ import java.util.List;
 public class JobQueryService implements GetJobQuery {
 
     private final JobRepositoryPort jobRepository;
-    private final JobCachePort      jobCachePort;
+    private final JobCachePort jobCachePort;
 
     @Override
     public MigrationJob findById(String jobId) {

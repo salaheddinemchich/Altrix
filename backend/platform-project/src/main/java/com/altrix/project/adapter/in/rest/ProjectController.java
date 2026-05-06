@@ -38,7 +38,7 @@ import java.util.List;
 public class ProjectController {
 
     private final UploadProjectUseCase uploadProjectUseCase;
-    private final GetProjectQuery      getProjectQuery;
+    private final GetProjectQuery getProjectQuery;
 
     /**
      * POST /api/v1/projects/upload
