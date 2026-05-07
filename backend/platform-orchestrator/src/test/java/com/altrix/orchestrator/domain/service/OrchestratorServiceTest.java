@@ -43,10 +43,11 @@ class OrchestratorServiceTest {
     private OrchestratorService service() {
         lenient().when(sessionRepository.save(any(WorkflowSession.class)))
                  .thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(sessionRepository.findByJobId(any())).thenReturn(java.util.Optional.empty());
         return new OrchestratorService(
                 workflowExecution, jobStatusUpdatePort, migratedFileStoragePort,
                 progressNotifierPort, codeIndexingPort, migrationPlanCachePort,
-                sessionRepository);
+                sessionRepository, 3);
     }
 
     // ── happy path ────────────────────────────────────────────────────────────

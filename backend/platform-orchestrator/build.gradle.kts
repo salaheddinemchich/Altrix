@@ -15,6 +15,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-websocket")
 
+    // Email — approval notifications (#66)
+    implementation("org.springframework.boot:spring-boot-starter-mail")
+
     // Validation
     implementation("org.springframework.boot:spring-boot-starter-validation")
 

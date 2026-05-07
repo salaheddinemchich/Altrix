@@ -45,7 +45,8 @@ import java.util.List;
 @EnableAsync
 @EnableScheduling
 @EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class,
-        EncryptionConfig.class, McpConfig.class, ApprovalConfig.class})
+        EncryptionConfig.class, McpConfig.class, ApprovalConfig.class, AutoPauseConfig.class,
+        ApprovalNotificationConfig.class})
 public class BeanConfig {
 
     @Bean
@@ -65,13 +66,14 @@ public class BeanConfig {
 
     @Bean
     public OrchestratorService orchestratorService(
-            WorkflowExecutionPort     workflowExecution,
-            JobStatusUpdatePort       jobStatusUpdatePort,
-            MigratedFileStoragePort   migratedFileStoragePort,
-            ProgressNotifierPort      progressNotifierPort,
-            CodeIndexingPort          codeIndexingPort,
-            MigrationPlanCachePort    migrationPlanCachePort,
-            WorkflowSessionRepository workflowSessionRepository
+            WorkflowExecutionPort workflowExecution,
+            JobStatusUpdatePort jobStatusUpdatePort,
+            MigratedFileStoragePort migratedFileStoragePort,
+            ProgressNotifierPort progressNotifierPort,
+            CodeIndexingPort codeIndexingPort,
+            MigrationPlanCachePort migrationPlanCachePort,
+            WorkflowSessionRepository workflowSessionRepository,
+            AutoPauseConfig autoPauseConfig
     ) {
         return new OrchestratorService(
                 workflowExecution,
@@ -80,7 +82,8 @@ public class BeanConfig {
                 progressNotifierPort,
                 codeIndexingPort,
                 migrationPlanCachePort,
-                workflowSessionRepository
+                workflowSessionRepository,
+                autoPauseConfig.threshold()
         );
     }
 

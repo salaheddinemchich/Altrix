@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.adapter.in.rest;
 
+import com.altrix.orchestrator.adapter.in.rest.dto.PauseRecordResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionStatusResponse;
 import com.altrix.orchestrator.domain.exception.IllegalStateTransitionException;
 import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
@@ -7,19 +8,22 @@ import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
+import com.altrix.orchestrator.domain.port.out.SessionPauseHistoryPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * REST adapter for session lifecycle operations (#64 #65 #69 #70).
+ * REST adapter for session lifecycle operations (#64 #65 #69 #70 #72).
  *
  * <ul>
  *   <li>{@code GET  /api/v1/sessions/{sessionId}}           — fetch current session state</li>
+ *   <li>{@code GET  /api/v1/sessions/{sessionId}/pauses}    — pause history (#72)</li>
  *   <li>{@code POST /api/v1/sessions/{sessionId}/approve}   — approve plan → MIGRATING (#64)</li>
  *   <li>{@code POST /api/v1/sessions/{sessionId}/reject}    — reject plan → FAILED (#65)</li>
  *   <li>{@code POST /api/v1/sessions/{sessionId}/pause}     — pause session (#69)</li>
@@ -37,6 +41,7 @@ public class SessionController {
     private final HandleApprovalUseCase handleApproval;
     private final PauseResumeSessionUseCase pauseResume;
     private final WorkflowSessionRepository sessionRepository;
+    private final SessionPauseHistoryPort pauseHistoryPort;
 
     // ── GET ───────────────────────────────────────────────────────────────────
 
@@ -45,6 +50,18 @@ public class SessionController {
         WorkflowSession session = sessionRepository.findById(WorkflowSessionId.of(UUID.fromString(sessionId)))
                 .orElseThrow(() -> new SessionNotFoundException(WorkflowSessionId.of(UUID.fromString(sessionId))));
         return ResponseEntity.ok(SessionStatusResponse.from(session));
+    }
+
+    // ── Pause history (#72) ───────────────────────────────────────────────────
+
+    @GetMapping("/{sessionId}/pauses")
+    public ResponseEntity<List<PauseRecordResponse>> getPauseHistory(@PathVariable String sessionId) {
+        List<PauseRecordResponse> history = pauseHistoryPort
+                .findBySessionId(toId(sessionId))
+                .stream()
+                .map(PauseRecordResponse::from)
+                .toList();
+        return ResponseEntity.ok(history);
     }
 
     // ── Approval (#64 #65) ────────────────────────────────────────────────────

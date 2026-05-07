@@ -47,6 +47,9 @@ public class WorkflowSessionJpaEntity {
     @Column(name = "paused_from", length = 30)
     private SessionStatus pausedFrom;
 
+    @Column(name = "consecutive_agent_errors", nullable = false)
+    private int consecutiveAgentErrors;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

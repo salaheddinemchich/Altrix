@@ -44,6 +44,7 @@ public class OrchestratorService implements RunPipelineUseCase {
     private final CodeIndexingPort codeIndexingPort;
     private final MigrationPlanCachePort planCachePort;
     private final WorkflowSessionRepository sessionRepository;
+    private final int autoPauseThreshold;
 
     public OrchestratorService(
             WorkflowExecutionPort workflowExecution,
@@ -52,7 +53,8 @@ public class OrchestratorService implements RunPipelineUseCase {
             ProgressNotifierPort progressNotifierPort,
             CodeIndexingPort codeIndexingPort,
             MigrationPlanCachePort planCachePort,
-            WorkflowSessionRepository sessionRepository
+            WorkflowSessionRepository sessionRepository,
+            int autoPauseThreshold
     ) {
         this.workflowExecution = workflowExecution;
         this.jobStatusUpdatePort = jobStatusUpdatePort;
@@ -61,7 +63,9 @@ public class OrchestratorService implements RunPipelineUseCase {
         this.codeIndexingPort = codeIndexingPort;
         this.planCachePort = planCachePort;
         this.sessionRepository = sessionRepository;
-        log.info("OrchestratorService initialised — typed LangGraph4j workflow");
+        this.autoPauseThreshold = autoPauseThreshold;
+        log.info("OrchestratorService initialised — typed LangGraph4j workflow (auto-pause threshold={})",
+                autoPauseThreshold);
     }
 
     @Override
@@ -69,8 +73,11 @@ public class OrchestratorService implements RunPipelineUseCase {
         String jobId = initial.jobId();
         log.info("Starting pipeline for job '{}'", jobId);
 
-        WorkflowSession session = sessionRepository.save(
-                WorkflowSession.create(jobId, initial.projectId()));
+        // Re-use an existing session when retrying after auto-pause; create one otherwise.
+        WorkflowSession session = sessionRepository.findByJobId(jobId)
+                .filter(s -> !s.status().isTerminal())
+                .orElseGet(() -> WorkflowSession.create(jobId, initial.projectId()));
+        session = sessionRepository.save(session);
 
         try {
             // ── Phase 0: RAG indexing ────────────────────────────────────────
@@ -96,6 +103,7 @@ public class OrchestratorService implements RunPipelineUseCase {
             String outputKey = migratedFileStoragePort.storeMigratedZip(jobId, files);
             cachePlanBestEffort(initial, files);
 
+            session.resetAgentErrors();
             session.complete();
             sessionRepository.save(session);
 
@@ -132,10 +140,19 @@ public class OrchestratorService implements RunPipelineUseCase {
 
         } catch (Exception e) {
             log.error("Pipeline FAILED for job '{}': {}", jobId, e.getMessage(), e);
-            failSessionBestEffort(session, e.getMessage());
-            jobStatusUpdatePort.markFailed(jobId, e.getMessage());
-            progressNotifierPort.notify(jobId, "Pipeline", "FAILED", e.getMessage());
-            throw new AgentFailureException("Pipeline", e.getMessage());
+            boolean autoPaused = applyAgentFailureBestEffort(session, e.getMessage());
+            if (autoPaused) {
+                log.warn("Session '{}' auto-paused after {} consecutive failures", session.id(), autoPauseThreshold);
+                jobStatusUpdatePort.markFailed(jobId,
+                        "Auto-paused after " + autoPauseThreshold + " consecutive failures — awaiting manual resume");
+                progressNotifierPort.notify(jobId, "Pipeline", "PAUSED",
+                        "Session auto-paused. Use POST /sessions/{id}/resume to retry.");
+            } else {
+                jobStatusUpdatePort.markFailed(jobId, e.getMessage());
+                progressNotifierPort.notify(jobId, "Pipeline", "FAILED", e.getMessage());
+                throw new AgentFailureException("Pipeline", e.getMessage());
+            }
+            return initial;
         }
     }
 
@@ -146,6 +163,18 @@ public class OrchestratorService implements RunPipelineUseCase {
         } catch (Exception ex) {
             log.warn("Could not persist FAILED state for session '{}' (non-fatal): {}",
                     session.id(), ex.getMessage());
+        }
+    }
+
+    private boolean applyAgentFailureBestEffort(WorkflowSession session, String reason) {
+        try {
+            boolean paused = session.handleAgentFailure(reason, autoPauseThreshold);
+            sessionRepository.save(session);
+            return paused;
+        } catch (Exception ex) {
+            log.warn("Could not persist failure state for session '{}' (non-fatal): {}",
+                    session.id(), ex.getMessage());
+            return false;
         }
     }
 

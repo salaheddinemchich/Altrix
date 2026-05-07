@@ -7,6 +7,7 @@ import com.altrix.orchestrator.domain.model.session.event.MigrationCompleted;
 import com.altrix.orchestrator.domain.model.session.event.PlanReady;
 import com.altrix.orchestrator.domain.model.session.event.SessionFailed;
 import com.altrix.orchestrator.domain.model.session.event.SessionPaused;
+import com.altrix.orchestrator.domain.model.session.event.SessionResumed;
 import com.altrix.orchestrator.domain.model.session.event.SessionStarted;
 
 import java.time.Instant;
@@ -33,6 +34,7 @@ public class WorkflowSession {
     private MigrationPlan plan;
     private String errorMessage;
     private SessionStatus pausedFrom;
+    private int consecutiveAgentErrors;
     private final Instant createdAt;
     private Instant updatedAt;
 
@@ -48,6 +50,7 @@ public class WorkflowSession {
                 projectId,
                 SessionStatus.PENDING,
                 null, null, null,
+                0,
                 Instant.now());
     }
 
@@ -55,7 +58,7 @@ public class WorkflowSession {
     public WorkflowSession(WorkflowSessionId id, String jobId, String projectId,
                            SessionStatus status, MigrationPlan plan,
                            String errorMessage, SessionStatus pausedFrom,
-                           Instant createdAt) {
+                           int consecutiveAgentErrors, Instant createdAt) {
         this.id = Objects.requireNonNull(id);
         this.jobId = Objects.requireNonNull(jobId);
         this.projectId = Objects.requireNonNull(projectId);
@@ -63,6 +66,7 @@ public class WorkflowSession {
         this.plan = plan;
         this.errorMessage = errorMessage;
         this.pausedFrom = pausedFrom;
+        this.consecutiveAgentErrors = consecutiveAgentErrors;
         this.createdAt = Objects.requireNonNull(createdAt);
         this.updatedAt = createdAt;
     }
@@ -145,6 +149,30 @@ public class WorkflowSession {
         this.status = pausedFrom;
         this.pausedFrom = null;
         this.updatedAt = Instant.now();
+        pendingEvents.add(SessionResumed.of(id, jobId, this.status));
+    }
+
+    // ── Auto-pause circuit-breaker (#71) ─────────────────────────────────────
+
+    /**
+     * Records an agent failure and applies auto-pause when the consecutive error
+     * count reaches {@code autoPauseThreshold}.
+     *
+     * @return {@code true} if the session was auto-paused; {@code false} if it was failed
+     */
+    public boolean handleAgentFailure(String reason, int autoPauseThreshold) {
+        consecutiveAgentErrors++;
+        if (consecutiveAgentErrors >= autoPauseThreshold) {
+            pause();
+            return true;
+        }
+        fail(reason);
+        return false;
+    }
+
+    /** Resets the consecutive error counter after a successful pipeline run. */
+    public void resetAgentErrors() {
+        consecutiveAgentErrors = 0;
     }
 
     // ── Event drain ───────────────────────────────────────────────────────────
@@ -168,6 +196,7 @@ public class WorkflowSession {
     public MigrationPlan plan() { return plan; }
     public String errorMessage() { return errorMessage; }
     public SessionStatus pausedFrom() { return pausedFrom; }
+    public int consecutiveAgentErrors() { return consecutiveAgentErrors; }
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
 

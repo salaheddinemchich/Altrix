@@ -84,6 +84,7 @@ public class WorkflowSessionPersistenceAdapter implements WorkflowSessionReposit
                 .plan(s.plan())
                 .errorMessage(s.errorMessage())
                 .pausedFrom(s.pausedFrom())
+                .consecutiveAgentErrors(s.consecutiveAgentErrors())
                 .createdAt(s.createdAt())
                 .updatedAt(s.updatedAt())
                 .build();
@@ -98,6 +99,7 @@ public class WorkflowSessionPersistenceAdapter implements WorkflowSessionReposit
                 e.getPlan(),
                 e.getErrorMessage(),
                 e.getPausedFrom(),
+                e.getConsecutiveAgentErrors(),
                 e.getCreatedAt());
     }
 }

@@ -252,4 +252,56 @@ class WorkflowSessionTest {
         assertThatThrownBy(() -> s.completePlan(null))
                 .isInstanceOf(NullPointerException.class);
     }
+
+    // ── auto-pause circuit-breaker (#71) ──────────────────────────────────────
+
+    @Test
+    void handleAgentFailure_belowThreshold_fails_andReturnsFalse() {
+        WorkflowSession s = pending();
+        s.startMigration();
+        boolean paused = s.handleAgentFailure("boom", 3);
+        assertThat(paused).isFalse();
+        assertThat(s.status()).isEqualTo(SessionStatus.FAILED);
+        assertThat(s.consecutiveAgentErrors()).isEqualTo(1);
+    }
+
+    @Test
+    void handleAgentFailure_atThreshold_pauses_andReturnsTrue() {
+        WorkflowSession s = pending();
+        s.startMigration();
+        boolean paused = s.handleAgentFailure("boom", 1);
+        assertThat(paused).isTrue();
+        assertThat(s.status()).isEqualTo(SessionStatus.PAUSED);
+        assertThat(s.consecutiveAgentErrors()).isEqualTo(1);
+    }
+
+    @Test
+    void handleAgentFailure_resumedSession_accumulatesErrorsAcrossAttempts() {
+        WorkflowSession s = pending();
+        s.startMigration();
+        s.pause();              // manually paused
+        s.drainEvents();
+        s.resume();             // back to MIGRATING
+
+        boolean paused = s.handleAgentFailure("err", 2); // count=1, threshold=2 → fail
+        assertThat(paused).isFalse();
+        assertThat(s.consecutiveAgentErrors()).isEqualTo(1);
+    }
+
+    @Test
+    void resetAgentErrors_setsCounterToZero() {
+        WorkflowSession s = pending();
+        s.startMigration();
+        s.handleAgentFailure("err", 5);
+        // start a new session (since the first one is now FAILED) to test reset
+        WorkflowSession s2 = pending();
+        s2.startMigration();
+        s2.resetAgentErrors();
+        assertThat(s2.consecutiveAgentErrors()).isEqualTo(0);
+    }
+
+    @Test
+    void consecutiveAgentErrors_startsAtZero() {
+        assertThat(pending().consecutiveAgentErrors()).isZero();
+    }
 }

@@ -2,6 +2,8 @@ package com.altrix.orchestrator.adapter.in.event;
 
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.event.*;
+import com.altrix.orchestrator.domain.port.out.ApprovalNotificationPort;
+import com.altrix.orchestrator.domain.port.out.SessionPauseHistoryPort;
 import com.altrix.orchestrator.domain.port.out.SessionProgressPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,14 +11,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.time.Instant;
+
 /**
  * Reacts to domain events emitted by {@link com.altrix.orchestrator.domain.model.session.WorkflowSession}.
  *
  * <p>All listeners fire on {@code AFTER_COMMIT} (#56), so no event is dispatched
  * if the originating transaction rolls back.
  *
- * <p>Each handler both logs and pushes a real-time update to WebSocket subscribers
- * via {@link SessionProgressPort} (#60).
+ * <p>Each handler both logs, pushes a real-time update via {@link SessionProgressPort} (#60),
+ * and (for pause/resume events) persists a history entry via {@link SessionPauseHistoryPort} (#72).
  */
 @Slf4j
 @Component
@@ -24,6 +28,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class SessionEventListener {
 
     private final SessionProgressPort sessionProgressPort;
+    private final SessionPauseHistoryPort pauseHistoryPort;
+    private final ApprovalNotificationPort approvalNotificationPort;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void on(SessionStarted event) {
@@ -45,6 +51,7 @@ public class SessionEventListener {
         log.info("Approval requested — id={} job={}", event.sessionId(), event.jobId());
         sessionProgressPort.publishSessionUpdate(
                 event.sessionId(), event.jobId(), SessionStatus.AWAITING_APPROVAL, null);
+        approvalNotificationPort.notifyApprovalRequired(event.sessionId(), event.jobId());
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -71,5 +78,15 @@ public class SessionEventListener {
         sessionProgressPort.publishSessionUpdate(
                 event.sessionId(), event.jobId(), SessionStatus.PAUSED,
                 "Paused from: " + event.pausedFrom());
+        pauseHistoryPort.record(event.sessionId(), event.pausedFrom(), Instant.now());
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void on(SessionResumed event) {
+        log.info("Session resumed — id={} job={} resumedTo={}",
+                event.sessionId(), event.jobId(), event.resumedTo());
+        sessionProgressPort.publishSessionUpdate(
+                event.sessionId(), event.jobId(), event.resumedTo(), null);
+        pauseHistoryPort.markResumed(event.sessionId(), Instant.now());
     }
 }

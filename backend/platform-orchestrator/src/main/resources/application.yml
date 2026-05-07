@@ -35,6 +35,18 @@ spring:
           max-wait: ${REDIS_POOL_MAX_WAIT:1000ms}
         shutdown-timeout: 200ms
 
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
     consumer:
@@ -172,6 +184,15 @@ websocket:
 approval:
   timeout: ${APPROVAL_TIMEOUT:30m}
   scheduler-cron: ${APPROVAL_SCHEDULER_CRON:"0 * * * * *"}
+  notification:
+    enabled: ${APPROVAL_NOTIFICATION_ENABLED:false}
+    reviewer-email: ${APPROVAL_REVIEWER_EMAIL:}
+    from-email: ${APPROVAL_FROM_EMAIL:altrix-noreply@localhost}
+    base-url: ${APPROVAL_BASE_URL:http://localhost:4200}
+
+workflow:
+  auto-pause:
+    threshold: ${AUTO_PAUSE_THRESHOLD:3}
 
 management:
   endpoints:
