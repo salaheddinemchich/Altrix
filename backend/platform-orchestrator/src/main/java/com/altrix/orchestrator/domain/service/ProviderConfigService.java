@@ -79,11 +79,11 @@ public class ProviderConfigService implements UpdateProviderConfigUseCase, GetPr
 
     private ProviderConfigView toView(ProviderFactory factory, ProviderConfig override) {
         boolean hasCustomKey = override != null && override.hasCustomApiKey();
-        boolean enabled      = override != null && override.getEnabled() != null
+        boolean enabled = override != null && override.getEnabled() != null
                 ? override.getEnabled()
                 : factory.isEnabled();
 
-        String modelAnalysis  = override != null && override.getModelAnalysis() != null
+        String modelAnalysis = override != null && override.getModelAnalysis() != null
                 ? override.getModelAnalysis()
                 : factory.defaultModelAnalysis();
 

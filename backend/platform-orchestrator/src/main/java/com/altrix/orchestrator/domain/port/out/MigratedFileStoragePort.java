@@ -13,7 +13,7 @@ public interface MigratedFileStoragePort {
     /**
      * Packs all migrated files into a ZIP and stores it.
      *
-     * @param jobId        used to construct the storage key
+     * @param jobId         used to construct the storage key
      * @param migratedFiles all files produced by the migration
      * @return the storage key of the output ZIP
      */

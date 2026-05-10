@@ -26,13 +26,14 @@ public record AiPricingConfig(
     public record ModelPricing(
             @DefaultValue("0.0") double inputPerMillion,
             @DefaultValue("0.0") double outputPerMillion
-    ) {}
+    ) {
+    }
 
     @Override
     public double estimateCostUsd(String providerId, long inputTokens, long outputTokens) {
         ModelPricing pricing = models.get(providerId);
         if (pricing == null) return 0.0;
-        return (inputTokens  / 1_000_000.0) * pricing.inputPerMillion()
-             + (outputTokens / 1_000_000.0) * pricing.outputPerMillion();
+        return (inputTokens / 1_000_000.0) * pricing.inputPerMillion()
+                + (outputTokens / 1_000_000.0) * pricing.outputPerMillion();
     }
 }

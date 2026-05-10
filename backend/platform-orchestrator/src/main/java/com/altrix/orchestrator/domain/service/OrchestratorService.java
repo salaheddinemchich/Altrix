@@ -8,13 +8,7 @@ import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.workflow.MigrationState;
 import com.altrix.orchestrator.domain.port.in.RunPipelineUseCase;
-import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
-import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
-import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
-import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
-import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
-import com.altrix.orchestrator.domain.port.out.WorkflowExecutionPort;
-import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
+import com.altrix.orchestrator.domain.port.out.*;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -104,6 +98,7 @@ public class OrchestratorService implements RunPipelineUseCase {
             cachePlanBestEffort(initial, files);
 
             session.resetAgentErrors();
+            session.storeMigratedFiles(files);
             session.complete();
             sessionRepository.save(session);
 

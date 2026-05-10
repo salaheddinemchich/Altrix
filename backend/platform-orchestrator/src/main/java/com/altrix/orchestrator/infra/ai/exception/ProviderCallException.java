@@ -21,6 +21,11 @@ public final class ProviderCallException extends RuntimeException {
         this.tier = tier;
     }
 
-    public String providerId() { return providerId; }
-    public ProviderTier tier()       { return tier; }
+    public String providerId() {
+        return providerId;
+    }
+
+    public ProviderTier tier() {
+        return tier;
+    }
 }

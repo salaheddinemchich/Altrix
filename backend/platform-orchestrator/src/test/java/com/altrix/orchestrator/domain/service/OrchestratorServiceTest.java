@@ -7,13 +7,7 @@ import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.workflow.MigrationState;
-import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
-import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
-import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
-import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
-import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
-import com.altrix.orchestrator.domain.port.out.WorkflowExecutionPort;
-import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
+import com.altrix.orchestrator.domain.port.out.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -32,17 +26,24 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrchestratorServiceTest {
 
-    @Mock WorkflowExecutionPort workflowExecution;
-    @Mock JobStatusUpdatePort jobStatusUpdatePort;
-    @Mock MigratedFileStoragePort migratedFileStoragePort;
-    @Mock ProgressNotifierPort progressNotifierPort;
-    @Mock CodeIndexingPort codeIndexingPort;
-    @Mock MigrationPlanCachePort migrationPlanCachePort;
-    @Mock WorkflowSessionRepository sessionRepository;
+    @Mock
+    WorkflowExecutionPort workflowExecution;
+    @Mock
+    JobStatusUpdatePort jobStatusUpdatePort;
+    @Mock
+    MigratedFileStoragePort migratedFileStoragePort;
+    @Mock
+    ProgressNotifierPort progressNotifierPort;
+    @Mock
+    CodeIndexingPort codeIndexingPort;
+    @Mock
+    MigrationPlanCachePort migrationPlanCachePort;
+    @Mock
+    WorkflowSessionRepository sessionRepository;
 
     private OrchestratorService service() {
         lenient().when(sessionRepository.save(any(WorkflowSession.class)))
-                 .thenAnswer(inv -> inv.getArgument(0));
+                .thenAnswer(inv -> inv.getArgument(0));
         lenient().when(sessionRepository.findByJobId(any())).thenReturn(java.util.Optional.empty());
         return new OrchestratorService(
                 workflowExecution, jobStatusUpdatePort, migratedFileStoragePort,
@@ -64,9 +65,9 @@ class OrchestratorServiceTest {
 
         MigrationArtifact artifact = new MigrationArtifact("proj-1", List.of(file), "done");
         MigrationState result = new MigrationState(Map.of(
-                MigrationState.PROJECT_CONTEXT,    initial,
+                MigrationState.PROJECT_CONTEXT, initial,
                 MigrationState.MIGRATION_ARTIFACT, artifact,
-                MigrationState.RETRY_COUNT,        0));
+                MigrationState.RETRY_COUNT, 0));
 
         when(workflowExecution.execute(initial)).thenReturn(result);
         when(migratedFileStoragePort.storeMigratedZip(eq("job-1"), any()))
@@ -91,9 +92,9 @@ class OrchestratorServiceTest {
 
         MigrationArtifact artifact = new MigrationArtifact("p", List.of(file), "ok");
         MigrationState state = new MigrationState(Map.of(
-                MigrationState.PROJECT_CONTEXT,    initial,
+                MigrationState.PROJECT_CONTEXT, initial,
                 MigrationState.MIGRATION_ARTIFACT, artifact,
-                MigrationState.RETRY_COUNT,        0));
+                MigrationState.RETRY_COUNT, 0));
 
         when(workflowExecution.execute(initial)).thenReturn(state);
         when(migratedFileStoragePort.storeMigratedZip(any(), any())).thenReturn("out.zip");
@@ -166,7 +167,7 @@ class OrchestratorServiceTest {
                 .jobId("job-1").projectId("proj-1").build();
         MigrationState emptyState = new MigrationState(Map.of(
                 MigrationState.PROJECT_CONTEXT, initial,
-                MigrationState.RETRY_COUNT,     0));
+                MigrationState.RETRY_COUNT, 0));
 
         when(workflowExecution.execute(initial)).thenReturn(emptyState);
         when(migratedFileStoragePort.storeMigratedZip(eq("job-1"), any()))

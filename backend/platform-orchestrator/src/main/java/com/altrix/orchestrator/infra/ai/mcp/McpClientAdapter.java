@@ -1,9 +1,9 @@
 package com.altrix.orchestrator.infra.ai.mcp;
 
+import com.altrix.orchestrator.infra.ai.tools.McpToolsPort;
+import com.altrix.orchestrator.infrastructure.config.McpConfig;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.altrix.orchestrator.infrastructure.config.McpConfig;
-import com.altrix.orchestrator.infra.ai.tools.McpToolsPort;
 import dev.langchain4j.agent.tool.ToolParameters;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import jakarta.annotation.PostConstruct;
@@ -53,20 +53,26 @@ import java.util.concurrent.atomic.AtomicInteger;
 @ConditionalOnProperty(prefix = "ai.mcp", name = "enabled", havingValue = "true")
 public class McpClientAdapter implements McpToolsPort {
 
-    private static final String JSONRPC       = "2.0";
+    private static final String JSONRPC = "2.0";
     private static final String PROTO_VERSION = "2024-11-05";
-    private static final String CLIENT_NAME   = "platform-orchestrator";
-    private static final String CLIENT_VER    = "1.0";
+    private static final String CLIENT_NAME = "platform-orchestrator";
+    private static final String CLIENT_VER = "1.0";
 
     private final McpConfig config;
     private final ObjectMapper objectMapper;
     private final HttpClient http;
 
-    /** tool name → owning server name (used to route {@code tools/call} requests) */
-    private final Map<String, String>                  toolToServer = new ConcurrentHashMap<>();
-    /** server name → its discovered tool specs */
-    private final Map<String, List<ToolSpecification>> serverTools  = new ConcurrentHashMap<>();
-    /** monotonically increasing JSON-RPC request id */
+    /**
+     * tool name → owning server name (used to route {@code tools/call} requests)
+     */
+    private final Map<String, String> toolToServer = new ConcurrentHashMap<>();
+    /**
+     * server name → its discovered tool specs
+     */
+    private final Map<String, List<ToolSpecification>> serverTools = new ConcurrentHashMap<>();
+    /**
+     * monotonically increasing JSON-RPC request id
+     */
     private final AtomicInteger idSeq = new AtomicInteger(0);
 
     public McpClientAdapter(McpConfig config, ObjectMapper objectMapper) {
@@ -134,18 +140,20 @@ public class McpClientAdapter implements McpToolsPort {
     private void sendInitialize(McpConfig.McpServer server) throws Exception {
         Map<String, Object> params = Map.of(
                 "protocolVersion", PROTO_VERSION,
-                "capabilities",    Map.of("tools", Map.of()),
-                "clientInfo",      Map.of("name", CLIENT_NAME, "version", CLIENT_VER)
+                "capabilities", Map.of("tools", Map.of()),
+                "clientInfo", Map.of("name", CLIENT_NAME, "version", CLIENT_VER)
         );
         postRpc(server, "initialize", params);
         log.debug("initialize handshake complete for MCP server [{}]", server.name());
     }
 
-    /** Fire-and-forget notification (no {@code id} field, response may be empty). */
+    /**
+     * Fire-and-forget notification (no {@code id} field, response may be empty).
+     */
     private void sendNotificationInitialized(McpConfig.McpServer server) throws Exception {
         Map<String, Object> notification = Map.of(
                 "jsonrpc", JSONRPC,
-                "method",  "notifications/initialized"
+                "method", "notifications/initialized"
         );
         String body = objectMapper.writeValueAsString(notification);
         HttpRequest req = buildRequest(server, body);
@@ -176,7 +184,8 @@ public class McpClientAdapter implements McpToolsPort {
             throws Exception {
 
         Map<String, Object> args = argumentsJson != null && !argumentsJson.isBlank()
-                ? objectMapper.readValue(argumentsJson, new TypeReference<>() {})
+                ? objectMapper.readValue(argumentsJson, new TypeReference<>() {
+        })
                 : Map.of();
 
         Map<String, Object> params = Map.of("name", toolName, "arguments", args);
@@ -212,9 +221,9 @@ public class McpClientAdapter implements McpToolsPort {
         int id = idSeq.incrementAndGet();
         Map<String, Object> rpc = Map.of(
                 "jsonrpc", JSONRPC,
-                "method",  method,
-                "params",  params,
-                "id",      id
+                "method", method,
+                "params", params,
+                "id", id
         );
 
         String body = objectMapper.writeValueAsString(rpc);
@@ -231,7 +240,8 @@ public class McpClientAdapter implements McpToolsPort {
             return Map.of();
         }
 
-        Map<String, Object> json = objectMapper.readValue(responseBody, new TypeReference<>() {});
+        Map<String, Object> json = objectMapper.readValue(responseBody, new TypeReference<>() {
+        });
 
         if (json.containsKey("error")) {
             Map<String, Object> err = (Map<String, Object>) json.get("error");
@@ -245,7 +255,9 @@ public class McpClientAdapter implements McpToolsPort {
         return Map.of();
     }
 
-    /** Extracts the JSON payload from an SSE-framed body if necessary. */
+    /**
+     * Extracts the JSON payload from an SSE-framed body if necessary.
+     */
     private String unwrapSse(String body) {
         if (body == null || !body.startsWith("data:")) {
             return body != null ? body : "";
@@ -304,6 +316,8 @@ public class McpClientAdapter implements McpToolsPort {
     // ── inner exception ───────────────────────────────────────────────────────
 
     public static final class McpException extends RuntimeException {
-        public McpException(String message) { super(message); }
+        public McpException(String message) {
+            super(message);
+        }
     }
 }

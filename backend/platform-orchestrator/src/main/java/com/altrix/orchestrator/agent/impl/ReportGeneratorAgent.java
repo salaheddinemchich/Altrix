@@ -1,12 +1,7 @@
 package com.altrix.orchestrator.agent.impl;
 
 import com.altrix.common.domain.enums.FileChangeType;
-import com.altrix.common.domain.model.AnalysisReport;
-import com.altrix.common.domain.model.MigrationArtifact;
-import com.altrix.common.domain.model.MigrationPlan;
-import com.altrix.common.domain.model.MigrationReport;
-import com.altrix.common.domain.model.ValidationReport;
-import com.altrix.common.domain.model.WorkflowOutcome;
+import com.altrix.common.domain.model.*;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +19,15 @@ import java.time.Instant;
 @Component("reportGeneratorAgent")
 public class ReportGeneratorAgent implements MigrationAgent<WorkflowOutcome, MigrationReport> {
 
-    @Override public String getName()  { return "Report Generator"; }
-    @Override public int getOrder() { return 5; }
+    @Override
+    public String getName() {
+        return "Report Generator";
+    }
+
+    @Override
+    public int getOrder() {
+        return 5;
+    }
 
     @Override
     public MigrationReport execute(WorkflowOutcome input) {
@@ -35,12 +37,12 @@ public class ReportGeneratorAgent implements MigrationAgent<WorkflowOutcome, Mig
     }
 
     private String buildMarkdown(WorkflowOutcome outcome) {
-        AnalysisReport   analysis   = outcome.analysis();
-        MigrationPlan    plan       = outcome.plan();
-        MigrationArtifact artifact  = outcome.artifact();
+        AnalysisReport analysis = outcome.analysis();
+        MigrationPlan plan = outcome.plan();
+        MigrationArtifact artifact = outcome.artifact();
         ValidationReport validation = outcome.validation();
 
-        long modified  = artifact.files().stream().filter(f -> f.changeType() == FileChangeType.MODIFIED).count();
+        long modified = artifact.files().stream().filter(f -> f.changeType() == FileChangeType.MODIFIED).count();
         long unchanged = artifact.files().stream().filter(f -> f.changeType() == FileChangeType.UNCHANGED).count();
 
         StringBuilder sb = new StringBuilder();
@@ -49,8 +51,9 @@ public class ReportGeneratorAgent implements MigrationAgent<WorkflowOutcome, Mig
         sb.append("| **Project** | ").append(outcome.projectId()).append(" |\n");
         sb.append("| **Generated** | ").append(Instant.now()).append(" |\n");
         if (!plan.targetStack().isBlank()) sb.append("| **Target stack** | ").append(plan.targetStack()).append(" |\n");
-        if (!plan.riskLevel().isBlank())   sb.append("| **Risk level** | ").append(plan.riskLevel()).append(" |\n");
-        if (!plan.estimatedEffort().isBlank()) sb.append("| **Effort** | ").append(plan.estimatedEffort()).append(" |\n");
+        if (!plan.riskLevel().isBlank()) sb.append("| **Risk level** | ").append(plan.riskLevel()).append(" |\n");
+        if (!plan.estimatedEffort().isBlank())
+            sb.append("| **Effort** | ").append(plan.estimatedEffort()).append(" |\n");
         sb.append("\n");
 
         sb.append("## Analysis\n\n");
@@ -78,7 +81,7 @@ public class ReportGeneratorAgent implements MigrationAgent<WorkflowOutcome, Mig
             artifact.files().forEach(f ->
                     sb.append("| `").append(f.newPath()).append("` | ").append(f.changeType()).append(" |\n"));
             sb.append("\n**Summary**: ").append(modified).append(" modified, ")
-              .append(unchanged).append(" unchanged\n\n");
+                    .append(unchanged).append(" unchanged\n\n");
         }
 
         sb.append("## Validation\n\n");

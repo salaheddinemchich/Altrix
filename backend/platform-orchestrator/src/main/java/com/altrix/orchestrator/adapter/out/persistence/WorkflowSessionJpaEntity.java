@@ -1,11 +1,13 @@
 package com.altrix.orchestrator.adapter.out.persistence;
 
+import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -20,6 +22,15 @@ public class WorkflowSessionJpaEntity {
     @Id
     @Column(nullable = false, updatable = false)
     private UUID id;
+
+    /**
+     * Optimistic lock counter — Hibernate increments this on every UPDATE.
+     * A concurrent modifier holding a stale version throws ObjectOptimisticLockingFailureException,
+     * which the global exception handler maps to 409 Conflict.
+     */
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     @Column(name = "job_id", nullable = false, unique = true, length = 36)
     private String jobId;
@@ -49,6 +60,10 @@ public class WorkflowSessionJpaEntity {
 
     @Column(name = "consecutive_agent_errors", nullable = false)
     private int consecutiveAgentErrors;
+
+    @Convert(converter = MigratedFilesConverter.class)
+    @Column(name = "migrated_files", columnDefinition = "jsonb")
+    private List<MigratedFile> migratedFiles;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

@@ -11,7 +11,8 @@ import com.altrix.common.domain.enums.ConfigFormatPreference;
  */
 public final class ConfigFormatResolver {
 
-    private ConfigFormatResolver() {}
+    private ConfigFormatResolver() {
+    }
 
     /**
      * @param detected   format found in the uploaded project
@@ -23,9 +24,9 @@ public final class ConfigFormatResolver {
             return detected != null ? detected : ConfigFormat.YAML;
         }
         return switch (preference) {
-            case FORCE_YAML       -> ConfigFormat.YAML;
+            case FORCE_YAML -> ConfigFormat.YAML;
             case FORCE_PROPERTIES -> ConfigFormat.PROPERTIES;
-            default               -> detected != null ? detected : ConfigFormat.YAML;
+            default -> detected != null ? detected : ConfigFormat.YAML;
         };
     }
 }

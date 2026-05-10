@@ -10,9 +10,13 @@ import java.util.Optional;
  * per project so OrchestratorService can serve it when AI providers are unavailable.
  */
 public interface MigrationPlanCachePort {
-    /** Store the result of a successful migration run for a given project + target stack. */
+    /**
+     * Store the result of a successful migration run for a given project + target stack.
+     */
     void store(String projectId, String targetStack, List<MigratedFile> files);
 
-    /** Return the most recent cached plan, or empty when no cache entry exists. */
+    /**
+     * Return the most recent cached plan, or empty when no cache entry exists.
+     */
     Optional<List<MigratedFile>> loadLatest(String projectId, String targetStack);
 }

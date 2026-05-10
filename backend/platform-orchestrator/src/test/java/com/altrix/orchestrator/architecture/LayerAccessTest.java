@@ -10,7 +10,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 /**
  * Verifies that no class outside the persistence adapter package accesses JPA
  * entities or repositories directly (#167).
- *
+ * <p>
  * The rule prevents controllers, domain services, and Kafka listeners from
  * bypassing the repository abstraction and issuing raw JPA queries.
  */

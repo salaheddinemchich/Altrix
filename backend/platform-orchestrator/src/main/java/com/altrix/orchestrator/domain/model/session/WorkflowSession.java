@@ -1,14 +1,9 @@
 package com.altrix.orchestrator.domain.model.session;
 
+import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.orchestrator.domain.exception.IllegalStateTransitionException;
-import com.altrix.orchestrator.domain.model.session.event.ApprovalRequested;
-import com.altrix.orchestrator.domain.model.session.event.MigrationCompleted;
-import com.altrix.orchestrator.domain.model.session.event.PlanReady;
-import com.altrix.orchestrator.domain.model.session.event.SessionFailed;
-import com.altrix.orchestrator.domain.model.session.event.SessionPaused;
-import com.altrix.orchestrator.domain.model.session.event.SessionResumed;
-import com.altrix.orchestrator.domain.model.session.event.SessionStarted;
+import com.altrix.orchestrator.domain.model.session.event.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -35,10 +30,15 @@ public class WorkflowSession {
     private String errorMessage;
     private SessionStatus pausedFrom;
     private int consecutiveAgentErrors;
+    private List<MigratedFile> migratedFiles;
     private final Instant createdAt;
     private Instant updatedAt;
+    /** Optimistic lock version — 0 for new sessions; threaded through from the JPA entity. */
+    private final long version;
 
-    /** Domain events collected during this unit of work; drained by the repository. */
+    /**
+     * Domain events collected during this unit of work; drained by the repository.
+     */
     private final List<Object> pendingEvents = new ArrayList<>();
 
     // ── Factory ───────────────────────────────────────────────────────────────
@@ -50,15 +50,18 @@ public class WorkflowSession {
                 projectId,
                 SessionStatus.PENDING,
                 null, null, null,
-                0,
-                Instant.now());
+                0, List.of(),
+                Instant.now(), 0L);
     }
 
-    /** Reconstitution constructor used by the persistence adapter. */
+    /**
+     * Reconstitution constructor used by the persistence adapter.
+     */
     public WorkflowSession(WorkflowSessionId id, String jobId, String projectId,
                            SessionStatus status, MigrationPlan plan,
                            String errorMessage, SessionStatus pausedFrom,
-                           int consecutiveAgentErrors, Instant createdAt) {
+                           int consecutiveAgentErrors, List<MigratedFile> migratedFiles,
+                           Instant createdAt, long version) {
         this.id = Objects.requireNonNull(id);
         this.jobId = Objects.requireNonNull(jobId);
         this.projectId = Objects.requireNonNull(projectId);
@@ -67,13 +70,17 @@ public class WorkflowSession {
         this.errorMessage = errorMessage;
         this.pausedFrom = pausedFrom;
         this.consecutiveAgentErrors = consecutiveAgentErrors;
+        this.migratedFiles = migratedFiles != null ? List.copyOf(migratedFiles) : List.of();
         this.createdAt = Objects.requireNonNull(createdAt);
         this.updatedAt = createdAt;
+        this.version = version;
     }
 
     // ── State machine ─────────────────────────────────────────────────────────
 
-    /** Transitions to CONTEXT_ANALYSED. Valid from: PENDING. */
+    /**
+     * Transitions to CONTEXT_ANALYSED. Valid from: PENDING.
+     */
     public void beginContextAnalysis() {
         guard(SessionStatus.CONTEXT_ANALYSED);
         this.status = SessionStatus.CONTEXT_ANALYSED;
@@ -81,7 +88,9 @@ public class WorkflowSession {
         pendingEvents.add(SessionStarted.of(id, jobId, projectId));
     }
 
-    /** Transitions to PLAN_READY and stores the produced plan. Valid from: CONTEXT_ANALYSED. */
+    /**
+     * Transitions to PLAN_READY and stores the produced plan. Valid from: CONTEXT_ANALYSED.
+     */
     public void completePlan(MigrationPlan plan) {
         guard(SessionStatus.PLAN_READY);
         this.plan = Objects.requireNonNull(plan, "plan must not be null");
@@ -90,7 +99,9 @@ public class WorkflowSession {
         pendingEvents.add(PlanReady.of(id, jobId, plan));
     }
 
-    /** Transitions to AWAITING_APPROVAL. Valid from: PLAN_READY. */
+    /**
+     * Transitions to AWAITING_APPROVAL. Valid from: PLAN_READY.
+     */
     public void requestApproval() {
         guard(SessionStatus.AWAITING_APPROVAL);
         this.status = SessionStatus.AWAITING_APPROVAL;
@@ -98,14 +109,18 @@ public class WorkflowSession {
         pendingEvents.add(ApprovalRequested.of(id, jobId));
     }
 
-    /** Transitions to MIGRATING. Valid from: PENDING (shortcut), PLAN_READY, or AWAITING_APPROVAL. */
+    /**
+     * Transitions to MIGRATING. Valid from: PENDING (shortcut), PLAN_READY, or AWAITING_APPROVAL.
+     */
     public void startMigration() {
         guard(SessionStatus.MIGRATING);
         this.status = SessionStatus.MIGRATING;
         this.updatedAt = Instant.now();
     }
 
-    /** Transitions to VALIDATING. Valid from: MIGRATING. */
+    /**
+     * Transitions to VALIDATING. Valid from: MIGRATING.
+     */
     public void startValidation(int fileCount) {
         guard(SessionStatus.VALIDATING);
         this.status = SessionStatus.VALIDATING;
@@ -113,14 +128,18 @@ public class WorkflowSession {
         pendingEvents.add(MigrationCompleted.of(id, jobId, fileCount));
     }
 
-    /** Transitions to DONE (terminal). Valid from: MIGRATING (shortcut) or VALIDATING. */
+    /**
+     * Transitions to DONE (terminal). Valid from: MIGRATING (shortcut) or VALIDATING.
+     */
     public void complete() {
         guard(SessionStatus.DONE);
         this.status = SessionStatus.DONE;
         this.updatedAt = Instant.now();
     }
 
-    /** Transitions to FAILED (terminal) from any non-terminal state. */
+    /**
+     * Transitions to FAILED (terminal) from any non-terminal state.
+     */
     public void fail(String reason) {
         guard(SessionStatus.FAILED);
         this.errorMessage = reason;
@@ -129,7 +148,9 @@ public class WorkflowSession {
         pendingEvents.add(SessionFailed.of(id, jobId, reason));
     }
 
-    /** Transitions to PAUSED; remembers the current state for resume. */
+    /**
+     * Transitions to PAUSED; remembers the current state for resume.
+     */
     public void pause() {
         guard(SessionStatus.PAUSED);
         this.pausedFrom = this.status;
@@ -138,7 +159,9 @@ public class WorkflowSession {
         pendingEvents.add(SessionPaused.of(id, jobId, pausedFrom));
     }
 
-    /** Resumes from PAUSED back to the state that was active before pausing. */
+    /**
+     * Resumes from PAUSED back to the state that was active before pausing.
+     */
     public void resume() {
         if (status != SessionStatus.PAUSED) {
             throw new IllegalStateTransitionException(status, SessionStatus.PAUSED);
@@ -170,9 +193,18 @@ public class WorkflowSession {
         return false;
     }
 
-    /** Resets the consecutive error counter after a successful pipeline run. */
+    /**
+     * Resets the consecutive error counter after a successful pipeline run.
+     */
     public void resetAgentErrors() {
         consecutiveAgentErrors = 0;
+    }
+
+    /**
+     * Stores the files produced by the migrator for later retrieval via the diff endpoint (#122).
+     */
+    public void storeMigratedFiles(List<MigratedFile> files) {
+        this.migratedFiles = files != null ? List.copyOf(files) : List.of();
     }
 
     // ── Event drain ───────────────────────────────────────────────────────────
@@ -189,16 +221,53 @@ public class WorkflowSession {
 
     // ── Accessors ─────────────────────────────────────────────────────────────
 
-    public WorkflowSessionId id() { return id; }
-    public String jobId() { return jobId; }
-    public String projectId() { return projectId; }
-    public SessionStatus status() { return status; }
-    public MigrationPlan plan() { return plan; }
-    public String errorMessage() { return errorMessage; }
-    public SessionStatus pausedFrom() { return pausedFrom; }
-    public int consecutiveAgentErrors() { return consecutiveAgentErrors; }
-    public Instant createdAt() { return createdAt; }
-    public Instant updatedAt() { return updatedAt; }
+    public WorkflowSessionId id() {
+        return id;
+    }
+
+    public String jobId() {
+        return jobId;
+    }
+
+    public String projectId() {
+        return projectId;
+    }
+
+    public SessionStatus status() {
+        return status;
+    }
+
+    public MigrationPlan plan() {
+        return plan;
+    }
+
+    public String errorMessage() {
+        return errorMessage;
+    }
+
+    public SessionStatus pausedFrom() {
+        return pausedFrom;
+    }
+
+    public int consecutiveAgentErrors() {
+        return consecutiveAgentErrors;
+    }
+
+    public List<MigratedFile> migratedFiles() {
+        return migratedFiles;
+    }
+
+    public Instant createdAt() {
+        return createdAt;
+    }
+
+    public Instant updatedAt() {
+        return updatedAt;
+    }
+
+    public long version() {
+        return version;
+    }
 
     // ── Guard ─────────────────────────────────────────────────────────────────
 

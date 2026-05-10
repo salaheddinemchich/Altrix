@@ -37,94 +37,96 @@ public class DocumentationIngestionService {
     private final EmbeddingStorePort embeddingStore;
     private final DocumentationFetchPort docFetch;
 
-    /** Documentation pages to ingest — logical path + canonical URL pairs. */
+    /**
+     * Documentation pages to ingest — logical path + canonical URL pairs.
+     */
     private static final List<DocPage> PAGES = List.of(
-        // ── Apache Kafka ──────────────────────────────────────────────────────
-        new DocPage("kafka/introduction",
-                "https://kafka.apache.org/documentation/#gettingStarted"),
-        new DocPage("kafka/producers",
-                "https://kafka.apache.org/documentation/#producerapi"),
-        new DocPage("kafka/consumers",
-                "https://kafka.apache.org/documentation/#consumerapi"),
-        new DocPage("kafka/consumer-groups",
-                "https://kafka.apache.org/documentation/#intro_consumers"),
-        new DocPage("kafka/topic-config",
-                "https://kafka.apache.org/documentation/#topicconfigs"),
-        new DocPage("kafka/streams-concepts",
-                "https://kafka.apache.org/documentation/streams/"),
-        new DocPage("kafka/connect-overview",
-                "https://kafka.apache.org/documentation/#connect"),
-        new DocPage("kafka/spring-boot",
-                "https://docs.spring.io/spring-kafka/reference/quick-tour.html"),
+            // ── Apache Kafka ──────────────────────────────────────────────────────
+            new DocPage("kafka/introduction",
+                    "https://kafka.apache.org/documentation/#gettingStarted"),
+            new DocPage("kafka/producers",
+                    "https://kafka.apache.org/documentation/#producerapi"),
+            new DocPage("kafka/consumers",
+                    "https://kafka.apache.org/documentation/#consumerapi"),
+            new DocPage("kafka/consumer-groups",
+                    "https://kafka.apache.org/documentation/#intro_consumers"),
+            new DocPage("kafka/topic-config",
+                    "https://kafka.apache.org/documentation/#topicconfigs"),
+            new DocPage("kafka/streams-concepts",
+                    "https://kafka.apache.org/documentation/streams/"),
+            new DocPage("kafka/connect-overview",
+                    "https://kafka.apache.org/documentation/#connect"),
+            new DocPage("kafka/spring-boot",
+                    "https://docs.spring.io/spring-kafka/reference/quick-tour.html"),
 
-        // ── GCP Pub/Sub ───────────────────────────────────────────────────────
-        new DocPage("gcp-pubsub/overview",
-                "https://cloud.google.com/pubsub/docs/overview"),
-        new DocPage("gcp-pubsub/publisher",
-                "https://cloud.google.com/pubsub/docs/publish-receive-messages-client-library"),
-        new DocPage("gcp-pubsub/subscriber",
-                "https://cloud.google.com/pubsub/docs/pull"),
-        new DocPage("gcp-pubsub/push-subscriptions",
-                "https://cloud.google.com/pubsub/docs/push"),
-        new DocPage("gcp-pubsub/ordering",
-                "https://cloud.google.com/pubsub/docs/ordering"),
-        new DocPage("gcp-pubsub/dead-letter",
-                "https://cloud.google.com/pubsub/docs/dead-letter-topics"),
-        new DocPage("gcp-pubsub/spring",
-                "https://googlecloudplatform.github.io/spring-cloud-gcp/reference/html/index.html#spring-integration-channel-adapters-for-cloud-pub-sub"),
+            // ── GCP Pub/Sub ───────────────────────────────────────────────────────
+            new DocPage("gcp-pubsub/overview",
+                    "https://cloud.google.com/pubsub/docs/overview"),
+            new DocPage("gcp-pubsub/publisher",
+                    "https://cloud.google.com/pubsub/docs/publish-receive-messages-client-library"),
+            new DocPage("gcp-pubsub/subscriber",
+                    "https://cloud.google.com/pubsub/docs/pull"),
+            new DocPage("gcp-pubsub/push-subscriptions",
+                    "https://cloud.google.com/pubsub/docs/push"),
+            new DocPage("gcp-pubsub/ordering",
+                    "https://cloud.google.com/pubsub/docs/ordering"),
+            new DocPage("gcp-pubsub/dead-letter",
+                    "https://cloud.google.com/pubsub/docs/dead-letter-topics"),
+            new DocPage("gcp-pubsub/spring",
+                    "https://googlecloudplatform.github.io/spring-cloud-gcp/reference/html/index.html#spring-integration-channel-adapters-for-cloud-pub-sub"),
 
-        // ── Migration patterns ────────────────────────────────────────────────
-        new DocPage("migration/kafka-to-pubsub",
-                "https://cloud.google.com/pubsub/docs/migrating-from-kafka-to-pubsub"),
-        new DocPage("migration/spring-boot-3",
-                "https://spring.io/blog/2022/05/24/preparing-for-spring-boot-3-0"),
+            // ── Migration patterns ────────────────────────────────────────────────
+            new DocPage("migration/kafka-to-pubsub",
+                    "https://cloud.google.com/pubsub/docs/migrating-from-kafka-to-pubsub"),
+            new DocPage("migration/spring-boot-3",
+                    "https://spring.io/blog/2022/05/24/preparing-for-spring-boot-3-0"),
 
-        // ── Jakarta EE / Java EE — messaging without Spring ───────────────────
-        // JMS 3.x (Jakarta Messaging) — the standard Java EE/Jakarta EE messaging API.
-        // Agents migrating from JMS to Kafka or Pub/Sub need this reference.
-        new DocPage("jakarta-ee/messaging-overview",
-                "https://jakarta.ee/specifications/messaging/3.1/"),
-        new DocPage("jakarta-ee/messaging-api",
-                "https://jakarta.ee/specifications/messaging/3.1/apidocs/"),
+            // ── Jakarta EE / Java EE — messaging without Spring ───────────────────
+            // JMS 3.x (Jakarta Messaging) — the standard Java EE/Jakarta EE messaging API.
+            // Agents migrating from JMS to Kafka or Pub/Sub need this reference.
+            new DocPage("jakarta-ee/messaging-overview",
+                    "https://jakarta.ee/specifications/messaging/3.1/"),
+            new DocPage("jakarta-ee/messaging-api",
+                    "https://jakarta.ee/specifications/messaging/3.1/apidocs/"),
 
-        // CDI Events — the Jakarta EE in-process event bus; often confused with
-        // message brokers during migration analysis.
-        new DocPage("jakarta-ee/cdi-events",
-                "https://jakarta.ee/specifications/cdi/4.0/jakarta-cdi-spec-4.0.html#events"),
+            // CDI Events — the Jakarta EE in-process event bus; often confused with
+            // message brokers during migration analysis.
+            new DocPage("jakarta-ee/cdi-events",
+                    "https://jakarta.ee/specifications/cdi/4.0/jakarta-cdi-spec-4.0.html#events"),
 
-        // MicroProfile Reactive Messaging — bridges Jakarta EE apps to Kafka/Pub/Sub
-        // via @Incoming / @Outgoing annotations (Quarkus, Open Liberty, Payara).
-        new DocPage("jakarta-ee/microprofile-reactive-messaging",
-                "https://download.eclipse.org/microprofile/microprofile-reactive-messaging-3.0/microprofile-reactive-messaging-spec-3.0.html"),
+            // MicroProfile Reactive Messaging — bridges Jakarta EE apps to Kafka/Pub/Sub
+            // via @Incoming / @Outgoing annotations (Quarkus, Open Liberty, Payara).
+            new DocPage("jakarta-ee/microprofile-reactive-messaging",
+                    "https://download.eclipse.org/microprofile/microprofile-reactive-messaging-3.0/microprofile-reactive-messaging-spec-3.0.html"),
 
-        // Kafka with pure Jakarta EE (no Spring) — uses kafka-clients directly;
-        // agents must recognise both Spring-Kafka and raw kafka-clients patterns.
-        new DocPage("jakarta-ee/kafka-clients-producer",
-                "https://kafka.apache.org/documentation/#producerconfigs"),
-        new DocPage("jakarta-ee/kafka-clients-consumer",
-                "https://kafka.apache.org/documentation/#consumerconfigs"),
+            // Kafka with pure Jakarta EE (no Spring) — uses kafka-clients directly;
+            // agents must recognise both Spring-Kafka and raw kafka-clients patterns.
+            new DocPage("jakarta-ee/kafka-clients-producer",
+                    "https://kafka.apache.org/documentation/#producerconfigs"),
+            new DocPage("jakarta-ee/kafka-clients-consumer",
+                    "https://kafka.apache.org/documentation/#consumerconfigs"),
 
-        // GCP Pub/Sub Java client (pure Java, no framework) — used in Jakarta EE
-        // deployments that call Pub/Sub via the Google Cloud client library directly.
-        new DocPage("jakarta-ee/gcp-pubsub-java-client",
-                "https://cloud.google.com/pubsub/docs/reference/libraries#client-libraries-install-java"),
+            // GCP Pub/Sub Java client (pure Java, no framework) — used in Jakarta EE
+            // deployments that call Pub/Sub via the Google Cloud client library directly.
+            new DocPage("jakarta-ee/gcp-pubsub-java-client",
+                    "https://cloud.google.com/pubsub/docs/reference/libraries#client-libraries-install-java"),
 
-        // Quarkus + Kafka — the most common Jakarta EE runtime for Kafka migrations.
-        new DocPage("jakarta-ee/quarkus-kafka",
-                "https://quarkus.io/guides/kafka"),
+            // Quarkus + Kafka — the most common Jakarta EE runtime for Kafka migrations.
+            new DocPage("jakarta-ee/quarkus-kafka",
+                    "https://quarkus.io/guides/kafka"),
 
-        // Quarkus + GCP Pub/Sub via Reactive Messaging connector.
-        new DocPage("jakarta-ee/quarkus-pubsub",
-                "https://quarkus.io/guides/reactive-messaging-google-pubsub"),
+            // Quarkus + GCP Pub/Sub via Reactive Messaging connector.
+            new DocPage("jakarta-ee/quarkus-pubsub",
+                    "https://quarkus.io/guides/reactive-messaging-google-pubsub"),
 
-        // Open Liberty + Kafka (MicroProfile Reactive Messaging on Liberty).
-        new DocPage("jakarta-ee/openliberty-kafka",
-                "https://openliberty.io/docs/latest/reactive-messaging.html"),
+            // Open Liberty + Kafka (MicroProfile Reactive Messaging on Liberty).
+            new DocPage("jakarta-ee/openliberty-kafka",
+                    "https://openliberty.io/docs/latest/reactive-messaging.html"),
 
-        // Jakarta EE + GCP configuration best practices (service accounts, ADC,
-        // workload identity) — agents need this for GCP authentication context.
-        new DocPage("jakarta-ee/gcp-auth-java",
-                "https://cloud.google.com/docs/authentication/client-libraries")
+            // Jakarta EE + GCP configuration best practices (service accounts, ADC,
+            // workload identity) — agents need this for GCP authentication context.
+            new DocPage("jakarta-ee/gcp-auth-java",
+                    "https://cloud.google.com/docs/authentication/client-libraries")
     );
 
     public void ingestOnStartup() {
@@ -186,5 +188,6 @@ public class DocumentationIngestionService {
         }
     }
 
-    private record DocPage(String logicalPath, String url) {}
+    private record DocPage(String logicalPath, String url) {
+    }
 }

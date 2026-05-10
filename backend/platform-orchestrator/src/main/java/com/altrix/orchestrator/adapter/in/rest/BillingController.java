@@ -4,6 +4,7 @@ import com.altrix.orchestrator.domain.model.AiCallUsageSummary;
 import com.altrix.orchestrator.domain.port.out.AiCallLedgerPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,6 +24,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/billing")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 public class BillingController {
 
     private final AiCallLedgerPort aiCallLedgerPort;

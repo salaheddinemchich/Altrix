@@ -5,6 +5,18 @@ spring:
   application:
     name: platform-orchestrator
 
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID:}
+            client-secret: ${GITHUB_CLIENT_SECRET:}
+            scope: read:user,user:email
+        provider:
+          github:
+            user-info-uri: https://api.github.com/user
+
   datasource:
     url:      jdbc:postgresql://localhost:5432/${POSTGRES_DB:altrix_db}
     username: ${POSTGRES_USER:altrix}
@@ -131,6 +143,10 @@ ai:
       timeout-seconds: ${ANTHROPIC_TIMEOUT_SECONDS:120}
       temperature:     ${ANTHROPIC_TEMPERATURE:0.1}
 
+  # Maximum tokens per Agent 3 context pass. If pruned files exceed this, the pruner
+  # truncates to the budget (batching across passes is a future enhancement, #27).
+  max-context-tokens: ${AI_MAX_CONTEXT_TOKENS:32000}
+
   routing:
     # TIER_PREFERENCE (default) or EXPLICIT_ORDER
     strategy: ${AI_ROUTING_STRATEGY:TIER_PREFERENCE}
@@ -189,6 +205,36 @@ approval:
     reviewer-email: ${APPROVAL_REVIEWER_EMAIL:}
     from-email: ${APPROVAL_FROM_EMAIL:altrix-noreply@localhost}
     base-url: ${APPROVAL_BASE_URL:http://localhost:4200}
+
+jwt:
+  # RS256 keys — Base64-encoded DER. Generate with:
+  #   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+  #   openssl pkcs8 -topk8 -nocrypt -in private.pem -outform DER | base64 -w0
+  #   openssl rsa -in private.pem -pubout -outform DER | base64 -w0
+  # Leave blank in dev — an ephemeral keypair is generated automatically (logged at WARN).
+  private-key: ${JWT_PRIVATE_KEY:}
+  public-key: ${JWT_PUBLIC_KEY:}
+  access-token-expiry-minutes: ${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:15}
+  refresh-token-expiry-days: ${JWT_REFRESH_TOKEN_EXPIRY_DAYS:7}
+
+security:
+  rate-limit:
+    auth-max-requests: ${RATE_LIMIT_AUTH_MAX:10}
+    auth-window-seconds: ${RATE_LIMIT_AUTH_WINDOW:60}
+    api-max-requests: ${RATE_LIMIT_API_MAX:200}
+    api-window-seconds: ${RATE_LIMIT_API_WINDOW:60}
+  brute-force:
+    max-attempts: ${BRUTE_FORCE_MAX_ATTEMPTS:5}
+    window-seconds: ${BRUTE_FORCE_WINDOW:300}
+  refresh-token:
+    cleanup-cron: ${REFRESH_TOKEN_CLEANUP_CRON:0 0 3 * * *}
+
+billing:
+  mv-refresh-cron: ${BILLING_MV_REFRESH_CRON:0 0 * * * *}
+
+# Frontend URL where the OAuth2 success handler redirects after login
+oauth2:
+  redirect-uri: ${OAUTH2_REDIRECT_URI:http://localhost:4200/auth/callback}
 
 workflow:
   auto-pause:

@@ -9,10 +9,10 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 
 /**
  * CQRS naming discipline (#165).
- *
+ * <p>
  * Commands change state and are named {@code *UseCase} or {@code *Command}.
  * Queries read state and are named {@code *Query} or {@code *UseCase}.
- *
+ * <p>
  * The rule here enforces that the driving port interfaces in
  * {@code domain.port.in} follow the convention:
  * <ul>

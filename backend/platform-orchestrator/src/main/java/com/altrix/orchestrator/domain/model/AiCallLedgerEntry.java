@@ -9,14 +9,15 @@ import java.time.Instant;
  * after every {@code ChatLanguageModel.generate()} returns.
  */
 public record AiCallLedgerEntry(
-        String  jobId,
-        String  agentName,
-        String  providerName,
-        String  modelName,
-        String  tier,
-        long    inputTokens,
-        long    outputTokens,
-        double  costUsd,
+        String jobId,
+        String agentName,
+        String providerName,
+        String modelName,
+        String tier,
+        long inputTokens,
+        long outputTokens,
+        double costUsd,
         boolean cacheHit,
         Instant createdAt
-) {}
+) {
+}

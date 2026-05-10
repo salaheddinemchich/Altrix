@@ -18,8 +18,8 @@ public record AiProvidersConfig(
         OpenAiCompatibleConfig openai,
         OpenAiCompatibleConfig deepseek,
         OpenAiCompatibleConfig nvidia,
-        AnthropicConfig        anthropic,
-        OllamaConfig           ollama
+        AnthropicConfig anthropic,
+        OllamaConfig ollama
 ) {
 
     /**
@@ -28,29 +28,32 @@ public record AiProvidersConfig(
      */
     public record OpenAiCompatibleConfig(
             @DefaultValue("false") boolean enabled,
-            @DefaultValue("")      String  apiKey,
-            @DefaultValue("")      String  baseUrl,
-            @DefaultValue("")      String  modelAnalysis,
-            @DefaultValue("")      String  modelMigration,
-            @DefaultValue("120")   long    timeoutSeconds,
-            @DefaultValue("0.1")   double  temperature
-    ) {}
+            @DefaultValue("") String apiKey,
+            @DefaultValue("") String baseUrl,
+            @DefaultValue("") String modelAnalysis,
+            @DefaultValue("") String modelMigration,
+            @DefaultValue("120") long timeoutSeconds,
+            @DefaultValue("0.1") double temperature
+    ) {
+    }
 
     public record AnthropicConfig(
             @DefaultValue("false") boolean enabled,
-            @DefaultValue("")      String  apiKey,
-            @DefaultValue("")      String  modelAnalysis,
-            @DefaultValue("")      String  modelMigration,
-            @DefaultValue("120")   long    timeoutSeconds,
-            @DefaultValue("0.1")   double  temperature
-    ) {}
+            @DefaultValue("") String apiKey,
+            @DefaultValue("") String modelAnalysis,
+            @DefaultValue("") String modelMigration,
+            @DefaultValue("120") long timeoutSeconds,
+            @DefaultValue("0.1") double temperature
+    ) {
+    }
 
     public record OllamaConfig(
-            @DefaultValue("false")                  boolean enabled,
-            @DefaultValue("http://localhost:11434") String  baseUrl,
-            @DefaultValue("llama3.2:3b")            String  modelAnalysis,
-            @DefaultValue("llama3.1:8b")            String  modelMigration,
-            @DefaultValue("300")                    long    timeoutSeconds,
-            @DefaultValue("false")                  boolean warmup
-    ) {}
+            @DefaultValue("false") boolean enabled,
+            @DefaultValue("http://localhost:11434") String baseUrl,
+            @DefaultValue("llama3.2:3b") String modelAnalysis,
+            @DefaultValue("llama3.1:8b") String modelMigration,
+            @DefaultValue("300") long timeoutSeconds,
+            @DefaultValue("false") boolean warmup
+    ) {
+    }
 }

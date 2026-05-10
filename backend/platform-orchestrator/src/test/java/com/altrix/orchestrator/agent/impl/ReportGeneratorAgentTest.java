@@ -1,11 +1,6 @@
 package com.altrix.orchestrator.agent.impl;
 
-import com.altrix.common.domain.model.AnalysisReport;
-import com.altrix.common.domain.model.MigrationArtifact;
-import com.altrix.common.domain.model.MigrationPlan;
-import com.altrix.common.domain.model.MigrationReport;
-import com.altrix.common.domain.model.ValidationReport;
-import com.altrix.common.domain.model.WorkflowOutcome;
+import com.altrix.common.domain.model.*;
 import com.altrix.common.exception.AgentFailureException;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +25,7 @@ class ReportGeneratorAgentTest {
                 "p1",
                 AnalysisReport.empty("p1"),
                 new MigrationPlan("p1", "", "Spring Boot 3 + Kafka", List.of("Step 1: replace PubSub"),
-                        "MEDIUM", "3 days", "the plan"),
+                        "MEDIUM", "3 days", "the plan", List.of()),
                 MigrationArtifact.empty("p1"),
                 ValidationReport.pending("p1"));
 

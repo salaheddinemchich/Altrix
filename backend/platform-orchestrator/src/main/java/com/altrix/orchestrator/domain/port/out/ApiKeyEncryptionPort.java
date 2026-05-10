@@ -6,5 +6,6 @@ package com.altrix.orchestrator.domain.port.out;
  */
 public interface ApiKeyEncryptionPort {
     String encrypt(String plaintext);
+
     String decrypt(String ciphertext);
 }

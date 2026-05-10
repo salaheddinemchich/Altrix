@@ -1,7 +1,7 @@
 package com.altrix.orchestrator.infra.ai;
 
-import com.altrix.orchestrator.infrastructure.config.AiProvidersConfig;
 import com.altrix.orchestrator.infra.ai.provider.ProviderTier;
+import com.altrix.orchestrator.infrastructure.config.AiProvidersConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 /**
  * Fires two cheap "hello" calls against Ollama on startup so the JVM-level
  * model loading cost is paid once, not on the first real user request (#171).
- *
+ * <p>
  * Activated only when {@code ai.providers.ollama.warmup=true} AND Ollama is
  * enabled. Runs asynchronously so it never delays application readiness.
  */
@@ -37,7 +37,7 @@ public class OllamaWarmupService {
         log.info("Warming up Ollama models ({} / {}) — first-call latency will be paid now",
                 ollama.modelAnalysis(), ollama.modelMigration());
         try {
-            providerRouter.chat(ProviderTier.ANALYSIS,  "You are a helpful assistant.", "Hello");
+            providerRouter.chat(ProviderTier.ANALYSIS, "You are a helpful assistant.", "Hello");
             providerRouter.chat(ProviderTier.MIGRATION, "You are a helpful assistant.", "Hello");
             log.info("Ollama warmup completed successfully");
         } catch (Exception e) {

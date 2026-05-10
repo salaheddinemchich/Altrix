@@ -13,4 +13,5 @@ public record SessionPauseRecord(
         SessionStatus pausedFrom,
         Instant pausedAt,
         Instant resumedAt
-) {}
+) {
+}

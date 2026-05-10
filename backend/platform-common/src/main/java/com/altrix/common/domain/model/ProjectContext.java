@@ -29,7 +29,13 @@ public record ProjectContext(
         List<String> listenerClasses,
         List<String> publisherClasses,
 
-        List<MigratedFile> migratedFiles
+        List<MigratedFile> migratedFiles,
+
+        /**
+         * When true, bypasses the ContextAnalyzer Redis cache for this run (#158).
+         * Null is treated as false.
+         */
+        Boolean forceFresh
 
 ) {
     public ProjectContext {

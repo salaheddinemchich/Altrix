@@ -27,8 +27,15 @@ import java.util.List;
 @Component("sandboxValidatorAgent")
 public class SandboxValidatorAgent implements MigrationAgent<MigrationArtifact, ValidationReport> {
 
-    @Override public String getName()  { return "Sandbox Validator"; }
-    @Override public int getOrder() { return 4; }
+    @Override
+    public String getName() {
+        return "Sandbox Validator";
+    }
+
+    @Override
+    public int getOrder() {
+        return 4;
+    }
 
     @Override
     public ValidationReport execute(MigrationArtifact input) {
@@ -41,7 +48,7 @@ public class SandboxValidatorAgent implements MigrationAgent<MigrationArtifact, 
         for (var file : input.files()) {
             if (file.changeType() != FileChangeType.MODIFIED) continue;
 
-            String path    = file.newPath();
+            String path = file.newPath();
             String content = file.content();
 
             if (content == null || content.isBlank()) {

@@ -18,13 +18,14 @@ import java.time.Duration;
  */
 final class OpenAiCompatibleBuilder {
 
-    private OpenAiCompatibleBuilder() {}
+    private OpenAiCompatibleBuilder() {
+    }
 
     static RegisteredProvider build(String id, ProviderCostTier costTier, ResolvedProviderConfig cfg) {
         return new RegisteredProvider(
                 id,
                 costTier,
-                model(cfg.baseUrl(), cfg.apiKey(), cfg.modelAnalysis(),  cfg),
+                model(cfg.baseUrl(), cfg.apiKey(), cfg.modelAnalysis(), cfg),
                 model(cfg.baseUrl(), cfg.apiKey(), cfg.modelMigration(), cfg)
         );
     }

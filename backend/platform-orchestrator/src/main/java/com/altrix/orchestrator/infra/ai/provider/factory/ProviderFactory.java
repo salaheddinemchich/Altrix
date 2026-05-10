@@ -20,19 +20,29 @@ import com.altrix.orchestrator.infra.ai.provider.RegisteredProvider;
  */
 public interface ProviderFactory {
 
-    /** Stable identifier used in logs, CB registry, and routing config. */
+    /**
+     * Stable identifier used in logs, CB registry, and routing config.
+     */
     String providerId();
 
-    /** Whether this provider should participate in the routing pool. */
+    /**
+     * Whether this provider should participate in the routing pool.
+     */
     boolean isEnabled();
 
-    /** Cost classification — used by {@code TierPreferenceStrategy} to order providers. */
+    /**
+     * Cost classification — used by {@code TierPreferenceStrategy} to order providers.
+     */
     ProviderCostTier costTier();
 
-    /** System-default model name for analysis-grade calls (may be overridden via DB config). */
+    /**
+     * System-default model name for analysis-grade calls (may be overridden via DB config).
+     */
     String defaultModelAnalysis();
 
-    /** System-default model name for migration-grade calls (may be overridden via DB config). */
+    /**
+     * System-default model name for migration-grade calls (may be overridden via DB config).
+     */
     String defaultModelMigration();
 
     /**

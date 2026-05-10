@@ -9,7 +9,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
  * Enforces hexagonal architecture layer rules (#164).
- *
+ * <p>
  * Layer isolation invariants:
  * <ul>
  *   <li>Domain must not depend on Spring, JPA, or any adapter.</li>

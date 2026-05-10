@@ -1,10 +1,10 @@
 package com.altrix.orchestrator.infra.ai.provider.factory;
 
-import com.altrix.orchestrator.infrastructure.config.AiProvidersConfig;
-import com.altrix.orchestrator.infra.ai.provider.ProviderCostTier;
 import com.altrix.orchestrator.infra.ai.provider.ProviderConfigResolver;
+import com.altrix.orchestrator.infra.ai.provider.ProviderCostTier;
 import com.altrix.orchestrator.infra.ai.provider.RegisteredProvider;
 import com.altrix.orchestrator.infra.ai.provider.ResolvedProviderConfig;
+import com.altrix.orchestrator.infrastructure.config.AiProvidersConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -29,10 +29,25 @@ public class DeepSeekProviderFactory implements ProviderFactory {
                 systemCfg.apiKey().isBlank() ? "[NOT SET]" : "[CONFIGURED]");
     }
 
-    @Override public String providerId()           { return ID; }
-    @Override public ProviderCostTier costTier()            { return ProviderCostTier.FREE; }
-    @Override public String defaultModelAnalysis() { return systemCfg.modelAnalysis(); }
-    @Override public String defaultModelMigration(){ return systemCfg.modelMigration(); }
+    @Override
+    public String providerId() {
+        return ID;
+    }
+
+    @Override
+    public ProviderCostTier costTier() {
+        return ProviderCostTier.FREE;
+    }
+
+    @Override
+    public String defaultModelAnalysis() {
+        return systemCfg.modelAnalysis();
+    }
+
+    @Override
+    public String defaultModelMigration() {
+        return systemCfg.modelMigration();
+    }
 
     @Override
     public boolean isEnabled() {

@@ -9,8 +9,9 @@ package com.altrix.orchestrator.domain.model;
 public record AiCallUsageSummary(
         String agentName,
         String providerName,
-        long   totalInputTokens,
-        long   totalOutputTokens,
+        long totalInputTokens,
+        long totalOutputTokens,
         double totalCostUsd,
-        long   callCount
-) {}
+        long callCount
+) {
+}

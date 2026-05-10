@@ -4,10 +4,14 @@ import com.altrix.common.domain.model.DocumentChunk;
 
 import java.util.List;
 
-/** Driven port — persists and retrieves embedded document chunks from the vector store. */
+/**
+ * Driven port — persists and retrieves embedded document chunks from the vector store.
+ */
 public interface EmbeddingStorePort {
 
-    /** Upsert chunks; skips any chunk whose content_hash already exists in the store. */
+    /**
+     * Upsert chunks; skips any chunk whose content_hash already exists in the store.
+     */
     void upsert(List<DocumentChunk> chunks);
 
     /**
@@ -18,6 +22,8 @@ public interface EmbeddingStorePort {
                                      List<com.altrix.common.domain.enums.DocumentType> types,
                                      int topK);
 
-    /** Returns true if documentation chunks for the given logicalPath already exist. */
+    /**
+     * Returns true if documentation chunks for the given logicalPath already exist.
+     */
     boolean documentationExists(String logicalPath);
 }

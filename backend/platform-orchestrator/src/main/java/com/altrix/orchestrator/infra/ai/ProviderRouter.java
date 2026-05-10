@@ -8,9 +8,6 @@ import com.altrix.orchestrator.domain.port.in.GetResilienceMetricsUseCase;
 import com.altrix.orchestrator.domain.port.in.ProviderResilienceStatus;
 import com.altrix.orchestrator.domain.port.out.AiCallLedgerPort;
 import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
-import com.altrix.orchestrator.infrastructure.config.McpConfig;
 import com.altrix.orchestrator.infra.ai.exception.ProviderCallException;
 import com.altrix.orchestrator.infra.ai.provider.ProviderTier;
 import com.altrix.orchestrator.infra.ai.provider.RegisteredProvider;
@@ -18,13 +15,12 @@ import com.altrix.orchestrator.infra.ai.routing.ExplicitOrderStrategy;
 import com.altrix.orchestrator.infra.ai.routing.ProviderSelectionStrategy;
 import com.altrix.orchestrator.infra.ai.routing.TierPreferenceStrategy;
 import com.altrix.orchestrator.infra.ai.tools.McpToolsPort;
+import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
+import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
+import com.altrix.orchestrator.infrastructure.config.McpConfig;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.ToolExecutionResultMessage;
-import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.output.TokenUsage;
 import io.github.resilience4j.bulkhead.Bulkhead;
@@ -93,19 +89,19 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
     private final int maxToolIter;
 
     public ProviderRouter(
-            ProviderRegistry         registry,
-            AiRoutingConfig          routingCfg,
-            McpConfig                mcpConfig,
-            Optional<McpToolsPort>   mcpTools,
-            TokenUsagePort           tokenUsagePort,
-            AiCallLedgerPort         aiCallLedgerPort) {
+            ProviderRegistry registry,
+            AiRoutingConfig routingCfg,
+            McpConfig mcpConfig,
+            Optional<McpToolsPort> mcpTools,
+            TokenUsagePort tokenUsagePort,
+            AiCallLedgerPort aiCallLedgerPort) {
 
         this.registry = registry;
         this.strategy = buildStrategy(routingCfg);
         this.cbRegistry = buildCbRegistry(routingCfg.circuitBreaker());
         this.retry = buildRetry(routingCfg.retry());
-        this.analysisBulkhead = buildBulkhead("analysis",  routingCfg.bulkhead().analysisConcurrency(),  routingCfg.bulkhead().maxWaitMs());
-        this.migrationBulkhead= buildBulkhead("migration", routingCfg.bulkhead().migrationConcurrency(), routingCfg.bulkhead().maxWaitMs());
+        this.analysisBulkhead = buildBulkhead("analysis", routingCfg.bulkhead().analysisConcurrency(), routingCfg.bulkhead().maxWaitMs());
+        this.migrationBulkhead = buildBulkhead("migration", routingCfg.bulkhead().migrationConcurrency(), routingCfg.bulkhead().maxWaitMs());
         this.tokenUsagePort = tokenUsagePort;
         this.aiCallLedgerPort = aiCallLedgerPort;
         this.monthlyTokenLimit = routingCfg.monthlyTokenLimit();
@@ -124,7 +120,7 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
      * No tool calls — use {@link #chatAgentic} for MCP tool support.
      *
      * @throws AllProvidersUnavailableException if every provider fails or has an open CB
-     * @throws BulkheadFullException if the per-tier concurrency limit is exhausted
+     * @throws BulkheadFullException            if the per-tier concurrency limit is exhausted
      */
     public String chat(ProviderTier tier, String systemPrompt, String userContent) {
         enforceBudget();
@@ -144,7 +140,7 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
      * {@link #chat} transparently — callers need not check.
      *
      * @throws AllProvidersUnavailableException if every provider fails
-     * @throws BulkheadFullException if the per-tier concurrency limit is exhausted
+     * @throws BulkheadFullException            if the per-tier concurrency limit is exhausted
      */
     public String chatAgentic(ProviderTier tier, String systemPrompt, String userContent) {
         if (mcpTools == null) {
@@ -165,7 +161,9 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
 
     // ── circuit breaker state (for monitoring) ────────────────────────────────
 
-    /** Returns CB states for health endpoints without leaking internal types. */
+    /**
+     * Returns CB states for health endpoints without leaking internal types.
+     */
     public Map<String, CircuitBreaker.State> circuitBreakerStates() {
         Map<String, CircuitBreaker.State> states = new ConcurrentHashMap<>();
         registry.all().forEach(p ->
@@ -180,7 +178,7 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
                 cbStates.put(p.id(), cbRegistry.circuitBreaker(p.id()).getState().name()));
 
         Map<String, ProviderResilienceStatus.BulkheadSnapshot> bulkheads = Map.of(
-                "ANALYSIS",  snapshot(analysisBulkhead),
+                "ANALYSIS", snapshot(analysisBulkhead),
                 "MIGRATION", snapshot(migrationBulkhead)
         );
         return new ProviderResilienceStatus(Map.copyOf(cbStates), bulkheads);
@@ -343,7 +341,7 @@ public class ProviderRouter implements GetResilienceMetricsUseCase {
                 providerId,
                 null,
                 tier.name(),
-                usage.inputTokenCount()  != null ? usage.inputTokenCount()  : 0L,
+                usage.inputTokenCount() != null ? usage.inputTokenCount() : 0L,
                 usage.outputTokenCount() != null ? usage.outputTokenCount() : 0L,
                 0.0,
                 false,

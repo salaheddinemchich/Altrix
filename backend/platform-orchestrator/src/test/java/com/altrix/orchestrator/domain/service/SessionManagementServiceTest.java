@@ -24,9 +24,11 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SessionManagementServiceTest {
 
-    @Mock WorkflowSessionRepository sessionRepository;
+    @Mock
+    WorkflowSessionRepository sessionRepository;
 
-    @InjectMocks SessionManagementService service;
+    @InjectMocks
+    SessionManagementService service;
 
     // ── approve ───────────────────────────────────────────────────────────────
 

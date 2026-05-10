@@ -20,8 +20,10 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MigrationPlannerAgentTest {
 
-    @Mock AiPort aiPort;
-    @InjectMocks MigrationPlannerAgent agent;
+    @Mock
+    AiPort aiPort;
+    @InjectMocks
+    MigrationPlannerAgent agent;
 
     @Test
     void exposesNameAndOrder2() {

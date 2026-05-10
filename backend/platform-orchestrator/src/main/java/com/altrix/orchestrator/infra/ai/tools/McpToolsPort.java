@@ -35,7 +35,7 @@ public interface McpToolsPort {
      * @param argumentsJson the raw JSON arguments string from the model's
      *                      {@code ToolExecutionRequest.arguments()}
      * @return the tool's text output (or an error description on failure —
-     *         never throws, so the agentic loop can continue)
+     * never throws, so the agentic loop can continue)
      */
     String executeTool(String toolName, String argumentsJson);
 }

@@ -1,9 +1,9 @@
 package com.altrix.orchestrator.infra.ai.routing;
 
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.TierPreference;
 import com.altrix.orchestrator.infra.ai.provider.ProviderCostTier;
 import com.altrix.orchestrator.infra.ai.provider.ProviderTier;
 import com.altrix.orchestrator.infra.ai.provider.RegisteredProvider;
+import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.TierPreference;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -17,9 +17,9 @@ class TierPreferenceStrategyTest {
     }
 
     private final List<RegisteredProvider> mixed = List.of(
-            p("groq",      ProviderCostTier.FREE),
-            p("openai",    ProviderCostTier.PAID),
-            p("deepseek",  ProviderCostTier.FREE),
+            p("groq", ProviderCostTier.FREE),
+            p("openai", ProviderCostTier.PAID),
+            p("deepseek", ProviderCostTier.FREE),
             p("anthropic", ProviderCostTier.PAID)
     );
 

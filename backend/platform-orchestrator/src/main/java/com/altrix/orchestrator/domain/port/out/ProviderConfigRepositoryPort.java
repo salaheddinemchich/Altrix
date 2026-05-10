@@ -7,6 +7,8 @@ import java.util.Optional;
 
 public interface ProviderConfigRepositoryPort {
     Optional<ProviderConfig> findById(String providerId);
+
     List<ProviderConfig> findAll();
+
     ProviderConfig save(ProviderConfig config);
 }

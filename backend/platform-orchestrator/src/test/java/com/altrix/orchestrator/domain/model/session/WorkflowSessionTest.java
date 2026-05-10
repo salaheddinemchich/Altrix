@@ -2,12 +2,7 @@ package com.altrix.orchestrator.domain.model.session;
 
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.orchestrator.domain.exception.IllegalStateTransitionException;
-import com.altrix.orchestrator.domain.model.session.event.ApprovalRequested;
-import com.altrix.orchestrator.domain.model.session.event.MigrationCompleted;
-import com.altrix.orchestrator.domain.model.session.event.PlanReady;
-import com.altrix.orchestrator.domain.model.session.event.SessionFailed;
-import com.altrix.orchestrator.domain.model.session.event.SessionPaused;
-import com.altrix.orchestrator.domain.model.session.event.SessionStarted;
+import com.altrix.orchestrator.domain.model.session.event.*;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -90,7 +85,7 @@ class WorkflowSessionTest {
         s.beginContextAnalysis();
         List<Object> events = s.drainEvents();
         assertThat(events).hasSize(1)
-                          .first().isInstanceOf(SessionStarted.class);
+                .first().isInstanceOf(SessionStarted.class);
         SessionStarted e = (SessionStarted) events.get(0);
         assertThat(e.jobId()).isEqualTo("job-1");
         assertThat(e.projectId()).isEqualTo("proj-1");
@@ -105,7 +100,7 @@ class WorkflowSessionTest {
         s.completePlan(plan);
         List<Object> events = s.drainEvents();
         assertThat(events).hasSize(1)
-                          .first().isInstanceOf(PlanReady.class);
+                .first().isInstanceOf(PlanReady.class);
         assertThat(((PlanReady) events.get(0)).plan()).isEqualTo(plan);
     }
 
@@ -117,7 +112,7 @@ class WorkflowSessionTest {
         s.drainEvents();
         s.requestApproval();
         assertThat(s.drainEvents()).hasSize(1)
-                                   .first().isInstanceOf(ApprovalRequested.class);
+                .first().isInstanceOf(ApprovalRequested.class);
     }
 
     @Test
@@ -127,7 +122,7 @@ class WorkflowSessionTest {
         s.startValidation(5);
         List<Object> events = s.drainEvents();
         assertThat(events).hasSize(1)
-                          .first().isInstanceOf(MigrationCompleted.class);
+                .first().isInstanceOf(MigrationCompleted.class);
         assertThat(((MigrationCompleted) events.get(0)).fileCount()).isEqualTo(5);
     }
 
@@ -140,7 +135,7 @@ class WorkflowSessionTest {
         assertThat(s.errorMessage()).isEqualTo("AI down");
         List<Object> events = s.drainEvents();
         assertThat(events).hasSize(1)
-                          .first().isInstanceOf(SessionFailed.class);
+                .first().isInstanceOf(SessionFailed.class);
         assertThat(((SessionFailed) events.get(0)).reason()).isEqualTo("AI down");
     }
 
@@ -152,7 +147,7 @@ class WorkflowSessionTest {
         assertThat(s.status()).isEqualTo(SessionStatus.PAUSED);
         assertThat(s.pausedFrom()).isEqualTo(SessionStatus.MIGRATING);
         assertThat(s.drainEvents()).hasSize(1)
-                                   .first().isInstanceOf(SessionPaused.class);
+                .first().isInstanceOf(SessionPaused.class);
     }
 
     @Test

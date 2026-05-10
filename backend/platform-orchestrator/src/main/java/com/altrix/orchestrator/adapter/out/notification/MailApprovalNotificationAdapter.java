@@ -41,13 +41,13 @@ public class MailApprovalNotificationAdapter implements ApprovalNotificationPort
         message.setSubject("Action required: migration plan awaiting approval (job " + jobId + ")");
         message.setText("""
                 A migration plan is waiting for your approval.
-
+                
                 Job ID   : %s
                 Session  : %s
-
+                
                 Review and approve or reject at:
                 %s
-
+                
                 — Altrix Migration Platform
                 """.formatted(jobId, sessionId.value(), approvalUrl));
 

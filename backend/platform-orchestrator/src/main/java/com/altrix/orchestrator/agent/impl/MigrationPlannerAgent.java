@@ -39,16 +39,27 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
               "steps": ["Step 1: ...", "Step 2: ...", "..."],
               "riskLevel": "LOW | MEDIUM | HIGH",
               "estimatedEffort": "e.g. 3–5 days",
-              "summary": "2–3 sentence overview"
+              "summary": "2–3 sentence overview",
+              "targetFiles": ["src/main/java/com/example/Listener.java", "..."]
             }
+
+            targetFiles must list the exact relative file paths (as they appear in the ZIP) that contain
+            Google Cloud Pub/Sub code and require rewriting. Omit files that have no Pub/Sub usage.
             """;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final AiPort aiPort;
 
-    @Override public String getName()  { return "Migration Planner"; }
-    @Override public int getOrder() { return 2; }
+    @Override
+    public String getName() {
+        return "Migration Planner";
+    }
+
+    @Override
+    public int getOrder() {
+        return 2;
+    }
 
     @Override
     public MigrationPlan execute(AnalysisReport input) {
@@ -74,13 +85,14 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
 
     private MigrationPlan parsePlan(String projectId, String storageKey, String response) {
         try {
-            JsonNode root          = MAPPER.readTree(extractJson(response));
-            String targetStack     = root.path("targetStack").asText("Spring Boot 3 + Apache Kafka");
-            List<String> steps     = toStringList(root.path("steps"));
-            String riskLevel       = root.path("riskLevel").asText("MEDIUM");
+            JsonNode root = MAPPER.readTree(extractJson(response));
+            String targetStack = root.path("targetStack").asText("Spring Boot 3 + Apache Kafka");
+            List<String> steps = toStringList(root.path("steps"));
+            String riskLevel = root.path("riskLevel").asText("MEDIUM");
             String estimatedEffort = root.path("estimatedEffort").asText("TBD");
-            String summary         = root.path("summary").asText("");
-            return new MigrationPlan(projectId, storageKey, targetStack, steps, riskLevel, estimatedEffort, summary);
+            String summary = root.path("summary").asText("");
+            List<String> targetFiles = toStringList(root.path("targetFiles"));
+            return new MigrationPlan(projectId, storageKey, targetStack, steps, riskLevel, estimatedEffort, summary, targetFiles);
         } catch (Exception e) {
             log.warn("[{}] failed to parse AI response: {}", getName(), e.getMessage());
             throw new RuntimeException("Plan parse failed", e);
@@ -92,19 +104,21 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
                 ? "Migration plan — no steps generated (AI unavailable)"
                 : "Migration plan based on: " + report.summary();
         return new MigrationPlan(report.projectId(), report.storageKey(),
-                "Spring Boot 3 + Apache Kafka", List.of(), "MEDIUM", "TBD", summary);
+                "Spring Boot 3 + Apache Kafka", List.of(), "MEDIUM", "TBD", summary, List.of());
     }
 
     private static String extractJson(String response) {
         int start = response.indexOf('{');
-        int end   = response.lastIndexOf('}');
+        int end = response.lastIndexOf('}');
         return (start >= 0 && end > start) ? response.substring(start, end + 1) : response;
     }
 
     private static List<String> toStringList(JsonNode node) {
         if (node == null || node.isMissingNode() || !node.isArray()) return List.of();
         List<String> result = new ArrayList<>();
-        node.forEach(n -> { if (!n.asText("").isBlank()) result.add(n.asText()); });
+        node.forEach(n -> {
+            if (!n.asText("").isBlank()) result.add(n.asText());
+        });
         return result;
     }
 }

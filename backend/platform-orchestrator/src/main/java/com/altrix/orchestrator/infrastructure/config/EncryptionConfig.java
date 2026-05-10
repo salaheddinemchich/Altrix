@@ -15,4 +15,5 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties(prefix = "encryption.provider-config")
 public record EncryptionConfig(
         @DefaultValue("") String key
-) {}
+) {
+}

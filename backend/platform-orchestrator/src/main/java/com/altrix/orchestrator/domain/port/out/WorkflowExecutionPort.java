@@ -17,7 +17,7 @@ public interface WorkflowExecutionPort {
      *
      * @param context project context produced by the Kafka listener
      * @return final {@link MigrationState} — callers can extract the migrated
-     *         files via {@code state.migrationArtifact()}
+     * files via {@code state.migrationArtifact()}
      */
     MigrationState execute(ProjectContext context);
 }

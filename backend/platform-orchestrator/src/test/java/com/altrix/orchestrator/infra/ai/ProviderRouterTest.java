@@ -2,16 +2,12 @@ package com.altrix.orchestrator.infra.ai;
 
 import com.altrix.orchestrator.domain.port.out.AiCallLedgerPort;
 import com.altrix.orchestrator.domain.port.out.TokenUsagePort;
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.BulkheadSettings;
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.CircuitBreakerSettings;
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RetrySettings;
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.RoutingStrategy;
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.TierPreference;
-import com.altrix.orchestrator.infrastructure.config.McpConfig;
 import com.altrix.orchestrator.infra.ai.provider.ProviderCostTier;
 import com.altrix.orchestrator.infra.ai.provider.ProviderTier;
 import com.altrix.orchestrator.infra.ai.provider.RegisteredProvider;
+import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig;
+import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.*;
+import com.altrix.orchestrator.infrastructure.config.McpConfig;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.output.Response;
@@ -65,11 +61,13 @@ class ProviderRouterTest {
         );
     }
 
-    /** Builds a router with MCP disabled and a no-op token-usage sink. */
+    /**
+     * Builds a router with MCP disabled and a no-op token-usage sink.
+     */
     private static ProviderRouter router(ProviderRegistry registry, AiRoutingConfig routing) {
-        McpConfig          mcpCfg       = new McpConfig(false, 5, List.of());
-        TokenUsagePort     tokenUsage   = mock(TokenUsagePort.class);
-        AiCallLedgerPort   ledger       = mock(AiCallLedgerPort.class);
+        McpConfig mcpCfg = new McpConfig(false, 5, List.of());
+        TokenUsagePort tokenUsage = mock(TokenUsagePort.class);
+        AiCallLedgerPort ledger = mock(AiCallLedgerPort.class);
         return new ProviderRouter(registry, routing, mcpCfg, Optional.empty(), tokenUsage, ledger);
     }
 
@@ -88,12 +86,12 @@ class ProviderRouterTest {
     @Test
     void falls_back_when_first_provider_throws() {
         ChatLanguageModel broken = modelThrowing();
-        ChatLanguageModel ok     = modelReturning("fallback");
+        ChatLanguageModel ok = modelReturning("fallback");
 
         ProviderRouter router = router(
                 registryOf(
                         provider("openai", ProviderCostTier.PAID, broken),
-                        provider("groq",   ProviderCostTier.FREE, ok)
+                        provider("groq", ProviderCostTier.FREE, ok)
                 ),
                 defaultRouting()
         );
@@ -106,7 +104,7 @@ class ProviderRouterTest {
         ProviderRouter router = router(
                 registryOf(
                         provider("openai", ProviderCostTier.PAID, modelThrowing()),
-                        provider("groq",   ProviderCostTier.FREE, modelThrowing())
+                        provider("groq", ProviderCostTier.FREE, modelThrowing())
                 ),
                 defaultRouting()
         );
@@ -124,7 +122,10 @@ class ProviderRouterTest {
         );
 
         for (int i = 0; i < 10; i++) {
-            try { router.chat(ProviderTier.MIGRATION, "s", "u"); } catch (Exception ignored) {}
+            try {
+                router.chat(ProviderTier.MIGRATION, "s", "u");
+            } catch (Exception ignored) {
+            }
         }
 
         assertThat(router.circuitBreakerStates().get("groq"))
@@ -133,7 +134,7 @@ class ProviderRouterTest {
 
     @Test
     void analysis_tier_routes_to_analysis_model() {
-        ChatLanguageModel analysisModel  = modelReturning("analysis result");
+        ChatLanguageModel analysisModel = modelReturning("analysis result");
         ChatLanguageModel migrationModel = modelReturning("migration result");
         RegisteredProvider p = new RegisteredProvider("groq", ProviderCostTier.FREE, analysisModel, migrationModel);
 
@@ -146,7 +147,7 @@ class ProviderRouterTest {
 
     @Test
     void explicit_order_strategy_respects_configured_order() {
-        ChatLanguageModel groqModel   = modelReturning("groq");
+        ChatLanguageModel groqModel = modelReturning("groq");
         ChatLanguageModel openaiModel = modelReturning("openai");
 
         AiRoutingConfig explicitCfg = new AiRoutingConfig(
@@ -162,7 +163,7 @@ class ProviderRouterTest {
         ProviderRouter r = router(
                 registryOf(
                         provider("openai", ProviderCostTier.PAID, openaiModel),
-                        provider("groq",   ProviderCostTier.FREE, groqModel)
+                        provider("groq", ProviderCostTier.FREE, groqModel)
                 ),
                 explicitCfg
         );

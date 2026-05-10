@@ -8,10 +8,11 @@ package com.altrix.orchestrator.domain.port.in;
  * system default.
  */
 public record SaveProviderConfigCommand(
-        String  providerId,
+        String providerId,
         Boolean enabled,
-        String  plainApiKey,     // null = no change; "" = clear override
-        String  baseUrl,         // null = no change; "" = clear override
-        String  modelAnalysis,   // null = no change; "" = clear override
-        String  modelMigration   // null = no change; "" = clear override
-) {}
+        String plainApiKey,     // null = no change; "" = clear override
+        String baseUrl,         // null = no change; "" = clear override
+        String modelAnalysis,   // null = no change; "" = clear override
+        String modelMigration   // null = no change; "" = clear override
+) {
+}

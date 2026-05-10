@@ -8,10 +8,11 @@ import java.time.Instant;
  * to keep the domain layer free of infrastructure types.
  */
 public record TokenUsageRecord(
-        String  providerId,
-        String  tier,
-        int     inputTokens,
-        int     outputTokens,
-        int     totalTokens,
+        String providerId,
+        String tier,
+        int inputTokens,
+        int outputTokens,
+        int totalTokens,
         Instant recordedAt
-) {}
+) {
+}

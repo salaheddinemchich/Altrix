@@ -1,8 +1,8 @@
 package com.altrix.orchestrator.agent.impl;
 
 import com.altrix.common.domain.enums.FileChangeType;
-import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.model.MigratedFile;
+import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.model.ValidationReport;
 import com.altrix.common.exception.AgentFailureException;
 import org.junit.jupiter.api.Test;

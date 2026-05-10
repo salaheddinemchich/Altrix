@@ -6,7 +6,7 @@ plugins {
 
 val langchain4jVersion = "0.36.2"
 val resilience4jVersion = "2.2.0"
-val langgraph4jVersion  = "1.5.12"
+val langgraph4jVersion = "1.5.12"
 
 dependencies {
     implementation(project(":platform-common"))
@@ -17,6 +17,14 @@ dependencies {
 
     // Email — approval notifications (#66)
     implementation("org.springframework.boot:spring-boot-starter-mail")
+
+    // Security — GitHub OAuth2 login + JWT RS256 + refresh tokens + rate limiting
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    testImplementation("org.springframework.security:spring-security-test")
 
     // Validation
     implementation("org.springframework.boot:spring-boot-starter-validation")
@@ -56,6 +64,9 @@ dependencies {
     // Redis — job status cache + LangGraph checkpoint persistence (commons-pool2 for Lettuce pooling)
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.apache.commons:commons-pool2")
+
+    // JTokkit — token counting for AI prompt budget enforcement (#48)
+    implementation("com.knuddels:jtokkit:1.1.0")
 
     // Resilience4j — circuit breaker + retry + bulkhead per provider
     implementation("io.github.resilience4j:resilience4j-spring-boot3:$resilience4jVersion")

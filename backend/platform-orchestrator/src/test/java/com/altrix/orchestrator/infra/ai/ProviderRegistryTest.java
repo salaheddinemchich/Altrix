@@ -62,7 +62,7 @@ class ProviderRegistryTest {
     @Test
     void build_not_called_on_disabled_factory() {
         ProviderFactory disabled = disabledFactory("anthropic");
-        ProviderFactory enabled  = enabledFactory("groq");
+        ProviderFactory enabled = enabledFactory("groq");
 
         new ProviderRegistry(List.of(disabled, enabled));
 

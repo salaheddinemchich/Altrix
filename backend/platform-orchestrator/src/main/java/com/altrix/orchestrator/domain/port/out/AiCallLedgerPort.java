@@ -11,7 +11,9 @@ import java.util.List;
  */
 public interface AiCallLedgerPort {
 
-    /** Persists one ledger entry. Best-effort — never throw on the caller. */
+    /**
+     * Persists one ledger entry. Best-effort — never throw on the caller.
+     */
     void record(AiCallLedgerEntry entry);
 
     /**

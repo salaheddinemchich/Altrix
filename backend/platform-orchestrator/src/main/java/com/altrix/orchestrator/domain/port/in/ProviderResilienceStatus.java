@@ -12,5 +12,6 @@ public record ProviderResilienceStatus(
         /** tier-name (ANALYSIS / MIGRATION) → bulkhead snapshot */
         Map<String, BulkheadSnapshot> bulkheads
 ) {
-    public record BulkheadSnapshot(int maxConcurrent, int availablePermits) {}
+    public record BulkheadSnapshot(int maxConcurrent, int availablePermits) {
+    }
 }

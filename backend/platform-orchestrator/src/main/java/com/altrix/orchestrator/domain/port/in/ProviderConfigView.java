@@ -11,11 +11,12 @@ import java.time.Instant;
  * whether a key override is stored.
  */
 public record ProviderConfigView(
-        String           providerId,
+        String providerId,
         ProviderCostTier costTier,
-        boolean          effectiveEnabled,
-        boolean          hasCustomApiKey,
-        String           effectiveModelAnalysis,
-        String           effectiveModelMigration,
-        Instant          updatedAt
-) {}
+        boolean effectiveEnabled,
+        boolean hasCustomApiKey,
+        String effectiveModelAnalysis,
+        String effectiveModelMigration,
+        Instant updatedAt
+) {
+}

@@ -6,15 +6,17 @@ package com.altrix.orchestrator.infra.ai.provider;
  * Factories use this to build {@link RegisteredProvider} instances.
  */
 public record ResolvedProviderConfig(
-        boolean  enabled,
-        String   apiKey,          // decrypted; empty string for key-less providers (Ollama)
-        String   baseUrl,         // empty string when not applicable (Anthropic)
-        String   modelAnalysis,
-        String   modelMigration,
-        double   temperature,
-        long     timeoutSeconds
+        boolean enabled,
+        String apiKey,          // decrypted; empty string for key-less providers (Ollama)
+        String baseUrl,         // empty string when not applicable (Anthropic)
+        String modelAnalysis,
+        String modelMigration,
+        double temperature,
+        long timeoutSeconds
 ) {
-    /** True when enabled AND (has an API key OR is a local/key-less provider). */
+    /**
+     * True when enabled AND (has an API key OR is a local/key-less provider).
+     */
     public boolean isEffectivelyEnabled(boolean requiresApiKey) {
         return enabled && (!requiresApiKey || !apiKey.isBlank());
     }

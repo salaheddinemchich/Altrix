@@ -56,7 +56,7 @@ class PipelineValueObjectsTest {
 
     @Test
     void migrationPlan_handlesNullsAndDefensiveCopy() {
-        MigrationPlan p = new MigrationPlan("p1", null, null, null, null, null, null);
+        MigrationPlan p = new MigrationPlan("p1", null, null, null, null, null, null, null);
         assertThat(p.storageKey()).isEmpty();
         assertThat(p.targetStack()).isEmpty();
         assertThat(p.steps()).isEmpty();
@@ -68,7 +68,7 @@ class PipelineValueObjectsTest {
     @Test
     void migrationPlan_preservesAllFields() {
         MigrationPlan p = new MigrationPlan("p1", "uploads/p1.zip", "Spring Boot 3 + Kafka",
-                List.of("Step 1"), "MEDIUM", "2 days", "migrate messaging layer");
+                List.of("Step 1"), "MEDIUM", "2 days", "migrate messaging layer", List.of());
         assertThat(p.storageKey()).isEqualTo("uploads/p1.zip");
         assertThat(p.targetStack()).isEqualTo("Spring Boot 3 + Kafka");
         assertThat(p.steps()).containsExactly("Step 1");
@@ -89,13 +89,13 @@ class PipelineValueObjectsTest {
 
     @Test
     void approvedPlan_rejectsNullPlan() {
-        assertThatThrownBy(() -> new ApprovedPlan(null, "user", Instant.now()))
+        assertThatThrownBy(() -> new ApprovedPlan(null, "user", Instant.now(), null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void approvedPlan_defaultsApprovedByToAuto() {
-        ApprovedPlan ap = new ApprovedPlan(MigrationPlan.empty("p1"), null, null);
+        ApprovedPlan ap = new ApprovedPlan(MigrationPlan.empty("p1"), null, null, null);
         assertThat(ap.approvedBy()).isEqualTo("auto");
         assertThat(ap.approvedAt()).isEqualTo(Instant.EPOCH);
     }

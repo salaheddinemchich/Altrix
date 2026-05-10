@@ -8,8 +8,8 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
  * {@link com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory}.
  */
 public record RegisteredProvider(
-        String            id,
-        ProviderCostTier  costTier,
+        String id,
+        ProviderCostTier costTier,
         ChatLanguageModel analysisModel,
         ChatLanguageModel migrationModel
 ) {

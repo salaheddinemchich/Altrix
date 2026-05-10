@@ -1,9 +1,9 @@
 package com.altrix.orchestrator.infra.ai.routing;
 
-import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.TierPreference;
 import com.altrix.orchestrator.infra.ai.provider.ProviderCostTier;
 import com.altrix.orchestrator.infra.ai.provider.ProviderTier;
 import com.altrix.orchestrator.infra.ai.provider.RegisteredProvider;
+import com.altrix.orchestrator.infrastructure.config.AiRoutingConfig.TierPreference;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +30,7 @@ public final class TierPreferenceStrategy implements ProviderSelectionStrategy {
                 ? ProviderCostTier.PAID
                 : ProviderCostTier.FREE;
 
-        List<RegisteredProvider> first  = new ArrayList<>();
+        List<RegisteredProvider> first = new ArrayList<>();
         List<RegisteredProvider> second = new ArrayList<>();
 
         for (RegisteredProvider p : available) {

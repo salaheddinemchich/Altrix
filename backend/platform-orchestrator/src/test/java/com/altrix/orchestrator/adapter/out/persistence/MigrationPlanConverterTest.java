@@ -35,9 +35,9 @@ class MigrationPlanConverterTest {
     void roundTrip_preservesAllFields() {
         MigrationPlan plan = new MigrationPlan(
                 "proj-1", "uploads/proj-1.zip", "Spring Boot 3 + Kafka",
-                List.of("step-a", "step-b"), "MEDIUM", "2 days", "two steps");
+                List.of("step-a", "step-b"), "MEDIUM", "2 days", "two steps", List.of());
 
-        String json    = converter.convertToDatabaseColumn(plan);
+        String json = converter.convertToDatabaseColumn(plan);
         MigrationPlan result = converter.convertToEntityAttribute(json);
 
         assertThat(result).isEqualTo(plan);
@@ -75,7 +75,7 @@ class MigrationPlanConverterTest {
     @Test
     void convertToDatabaseColumn_producesValidJson() {
         MigrationPlan plan = new MigrationPlan(
-                "proj-1", "", "", List.of("s1"), "", "", "one step");
+                "proj-1", "", "", List.of("s1"), "", "", "one step", List.of());
         String json = converter.convertToDatabaseColumn(plan);
         assertThat(json).contains("proj-1").contains("s1").contains("one step");
     }

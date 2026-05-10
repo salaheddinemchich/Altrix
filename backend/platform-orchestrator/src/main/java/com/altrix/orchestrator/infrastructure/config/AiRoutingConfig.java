@@ -17,32 +17,37 @@ import java.util.List;
  */
 @ConfigurationProperties(prefix = "ai.routing")
 public record AiRoutingConfig(
-        @DefaultValue("TIER_PREFERENCE") RoutingStrategy        strategy,
-        @DefaultValue("PAID_FIRST")      TierPreference         tierPreference,
-        @DefaultValue("")                List<String>           explicitOrder,
-                                         CircuitBreakerSettings circuitBreaker,
-                                         RetrySettings          retry,
-                                         BulkheadSettings       bulkhead,
+        @DefaultValue("TIER_PREFERENCE") RoutingStrategy strategy,
+        @DefaultValue("PAID_FIRST") TierPreference tierPreference,
+        @DefaultValue("") List<String> explicitOrder,
+        CircuitBreakerSettings circuitBreaker,
+        RetrySettings retry,
+        BulkheadSettings bulkhead,
         /** Monthly token budget across all providers. 0 = unlimited. */
-        @DefaultValue("0")               long                   monthlyTokenLimit
+        @DefaultValue("0") long monthlyTokenLimit
 ) {
 
-    public enum RoutingStrategy { TIER_PREFERENCE, EXPLICIT_ORDER }
-    public enum TierPreference  { PAID_FIRST, FREE_FIRST }
+    public enum RoutingStrategy {TIER_PREFERENCE, EXPLICIT_ORDER}
+
+    public enum TierPreference {PAID_FIRST, FREE_FIRST}
 
     public record CircuitBreakerSettings(
-            @DefaultValue("10")   int   slidingWindowSize,
-            @DefaultValue("50")   float failureRateThreshold,
-            @DefaultValue("30")   long  waitDurationOpenSeconds,
-            @DefaultValue("3")    int   permittedCallsHalfOpen
-    ) {}
+            @DefaultValue("10") int slidingWindowSize,
+            @DefaultValue("50") float failureRateThreshold,
+            @DefaultValue("30") long waitDurationOpenSeconds,
+            @DefaultValue("3") int permittedCallsHalfOpen
+    ) {
+    }
 
     public record RetrySettings(
-            @DefaultValue("2")    int  maxAttempts,
+            @DefaultValue("2") int maxAttempts,
             @DefaultValue("1000") long waitDurationMillis
-    ) {}
+    ) {
+    }
 
-    /** Per-tier semaphore bulkhead — limits concurrent AI calls to protect upstream rate limits. */
+    /**
+     * Per-tier semaphore bulkhead — limits concurrent AI calls to protect upstream rate limits.
+     */
     public record BulkheadSettings(
             /** Max concurrent ANALYSIS (fast-model) calls across all agents. */
             @DefaultValue("3") int analysisConcurrency,
@@ -50,5 +55,6 @@ public record AiRoutingConfig(
             @DefaultValue("5") int migrationConcurrency,
             /** Max time a caller will wait for a permit before receiving BulkheadFullException. */
             @DefaultValue("5000") long maxWaitMs
-    ) {}
+    ) {
+    }
 }

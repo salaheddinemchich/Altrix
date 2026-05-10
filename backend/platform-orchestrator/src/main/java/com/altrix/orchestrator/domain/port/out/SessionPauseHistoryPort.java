@@ -14,7 +14,9 @@ public interface SessionPauseHistoryPort {
 
     void record(WorkflowSessionId sessionId, SessionStatus pausedFrom, Instant pausedAt);
 
-    /** Marks the most recent open (resumedAt=null) entry for this session as resumed. */
+    /**
+     * Marks the most recent open (resumedAt=null) entry for this session as resumed.
+     */
     void markResumed(WorkflowSessionId sessionId, Instant resumedAt);
 
     List<SessionPauseRecord> findBySessionId(WorkflowSessionId sessionId);
