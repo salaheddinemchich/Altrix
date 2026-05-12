@@ -2,6 +2,7 @@ package com.altrix.orchestrator.adapter.out.cache;
 
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.orchestrator.domain.port.out.MigrationPlanCachePort;
+import com.altrix.orchestrator.infrastructure.config.CacheConfig;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,7 @@ import java.util.Optional;
 /**
  * Redis-backed cache for successful migration plans (#148).
  * Key format: {@code migration-plan:{projectId}:{targetStack}}
- * TTL: 7 days (plans remain useful across provider outages).
+ * TTL: configurable via {@code cache.ttl.migration-plan} (default 24 h) — #157.
  */
 @Slf4j
 @Component
@@ -24,20 +25,21 @@ import java.util.Optional;
 public class RedisMigrationPlanCacheAdapter implements MigrationPlanCachePort {
 
     private static final String KEY_PREFIX = "migration-plan:";
-    private static final Duration TTL = Duration.ofDays(7);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final CacheConfig cacheConfig;
 
     @Override
     public void store(String projectId, String targetStack, List<MigratedFile> files) {
         String key = cacheKey(projectId, targetStack);
         try {
             String json = objectMapper.writeValueAsString(files);
-            redisTemplate.opsForValue().set(key, json, TTL);
-            log.debug("Cached {} migrated file(s) for project={} stack={}", files.size(), projectId, targetStack);
+            Duration ttl = cacheConfig.ttl().migrationPlan();
+            redisTemplate.opsForValue().set(key, json, ttl);
+            log.debug("Cached {} migrated file(s) for project={} stack={} ttl={}s",
+                    files.size(), projectId, targetStack, ttl.getSeconds());
         } catch (Exception e) {
-            // Best-effort — never fail a successful migration because of cache write
             log.warn("Failed to cache migration plan for project={}: {}", projectId, e.getMessage());
         }
     }
@@ -48,8 +50,7 @@ public class RedisMigrationPlanCacheAdapter implements MigrationPlanCachePort {
         try {
             String json = redisTemplate.opsForValue().get(key);
             if (json == null) return Optional.empty();
-            List<MigratedFile> files = objectMapper.readValue(json, new TypeReference<>() {
-            });
+            List<MigratedFile> files = objectMapper.readValue(json, new TypeReference<>() {});
             log.info("Cache HIT — returning {} file(s) for project={} stack={}", files.size(), projectId, targetStack);
             return Optional.of(files);
         } catch (Exception e) {

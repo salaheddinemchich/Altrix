@@ -51,7 +51,11 @@ public class ProjectController {
     public ProjectResponse upload(
             @RequestHeader("X-User-Id") @NotBlank String userId,
             @RequestPart("file") MultipartFile file,
-            @RequestPart(value = "configFormatPreference", required = false)
+            // @RequestParam (not @RequestPart) — the value is a plain form field
+            // (string), so Spring binds it via the standard String→Enum converter.
+            // @RequestPart on an enum requires the part to carry application/json,
+            // which most multipart clients don't set on simple text parts.
+            @RequestParam(value = "configFormatPreference", required = false)
                     ConfigFormatPreference configFormatPreference
     ) throws IOException {
 

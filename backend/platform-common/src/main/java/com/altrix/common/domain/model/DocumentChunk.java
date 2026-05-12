@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import com.altrix.common.domain.enums.DocumentType;
 
 /**
@@ -20,7 +22,7 @@ public record DocumentChunk(
         String       text,
         String       contentHash,
         String       sourceUrl
-) {
+) implements Serializable {
     public static DocumentChunk sourceCode(String projectId, String filePath,
                                            int chunkIndex, String text, String hash) {
         return new DocumentChunk(projectId, DocumentType.SOURCE_CODE,

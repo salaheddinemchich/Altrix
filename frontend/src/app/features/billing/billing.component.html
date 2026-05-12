@@ -1,0 +1,135 @@
+<div class="page-header">
+  <div>
+    <h1>Billing & Usage</h1>
+    <p class="muted">AI token consumption and cost breakdown for the current billing period.</p>
+  </div>
+  <button class="btn" (click)="load()">
+    <app-icon name="refresh" [size]="15"/>
+    Refresh
+  </button>
+</div>
+
+@if (error(); as err) {
+  <div class="error" style="margin-bottom:16px">{{ err }}</div>
+}
+
+<!-- ══ Summary cards ══════════════════════════════════════════════════════════ -->
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="summary-icon" style="--c: rgba(245,196,94,0.15); --ic: #F5C45E">
+      <app-icon name="dollar" [size]="20"/>
+    </div>
+    <div>
+      <div class="summary-value">
+        @if (totalCost() !== null) { ${{ totalCost()!.toFixed(4) }} } @else { — }
+      </div>
+      <div class="summary-label">Estimated cost</div>
+    </div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-icon" style="--c: rgba(91,140,255,0.15); --ic: #5B8CFF">
+      <app-icon name="zap" [size]="20"/>
+    </div>
+    <div>
+      <div class="summary-value">{{ formatK(totalInput()) }}</div>
+      <div class="summary-label">Input tokens</div>
+    </div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-icon" style="--c: rgba(45,212,191,0.15); --ic: #2DD4BF">
+      <app-icon name="zap" [size]="20"/>
+    </div>
+    <div>
+      <div class="summary-value">{{ formatK(totalOutput()) }}</div>
+      <div class="summary-label">Output tokens</div>
+    </div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-icon" style="--c: rgba(179,136,255,0.15); --ic: #b388ff">
+      <app-icon name="cpu" [size]="20"/>
+    </div>
+    <div>
+      <div class="summary-value">{{ totalCalls() ?? '—' }}</div>
+      <div class="summary-label">AI calls</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Token usage by provider ════════════════════════════════════════════════ -->
+<section style="margin-bottom: 24px">
+  <h2 style="margin-bottom:14px">Token usage by provider</h2>
+  @if (tokens() === null) {
+    <div class="empty">Loading…</div>
+  } @else if (tokens()!.length === 0) {
+    <div class="empty">No token usage recorded yet.</div>
+  } @else {
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Tier</th>
+            <th>Calls</th>
+            <th>Input tokens</th>
+            <th>Output tokens</th>
+            <th>Total tokens</th>
+            <th>Est. cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of tokens()!; track r.providerId + r.tier) {
+            <tr>
+              <td style="font-weight:600;text-transform:capitalize">{{ r.providerId }}</td>
+              <td><span class="pill">{{ r.tier }}</span></td>
+              <td class="mono muted">{{ r.callCount | number }}</td>
+              <td class="mono muted">{{ formatK(r.inputTokens) }}</td>
+              <td class="mono muted">{{ formatK(r.outputTokens) }}</td>
+              <td class="mono" style="font-weight:500">{{ formatK(r.totalTokens) }}</td>
+              <td class="mono" style="color:var(--color-gold)">${{ r.estimatedCostUsd.toFixed(4) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>
+
+<!-- ══ Cost by agent ══════════════════════════════════════════════════════════ -->
+<section>
+  <h2 style="margin-bottom:14px">Cost by agent</h2>
+  @if (usage() === null) {
+    <div class="empty">Loading…</div>
+  } @else if (usage()!.length === 0) {
+    <div class="empty">No billing data recorded yet.</div>
+  } @else {
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Provider</th>
+            <th>Calls</th>
+            <th>Input tokens</th>
+            <th>Output tokens</th>
+            <th>Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of usage()!; track r.agentName + r.providerName) {
+            <tr>
+              <td style="font-weight:500">{{ r.agentName }}</td>
+              <td class="muted" style="text-transform:capitalize">{{ r.providerName }}</td>
+              <td class="mono muted">{{ r.callCount | number }}</td>
+              <td class="mono muted">{{ formatK(r.totalInputTokens) }}</td>
+              <td class="mono muted">{{ formatK(r.totalOutputTokens) }}</td>
+              <td class="mono" style="color:var(--color-gold)">${{ r.totalCostUsd.toFixed(4) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

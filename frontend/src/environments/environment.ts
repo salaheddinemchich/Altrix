@@ -6,9 +6,11 @@
  */
 export const environment = {
   production: false,
+  // Auth and orchestrator share the same service — port 8084
+  apiUrl: 'http://localhost:8084',
   api: {
     project:      'http://localhost:8082',
     job:          'http://localhost:8083',
-    orchestrator: 'http://localhost:8084'
-  }
+    orchestrator: 'http://localhost:8084',
+  },
 };

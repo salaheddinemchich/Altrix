@@ -19,10 +19,10 @@ public class RefreshTokenPersistenceAdapter implements RefreshTokenRepository {
 
     @Override
     @Transactional
-    public RefreshToken save(String tokenHash, String githubId, Instant expiresAt) {
+    public RefreshToken save(String tokenHash, String userId, Instant expiresAt) {
         RefreshTokenJpaEntity entity = RefreshTokenJpaEntity.builder()
                 .tokenHash(tokenHash)
-                .githubId(githubId)
+                .userId(userId)
                 .expiresAt(expiresAt)
                 .issuedAt(Instant.now())
                 .revoked(false)
@@ -47,9 +47,9 @@ public class RefreshTokenPersistenceAdapter implements RefreshTokenRepository {
 
     @Override
     @Transactional
-    public void revokeAllForUser(String githubId) {
-        int count = repository.revokeAllForUser(githubId);
-        log.debug("Revoked {} refresh token(s) for githubId={}", count, githubId);
+    public void revokeAllForUser(String userId) {
+        int count = repository.revokeAllForUser(userId);
+        log.debug("Revoked {} refresh token(s) for userId={}", count, userId);
     }
 
     @Override
@@ -60,7 +60,7 @@ public class RefreshTokenPersistenceAdapter implements RefreshTokenRepository {
     }
 
     private RefreshToken toDomain(RefreshTokenJpaEntity e) {
-        return new RefreshToken(e.getId(), e.getTokenHash(), e.getGithubId(),
+        return new RefreshToken(e.getId(), e.getTokenHash(), e.getUserId(),
                 e.getExpiresAt(), e.getIssuedAt(), e.isRevoked(), e.getReplacedByHash());
     }
 }

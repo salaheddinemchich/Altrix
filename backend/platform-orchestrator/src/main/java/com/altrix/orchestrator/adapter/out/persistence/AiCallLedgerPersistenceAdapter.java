@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -28,7 +29,7 @@ public class AiCallLedgerPersistenceAdapter implements AiCallLedgerPort {
                     .tier(entry.tier())
                     .inputTokens(entry.inputTokens())
                     .outputTokens(entry.outputTokens())
-                    .costUsd(entry.costUsd())
+                    .costUsd(BigDecimal.valueOf(entry.costUsd()))
                     .cacheHit(entry.cacheHit())
                     .createdAt(entry.createdAt())
                     .build());
@@ -46,7 +47,7 @@ public class AiCallLedgerPersistenceAdapter implements AiCallLedgerPort {
                         r.providerName(),
                         r.totalInputTokens(),
                         r.totalOutputTokens(),
-                        r.totalCostUsd(),
+                        r.totalCostUsd().doubleValue(),
                         r.callCount()))
                 .toList();
     }

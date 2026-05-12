@@ -1,32 +1,48 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-
-import { ConfigFormatPreference, Project } from '../../core/models/project.model';
+import { Project } from '../../core/models/project.model';
+import { ConfigFormatPreference, GitHubRepo } from '../../core/models/repository.model';
 import { ProjectService } from '../../core/services/project.service';
+import { RepositoryService } from '../../core/services/repository.service';
+import { IconComponent } from '../../shared/icon/icon.component';
 
 @Component({
   selector: 'app-projects',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, IconComponent],
   templateUrl: './projects.component.html',
-  styleUrl: './projects.component.scss'
+  styleUrl: './projects.component.scss',
 })
 export class ProjectsComponent {
   private readonly projectsApi = inject(ProjectService);
+  private readonly repoApi = inject(RepositoryService);
 
-  readonly projects   = signal<Project[] | null>(null);
-  readonly loadError  = signal<string | null>(null);
+  readonly projects = signal<Project[] | null>(null);
+  readonly loadError = signal<string | null>(null);
 
-  readonly selectedFile          = signal<File | null>(null);
-  readonly configFormat          = signal<ConfigFormatPreference>('KEEP_ORIGINAL');
-  readonly uploading             = signal(false);
-  readonly uploadError           = signal<string | null>(null);
+  readonly repos = signal<GitHubRepo[] | null>(null);
+  readonly reposError = signal<string | null>(null);
+  readonly reposLoading = signal(false);
+
+  readonly selectedRepo = signal<GitHubRepo | null>(null);
+  readonly configFormat = signal<ConfigFormatPreference>('KEEP_ORIGINAL');
+  readonly ingesting = signal(false);
+  readonly ingestError = signal<string | null>(null);
+  readonly ingestSuccess = signal<string | null>(null);
 
   readonly configOptions: ConfigFormatPreference[] = ['KEEP_ORIGINAL', 'YAML', 'PROPERTIES'];
 
+  readonly repoSearchQuery = signal('');
+  readonly filteredRepos = computed(() => {
+    const q = this.repoSearchQuery().toLowerCase();
+    const all = this.repos() ?? [];
+    return q ? all.filter(r => r.fullName.toLowerCase().includes(q)) : all;
+  });
+
   constructor() {
     this.refresh();
+    this.loadRepos();
   }
 
   refresh(): void {
@@ -37,50 +53,76 @@ export class ProjectsComponent {
       error: err => {
         this.projects.set([]);
         this.loadError.set(this.describe(err));
-      }
+      },
     });
   }
 
-  onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    this.selectedFile.set(input.files?.[0] ?? null);
-    this.uploadError.set(null);
+  loadRepos(): void {
+    this.reposLoading.set(true);
+    this.reposError.set(null);
+    this.repoApi.listRepos().subscribe({
+      next: repos => {
+        this.repos.set(repos);
+        this.reposLoading.set(false);
+      },
+      error: err => {
+        this.reposError.set(this.describe(err));
+        this.reposLoading.set(false);
+      },
+    });
   }
 
-  upload(): void {
-    const file = this.selectedFile();
-    if (!file || this.uploading()) return;
+  selectRepo(repo: GitHubRepo): void {
+    this.selectedRepo.set(repo);
+    this.ingestError.set(null);
+    this.ingestSuccess.set(null);
+  }
 
-    this.uploading.set(true);
-    this.uploadError.set(null);
+  clearSelection(): void {
+    this.selectedRepo.set(null);
+    this.ingestError.set(null);
+    this.ingestSuccess.set(null);
+  }
 
-    this.projectsApi.upload(file, this.configFormat()).subscribe({
-      next: () => {
-        this.uploading.set(false);
-        this.selectedFile.set(null);
+  ingest(): void {
+    const repo = this.selectedRepo();
+    if (!repo || this.ingesting()) return;
+    this.ingesting.set(true);
+    this.ingestError.set(null);
+    this.ingestSuccess.set(null);
+
+    this.repoApi.ingestFromGitHub({
+      repoFullName: repo.fullName,
+      defaultBranch: repo.defaultBranch,
+      configFormatPreference: this.configFormat(),
+    }).subscribe({
+      next: project => {
+        this.ingesting.set(false);
+        this.ingestSuccess.set(`Project "${project.name}" created successfully.`);
+        this.selectedRepo.set(null);
         this.refresh();
       },
       error: err => {
-        this.uploading.set(false);
-        this.uploadError.set(this.describe(err));
-      }
+        this.ingesting.set(false);
+        this.ingestError.set(this.describe(err));
+      },
     });
   }
 
   statusClass(status: Project['status']): string {
     switch (status) {
       case 'READY':      return 'success';
-      case 'FAILED':     return 'danger';
+      case 'FAILED':
+      case 'ERROR':      return 'danger';
       case 'PROCESSING': return 'info';
+      case 'PENDING':
       case 'REGISTERED': return 'warning';
       default:           return '';
     }
   }
 
   private describe(err: unknown): string {
-    if (err && typeof err === 'object' && 'message' in err) {
-      return String((err as { message: unknown }).message);
-    }
+    if (err && typeof err === 'object' && 'message' in err) return String((err as { message: unknown }).message);
     return 'Request failed';
   }
 }

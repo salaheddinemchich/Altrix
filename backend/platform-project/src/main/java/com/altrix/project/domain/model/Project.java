@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.With;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -49,6 +50,12 @@ public final class Project {
     /** User's preference for the output config format. Defaults to KEEP_ORIGINAL. */
     private final ConfigFormatPreference configFormatPreference;
 
+    /** True when the project uses GCP Pub/Sub and is eligible for migration. */
+    private final boolean eligibleForMigration;
+
+    /** Technologies detected during analysis (e.g. GCP_PUBSUB, SPRING_BOOT). */
+    private final List<String> detectedTechnologies;
+
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -84,12 +91,16 @@ public final class Project {
     public Project withDetectionApplied(
             BuildSystem buildSystem,
             ConfigFormat configFormat,
-            DetectedFramework framework
+            DetectedFramework framework,
+            boolean eligibleForMigration,
+            List<String> detectedTechnologies
     ) {
         return this.toBuilder()
                 .buildSystem(buildSystem)
                 .configFormat(configFormat)
                 .framework(framework)
+                .eligibleForMigration(eligibleForMigration)
+                .detectedTechnologies(detectedTechnologies)
                 .status(ProjectStatus.READY)
                 .updatedAt(Instant.now())
                 .build();

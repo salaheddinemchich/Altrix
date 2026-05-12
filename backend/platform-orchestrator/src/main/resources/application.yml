@@ -12,13 +12,33 @@ spring:
           github:
             client-id: ${GITHUB_CLIENT_ID:}
             client-secret: ${GITHUB_CLIENT_SECRET:}
-            scope: read:user,user:email
+            scope: read:user,user:email,repo
+          # GitLab is optional. Spring Boot validates every registration at startup,
+          # so the defaults below are non-empty placeholders ("disabled-…") that let
+          # the app boot without GitLab configured. Set GITLAB_CLIENT_ID and
+          # GITLAB_CLIENT_SECRET in your .env to enable login via GitLab.
+          gitlab:
+            client-id: ${GITLAB_CLIENT_ID:disabled-gitlab-client-id}
+            client-secret: ${GITLAB_CLIENT_SECRET:disabled-gitlab-client-secret}
+            scope: read_user,read_api,read_repository
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            client-name: GitLab
         provider:
           github:
             user-info-uri: https://api.github.com/user
+          gitlab:
+            authorization-uri: ${GITLAB_AUTH_URI:https://gitlab.com/oauth/authorize}
+            token-uri:         ${GITLAB_TOKEN_URI:https://gitlab.com/oauth/token}
+            user-info-uri:     ${GITLAB_USERINFO_URI:https://gitlab.com/api/v4/user}
+            user-name-attribute: id
 
   datasource:
-    url:      jdbc:postgresql://localhost:5432/${POSTGRES_DB:altrix_db}
+    # stringtype=unspecified lets the PostgreSQL JDBC driver send Java Strings
+    # as PG type `unspecified`, so server-side coercion can drop them into
+    # `jsonb` columns (workflow_sessions.plan, workflow_sessions.migrated_files,
+    # ai_call_ledger.*, …) without an explicit ::jsonb cast on every insert.
+    url:      jdbc:postgresql://localhost:5432/${POSTGRES_DB:altrix_db}?stringtype=unspecified
     username: ${POSTGRES_USER:altrix}
     password: ${POSTGRES_PASSWORD:altrix_pass}
 
@@ -123,10 +143,21 @@ ai:
       enabled: ${NVIDIA_ENABLED:false}
       api-key: ${NVIDIA_API_KEY:}
       base-url: ${NVIDIA_BASE_URL:https://integrate.api.nvidia.com/v1}
+      # ANALYSIS tier  — fast/cheap model for short reasoning steps (Agents 1, 2, 4)
+      # MIGRATION tier — large model for high-quality code rewriting (Agent 3)
       model-analysis:  ${NVIDIA_MODEL_ANALYSIS:meta/llama-3.1-8b-instruct}
-      model-migration: ${NVIDIA_MODEL_MIGRATION:nvidia/llama-3.1-nemotron-70b-instruct}
-      timeout-seconds: ${NVIDIA_TIMEOUT_SECONDS:120}
+      model-migration: ${NVIDIA_MODEL_MIGRATION:nvidia/llama-3.3-nemotron-super-49b-v1}
+      timeout-seconds: ${NVIDIA_TIMEOUT_SECONDS:180}
       temperature:     ${NVIDIA_TEMPERATURE:0.1}
+    openrouter:
+      enabled: ${OPENROUTER_ENABLED:false}
+      api-key: ${OPENROUTER_API_KEY:}
+      base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+      # OpenRouter routes by model id. Defaults pick a strong code/migration model.
+      model-analysis:  ${OPENROUTER_MODEL_ANALYSIS:meta-llama/llama-3.1-8b-instruct}
+      model-migration: ${OPENROUTER_MODEL_MIGRATION:anthropic/claude-3.5-sonnet}
+      timeout-seconds: ${OPENROUTER_TIMEOUT_SECONDS:180}
+      temperature:     ${OPENROUTER_TEMPERATURE:0.1}
     openai:
       enabled: ${OPENAI_ENABLED:false}
       api-key: ${OPENAI_API_KEY:}
@@ -173,6 +204,9 @@ ai:
   # Delay between agents in ms (0 = off; raise only for single-provider Groq free-tier)
   inter-agent-delay-ms: ${AI_INTER_AGENT_DELAY_MS:0}
 
+  plan-similarity:
+    threshold: ${AI_PLAN_SIMILARITY_THRESHOLD:0.85}   # Jaccard threshold, 0–1
+
   mcp:
     # Set to true to enable MCP (Model Context Protocol) agentic tool calls.
     enabled: ${AI_MCP_ENABLED:false}
@@ -189,7 +223,7 @@ ai:
     #   - name: git
     #     base-url: ${MCP_GIT_URL:http://localhost:3002/mcp}
     #     timeout-seconds: 15
-    servers: ${AI_MCP_SERVERS:}
+    servers:
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:4200,http://localhost:8080}
@@ -199,7 +233,7 @@ websocket:
 
 approval:
   timeout: ${APPROVAL_TIMEOUT:30m}
-  scheduler-cron: ${APPROVAL_SCHEDULER_CRON:"0 * * * * *"}
+  scheduler-cron: ${APPROVAL_SCHEDULER_CRON:0 * * * * *}
   notification:
     enabled: ${APPROVAL_NOTIFICATION_ENABLED:false}
     reviewer-email: ${APPROVAL_REVIEWER_EMAIL:}
@@ -240,6 +274,18 @@ workflow:
   auto-pause:
     threshold: ${AUTO_PAUSE_THRESHOLD:3}
 
+# ── Cache TTL and health monitoring (#157) ─────────────────────────────────────
+cache:
+  ttl:
+    context-analysis: ${CACHE_TTL_CONTEXT_ANALYSIS:PT1H}    # ISO-8601 duration, default 1 h
+    migration-plan:   ${CACHE_TTL_MIGRATION_PLAN:PT24H}     # ISO-8601 duration, default 24 h
+  health:
+    check-interval-ms: ${CACHE_HEALTH_INTERVAL_MS:300000}   # 5 min
+    min-hit-rate:      ${CACHE_HEALTH_MIN_HIT_RATE:0.20}    # alert below 20%
+    min-samples:       ${CACHE_HEALTH_MIN_SAMPLES:10}       # skip alert before 10 ops
+    alert-enabled:     ${CACHE_HEALTH_ALERT_ENABLED:false}
+    ops-email:         ${CACHE_HEALTH_OPS_EMAIL:}
+
 management:
   endpoints:
     web:
@@ -248,8 +294,16 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    # Approval-email SMTP is opt-in (approval.notification.enabled=false by default).
+    # Don't fail the health probe when no local mail catcher is running.
+    mail:
+      enabled: false
 
 # ── RAG / Embedding ────────────────────────────────────────────────────────────
+platform-project:
+  base-url: ${PLATFORM_PROJECT_URL:http://localhost:8082}
+
 rag:
   embedding:
     provider: ${RAG_EMBEDDING_PROVIDER:openai}   # openai | ollama

@@ -23,7 +23,7 @@ class JwtTokenProviderTest {
 
     @Test
     void access_token_is_valid_and_parses_claims() {
-        String token = provider.issueAccessToken("gh-42", "alice", "alice@example.com", "ROLE_USER");
+        String token = provider.issueAccessToken("gh-42", "alice", "alice@example.com", "ROLE_USER", "GITHUB");
 
         assertThat(provider.isValid(token)).isTrue();
 
@@ -38,8 +38,8 @@ class JwtTokenProviderTest {
 
     @Test
     void access_token_has_unique_jti_per_issuance() {
-        String t1 = provider.issueAccessToken("gh-42", "alice", "alice@example.com", "ROLE_USER");
-        String t2 = provider.issueAccessToken("gh-42", "alice", "alice@example.com", "ROLE_USER");
+        String t1 = provider.issueAccessToken("gh-42", "alice", "alice@example.com", "ROLE_USER", "GITHUB");
+        String t2 = provider.issueAccessToken("gh-42", "alice", "alice@example.com", "ROLE_USER", "GITHUB");
 
         assertThat(provider.parse(t1).getId())
                 .isNotEqualTo(provider.parse(t2).getId());
@@ -64,7 +64,7 @@ class JwtTokenProviderTest {
 
     @Test
     void tampered_token_is_invalid() {
-        String token = provider.issueAccessToken("gh-42", "alice", "alice@example.com", "ROLE_USER");
+        String token = provider.issueAccessToken("gh-42", "alice", "alice@example.com", "ROLE_USER", "GITHUB");
         String tampered = token.substring(0, token.length() - 4) + "XXXX";
 
         assertThat(provider.isValid(tampered)).isFalse();
@@ -80,7 +80,7 @@ class JwtTokenProviderTest {
 
     @Test
     void remaining_ttl_is_positive_for_fresh_token() {
-        String token = provider.issueAccessToken("gh-42", "alice", "a@b.com", "ROLE_USER");
+        String token = provider.issueAccessToken("gh-42", "alice", "a@b.com", "ROLE_USER", "GITHUB");
         Claims claims = provider.parse(token);
 
         assertThat(provider.remainingTtlMs(claims))
@@ -96,7 +96,7 @@ class JwtTokenProviderTest {
         RsaKeyProvider otherKeys = new RsaKeyProvider(otherConfig);
         JwtTokenProvider otherProvider = new JwtTokenProvider(otherConfig, otherKeys);
 
-        String foreignToken = otherProvider.issueAccessToken("gh-1", "bob", "b@b.com", "ROLE_USER");
+        String foreignToken = otherProvider.issueAccessToken("gh-1", "bob", "b@b.com", "ROLE_USER", "GITHUB");
 
         // Our provider should reject a token signed by a different key
         assertThat(provider.isValid(foreignToken)).isFalse();

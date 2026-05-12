@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import com.altrix.common.domain.enums.BuildSystem;
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.DetectedFramework;
@@ -31,7 +33,7 @@ public record DetectionResult(
          */
         @NotNull List<String> modules
 
-) {
+) implements Serializable {
     /**
      * Compact canonical constructor — defensive copy of the modules list
      * to guarantee immutability.

@@ -30,8 +30,8 @@ public class TokenService {
     /**
      * Persists a new refresh token entry after successful login.
      */
-    public void storeRefreshToken(String tokenHash, String githubId, Instant expiresAt) {
-        refreshTokenRepo.save(tokenHash, githubId, expiresAt);
+    public void storeRefreshToken(String tokenHash, String userId, Instant expiresAt) {
+        refreshTokenRepo.save(tokenHash, userId, expiresAt);
     }
 
     /**
@@ -39,7 +39,7 @@ public class TokenService {
      *
      * @param oldTokenHash SHA-256 hex of the token the client presented
      * @param newTokenHash SHA-256 hex of the newly issued replacement
-     * @return the githubId of the token owner, or empty if the token is invalid
+     * @return the userId of the token owner, or empty if the token is invalid
      */
     public Optional<String> rotateRefreshToken(String oldTokenHash, String newTokenHash) {
         Optional<RefreshToken> found = refreshTokenRepo.findByTokenHash(oldTokenHash);
@@ -52,20 +52,19 @@ public class TokenService {
         RefreshToken token = found.get();
 
         if (token.revoked()) {
-            // A previously revoked token is being replayed — revoke the entire family
-            log.warn("Revoked refresh token replayed for githubId={} — revoking all tokens (theft suspected)",
-                    token.githubId());
-            refreshTokenRepo.revokeAllForUser(token.githubId());
+            log.warn("Revoked refresh token replayed for userId={} — revoking all tokens (theft suspected)",
+                    token.userId());
+            refreshTokenRepo.revokeAllForUser(token.userId());
             return Optional.empty();
         }
 
         if (token.isExpired()) {
-            log.debug("Expired refresh token presented for githubId={}", token.githubId());
+            log.debug("Expired refresh token presented for userId={}", token.userId());
             return Optional.empty();
         }
 
         refreshTokenRepo.revokeAndReplace(oldTokenHash, newTokenHash);
-        return Optional.of(token.githubId());
+        return Optional.of(token.userId());
     }
 
     /**
@@ -73,11 +72,11 @@ public class TokenService {
      *
      * @param accessTokenJti  jti of the current access token
      * @param accessTtlSecs   remaining lifetime of the access token (for Redis TTL)
-     * @param githubId        user to revoke all refresh tokens for
+     * @param userId          user to revoke all refresh tokens for
      */
-    public void logout(String accessTokenJti, long accessTtlSecs, String githubId) {
+    public void logout(String accessTokenJti, long accessTtlSecs, String userId) {
         tokenBlacklist.blacklist(accessTokenJti, accessTtlSecs);
-        refreshTokenRepo.revokeAllForUser(githubId);
-        log.info("Logged out githubId={} — access token blacklisted, refresh tokens revoked", githubId);
+        refreshTokenRepo.revokeAllForUser(userId);
+        log.info("Logged out userId={} — access token blacklisted, refresh tokens revoked", userId);
     }
 }

@@ -1,52 +1,69 @@
-<header class="page-header">
+<div class="page-header">
   <div>
-    <h1>Migration jobs</h1>
-    <p class="muted">Every analysis, plan, and transformation Altrix has run for you.</p>
+    <h1>Migration Jobs</h1>
+    <p class="muted">Every analysis, plan, and transformation Altrix has run.</p>
   </div>
-  <button class="btn" (click)="refresh()" [disabled]="jobs() === null">Refresh</button>
-</header>
+  <button class="btn" (click)="refresh()" [disabled]="jobs() === null">
+    <app-icon name="refresh" [size]="15"/>
+    Refresh
+  </button>
+</div>
 
+<!-- Filter chips -->
 <div class="filters">
   @for (f of filters; track f) {
     <button
-      class="btn"
-      [class.btn-primary]="activeFilter() === f"
-      (click)="setFilter(f)"
-    >{{ f }}</button>
+      class="chip"
+      [class.active]="activeFilter() === f"
+      (click)="setFilter(f)">
+      {{ f }}
+      @if (jobs() !== null) {
+        <span class="chip-count">{{ counts()[f] || 0 }}</span>
+      }
+    </button>
   }
 </div>
 
+<!-- Content -->
 @if (loadError(); as err) {
-  <div class="empty">Could not load jobs — {{ err }}</div>
+  <div class="empty">
+    <app-icon name="alert" [size]="28"/>
+    Could not load jobs — {{ err }}
+  </div>
 } @else if (visibleJobs() === null) {
   <div class="empty">Loading…</div>
 } @else if (visibleJobs()!.length === 0) {
-  <div class="empty">No jobs match the current filter.</div>
+  <div class="empty">
+    <app-icon name="briefcase" [size]="32"/>
+    No jobs match this filter.
+  </div>
 } @else {
-  <table>
-    <thead>
-      <tr>
-        <th>Job</th>
-        <th>Project</th>
-        <th>Status</th>
-        <th>Created</th>
-        <th>Completed</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (job of visibleJobs(); track job.id) {
+  <div class="table-wrap">
+    <table>
+      <thead>
         <tr>
-          <td class="mono">{{ job.id }}</td>
-          <td class="mono muted">{{ job.projectId }}</td>
-          <td><span class="pill" [class]="statusClass(job.status)">{{ job.status }}</span></td>
-          <td class="muted">{{ job.createdAt | date:'short' }}</td>
-          <td class="muted">{{ job.completedAt ? (job.completedAt | date:'short') : '—' }}</td>
-          <td class="row-actions">
-            <a class="btn btn-ghost" [routerLink]="['/jobs', job.id]">View</a>
-          </td>
+          <th>Job ID</th>
+          <th>Project</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Completed</th>
+          <th></th>
         </tr>
-      }
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        @for (job of visibleJobs()!; track job.id) {
+          <tr [routerLink]="['/jobs', job.id]">
+            <td class="mono" style="font-size:0.8rem">{{ job.id }}</td>
+            <td class="mono muted" style="font-size:0.8rem">{{ job.projectId }}</td>
+            <td><span class="pill" [class]="statusClass(job.status)">{{ job.status }}</span></td>
+            <td class="muted">{{ job.createdAt | date:'MMM d, h:mm a' }}</td>
+            <td class="muted">{{ job.completedAt ? (job.completedAt | date:'MMM d, h:mm a') : '—' }}</td>
+            <td class="row-action">
+              <app-icon name="chevron-right" [size]="15"/>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
 }

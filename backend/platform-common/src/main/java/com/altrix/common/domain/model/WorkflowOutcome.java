@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 /**
  * Aggregate fed to {@code ReportGeneratorAgent} (Agent 5).
  *
@@ -15,7 +17,7 @@ public record WorkflowOutcome(
         MigrationArtifact  artifact,
         ValidationReport   validation
 
-) {
+) implements Serializable {
     public WorkflowOutcome {
         if (projectId  == null) projectId  = "";
         if (analysis   == null) analysis   = AnalysisReport.empty(projectId);

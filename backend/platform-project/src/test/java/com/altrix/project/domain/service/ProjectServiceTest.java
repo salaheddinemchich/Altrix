@@ -51,7 +51,8 @@ class ProjectServiceTest {
         when(fileStoragePort.store(any(), anyLong(), any())).thenReturn("uploads/key.zip");
 
         Project detected = Project.create("user-1", "app.zip", "uploads/key.zip", null)
-                .withDetectionApplied(BuildSystem.GRADLE_KOTLIN, ConfigFormat.YAML, DetectedFramework.SPRING_BOOT);
+                .withDetectionApplied(BuildSystem.GRADLE_KOTLIN, ConfigFormat.YAML, DetectedFramework.SPRING_BOOT,
+                        true, java.util.List.of("SPRING_BOOT", "GRADLE_KOTLIN", "GCP_PUBSUB"));
         when(fileStoragePort.retrieve("uploads/key.zip")).thenReturn(zip);
         when(buildSystemDetector.detect(any(), any(InputStream.class))).thenReturn(detected);
         when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));

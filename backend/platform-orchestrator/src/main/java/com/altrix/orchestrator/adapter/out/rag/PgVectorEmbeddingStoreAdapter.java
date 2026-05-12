@@ -64,7 +64,14 @@ public class PgVectorEmbeddingStoreAdapter implements EmbeddingStorePort {
     @Override
     public List<DocumentChunk> findRelevant(String query, String projectId,
                                             List<DocumentType> types, int topK) {
-        float[] queryVector = embed(query);
+        float[] queryVector;
+        try {
+            queryVector = embed(query);
+        } catch (IllegalStateException disabled) {
+            // RAG disabled — agents will run without semantic search results.
+            log.debug("RAG findRelevant skipped: {}", disabled.getMessage());
+            return List.of();
+        }
         String typeList = types.stream()
                 .map(Enum::name)
                 .map(t -> "'" + t + "'")

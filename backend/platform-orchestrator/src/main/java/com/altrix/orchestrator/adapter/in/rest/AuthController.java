@@ -60,16 +60,17 @@ public class AuthController {
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<UserProfileResponse> me(@AuthenticationPrincipal String githubId,
+    public ResponseEntity<UserProfileResponse> me(@AuthenticationPrincipal String userId,
                                                   HttpServletRequest request) {
         Claims claims = (Claims) org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getDetails();
 
         return ResponseEntity.ok(new UserProfileResponse(
-                githubId,
-                claims.get("login", String.class),
-                claims.get("email", String.class),
-                claims.get("role",  String.class)));
+                userId,
+                claims.get("login",    String.class),
+                claims.get("email",    String.class),
+                claims.get("role",     String.class),
+                claims.get("provider", String.class)));
     }
 
     // ── POST /refresh ─────────────────────────────────────────────────────────
@@ -96,8 +97,8 @@ public class AuthController {
         String newRawRefreshToken = tokenProvider.issueRefreshToken(oldClaims.getSubject());
         String newHash = TokenHashUtil.sha256Hex(newRawRefreshToken);
 
-        Optional<String> githubId = tokenService.rotateRefreshToken(oldHash, newHash);
-        if (githubId.isEmpty()) {
+        Optional<String> userId = tokenService.rotateRefreshToken(oldHash, newHash);
+        if (userId.isEmpty()) {
             auditService.tokenReplayDetected(oldClaims.getSubject(), request.getRemoteAddr());
             clearRefreshCookie(response);
             return ResponseEntity.status(401).body(Map.of("error", "Refresh token invalid or revoked"));
@@ -105,27 +106,27 @@ public class AuthController {
 
         // Store the new token in DB
         Claims newClaims = tokenProvider.parse(newRawRefreshToken);
-        tokenService.storeRefreshToken(newHash, githubId.get(), newClaims.getExpiration().toInstant());
+        tokenService.storeRefreshToken(newHash, userId.get(), newClaims.getExpiration().toInstant());
 
-        // Look up current role
-        String role = userRepository.findByGithubId(githubId.get())
+        // Look up current profile
+        String role = userRepository.findById(userId.get())
                 .map(u -> u.role().name())
                 .orElse("ROLE_USER");
 
-        // Issue new access token
-        String login = ""; // Not in refresh token — looked up from DB if needed
-        String email = userRepository.findByGithubId(githubId.get())
+        String email = userRepository.findById(userId.get())
                 .map(u -> u.email() != null ? u.email() : "")
                 .orElse("");
 
+        // Provider is preserved across refresh by carrying it in the original refresh token's chain.
+        // Refresh tokens themselves don't carry provider; access tokens get an empty provider on refresh.
         String newAccessToken = tokenProvider.issueAccessToken(
-                githubId.get(), login, email, role);
+                userId.get(), "", email, role, "");
 
         // Rotate the cookie
         setRefreshCookie(response, newRawRefreshToken, request.isSecure() ||
                 "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto")));
 
-        auditService.tokenRefreshed(githubId.get(), request.getRemoteAddr());
+        auditService.tokenRefreshed(userId.get(), request.getRemoteAddr());
 
         return ResponseEntity.ok(TokenResponse.of(
                 newAccessToken,
@@ -138,7 +139,7 @@ public class AuthController {
     @PostMapping("/logout")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, String>> logout(
-            @AuthenticationPrincipal String githubId,
+            @AuthenticationPrincipal String userId,
             HttpServletRequest request,
             HttpServletResponse response) {
 
@@ -146,10 +147,10 @@ public class AuthController {
                 .getContext().getAuthentication().getDetails();
 
         long ttlSecs = tokenProvider.remainingTtlMs(claims) / 1_000;
-        tokenService.logout(claims.getId(), ttlSecs, githubId);
+        tokenService.logout(claims.getId(), ttlSecs, userId);
         clearRefreshCookie(response);
 
-        auditService.logout(githubId, claims.getId(), request.getRemoteAddr());
+        auditService.logout(userId, claims.getId(), request.getRemoteAddr());
 
         return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }

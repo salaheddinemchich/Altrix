@@ -4,11 +4,15 @@ import com.altrix.common.domain.enums.ConfigFormatPreference;
 import lombok.Builder;
 import lombok.With;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
  * Immutable context object flowing through the agent pipeline.
  * Each agent returns an enriched copy via @With generated methods.
+ *
+ * <p>{@link Serializable} because LangGraph4j persists the workflow state via
+ * Java serialisation at every checkpoint.
  */
 @Builder
 @With
@@ -37,7 +41,7 @@ public record ProjectContext(
          */
         Boolean forceFresh
 
-) {
+) implements Serializable {
     public ProjectContext {
         pubSubTopics        = pubSubTopics        != null ? List.copyOf(pubSubTopics)        : List.of();
         pubSubSubscriptions = pubSubSubscriptions != null ? List.copyOf(pubSubSubscriptions)  : List.of();

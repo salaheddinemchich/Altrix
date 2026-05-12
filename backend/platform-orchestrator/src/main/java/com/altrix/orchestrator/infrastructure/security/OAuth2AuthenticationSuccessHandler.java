@@ -3,6 +3,7 @@ package com.altrix.orchestrator.infrastructure.security;
 import com.altrix.orchestrator.domain.port.out.UserRepository;
 import com.altrix.orchestrator.domain.service.TokenService;
 import com.altrix.orchestrator.infrastructure.config.JwtConfig;
+import com.altrix.orchestrator.infrastructure.security.oauth.MultiProviderOAuth2UserService;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -17,17 +18,13 @@ import java.io.IOException;
 import java.time.Instant;
 
 /**
- * Issues JWT access + refresh tokens after a successful GitHub OAuth2 login.
+ * Issues JWT access + refresh tokens after a successful OAuth2 login. Works for
+ * any provider supported by {@link MultiProviderOAuth2UserService} — the
+ * principal carries the resolved internal user id under
+ * {@link MultiProviderOAuth2UserService#ATTR_INTERNAL_USER_ID}.
  *
- * <p>The access token is appended as a URL fragment parameter to the frontend
- * redirect URI. The refresh token is stored in the DB and sent via a
- * {@code Set-Cookie: refreshToken=<value>; HttpOnly; Secure; SameSite=Strict}
- * response header — it never lands in the URL or localStorage.
- *
- * <p><b>Why HttpOnly cookie for refresh token?</b> HttpOnly prevents JavaScript
- * from reading the cookie, eliminating XSS-based refresh token theft.
- * SameSite=Strict prevents CSRF — a cross-site request cannot send the cookie.
- * Secure ensures the cookie is only transmitted over HTTPS.
+ * <p>Refresh token is delivered via an {@code HttpOnly}, {@code Secure},
+ * {@code SameSite=Strict} cookie so it never lands in the URL or localStorage.
  */
 @Slf4j
 @Component
@@ -60,26 +57,23 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
                                         Authentication authentication) throws IOException {
         OAuth2User oauthUser = (OAuth2User) authentication.getPrincipal();
 
-        String githubId = String.valueOf(oauthUser.getAttribute("id"));
-        String login    = oauthUser.getAttribute("login");
-        String email    = oauthUser.getAttribute("email");
+        String userId   = oauthUser.getAttribute(MultiProviderOAuth2UserService.ATTR_INTERNAL_USER_ID);
+        String provider = oauthUser.getAttribute(MultiProviderOAuth2UserService.ATTR_PROVIDER);
+        String login    = oauthUser.getAttribute(MultiProviderOAuth2UserService.ATTR_LOGIN);
+        String email    = oauthUser.getAttribute(MultiProviderOAuth2UserService.ATTR_EMAIL);
 
-        // Look up stored role; fall back to ROLE_USER for new users
-        String role = userRepository.findByGithubId(githubId)
+        String role = userRepository.findById(userId)
                 .map(u -> u.role().name())
                 .orElse("ROLE_USER");
 
-        // Issue short-lived access token (15 min)
-        String accessToken = tokenProvider.issueAccessToken(githubId, login, email, role);
+        String accessToken = tokenProvider.issueAccessToken(userId, login, email, role, provider);
 
-        // Issue long-lived refresh token and store its hash in the DB
-        String rawRefreshToken = tokenProvider.issueRefreshToken(githubId);
+        String rawRefreshToken = tokenProvider.issueRefreshToken(userId);
         String refreshHash     = TokenHashUtil.sha256Hex(rawRefreshToken);
         Claims refreshClaims   = tokenProvider.parse(rawRefreshToken);
         Instant expiresAt      = refreshClaims.getExpiration().toInstant();
-        tokenService.storeRefreshToken(refreshHash, githubId, expiresAt);
+        tokenService.storeRefreshToken(refreshHash, userId, expiresAt);
 
-        // Refresh token in HttpOnly Secure cookie — never accessible via JS
         boolean secure = request.isSecure() || "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto"));
         String cookieValue = "refreshToken=" + rawRefreshToken +
                 "; HttpOnly; Path=/api/v1/auth/refresh" +
@@ -88,11 +82,10 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
                 (secure ? "; Secure" : "");
         response.addHeader("Set-Cookie", cookieValue);
 
-        auditService.loginSuccess(login, request.getRemoteAddr());
-        log.debug("OAuth2 login complete: login={} role={}", login, role);
+        auditService.loginSuccess(login != null ? login : userId, request.getRemoteAddr());
+        log.debug("OAuth2 login complete: provider={} userId={} role={}", provider, userId, role);
 
         String redirectUrl = getDefaultTargetUrl() + "?token=" + accessToken;
         getRedirectStrategy().sendRedirect(request, response, redirectUrl);
     }
-
 }

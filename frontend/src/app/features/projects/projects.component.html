@@ -1,86 +1,185 @@
-<header class="page-header">
+<div class="page-header">
   <div>
     <h1>Projects</h1>
-    <p class="muted">Upload a codebase to start a migration. Altrix detects the stack automatically.</p>
+    <p class="muted">Select a GitHub repository to analyse and migrate.</p>
   </div>
   <button class="btn" (click)="refresh()" [disabled]="projects() === null">
+    <app-icon name="refresh" [size]="15"/>
     Refresh
   </button>
-</header>
+</div>
 
-<section class="card upload">
-  <h3>Upload new project</h3>
-
-  <div class="upload-grid">
+<!-- ══ Import from GitHub ═════════════════════════════════════════════════════ -->
+<section class="card import-card">
+  <div class="import-header">
     <div>
-      <label for="file">Project archive (.zip)</label>
-      <input id="file" type="file" accept=".zip" (change)="onFileSelected($event)" />
-      @if (selectedFile(); as f) {
-        <small class="muted">{{ f.name }} · {{ (f.size / 1024 / 1024).toFixed(2) }} MB</small>
-      }
+      <h3>Import from GitHub</h3>
+      <p class="muted" style="margin:0;font-size:0.85rem">
+        Repositories accessible to your GitHub account are listed below.
+      </p>
     </div>
-
-    <div>
-      <label for="cfg">Config format preference</label>
-      <select id="cfg" [(ngModel)]="configFormat">
-        @for (opt of configOptions; track opt) {
-          <option [value]="opt">{{ opt }}</option>
-        }
-      </select>
-    </div>
-
-    <div class="upload-actions">
-      <button
-        class="btn btn-primary"
-        [disabled]="!selectedFile() || uploading()"
-        (click)="upload()"
-      >
-        {{ uploading() ? 'Uploading…' : 'Upload' }}
-      </button>
-    </div>
+    <button class="btn btn-sm" (click)="loadRepos()" [disabled]="reposLoading()">
+      <app-icon name="refresh" [size]="13"/>
+      Reload
+    </button>
   </div>
 
-  @if (uploadError(); as err) {
-    <p class="error">Upload failed — {{ err }}</p>
+  @if (!selectedRepo()) {
+    <!-- ── Repo picker ───────────────────────────────────────────────────── -->
+    @if (reposLoading()) {
+      <div class="repo-loading">
+        <div class="skeleton" style="height:40px; border-radius:8px;"></div>
+        @for (i of [1,2,3,4,5]; track i) {
+          <div class="skeleton repo-skeleton"></div>
+        }
+      </div>
+    } @else if (reposError()) {
+      <div class="repo-error">
+        <app-icon name="alert" [size]="18"/>
+        Could not load repositories — {{ reposError() }}
+      </div>
+    } @else if (repos() !== null) {
+      <div class="search-wrap">
+        <app-icon name="search" [size]="15"/>
+        <input
+          type="text"
+          placeholder="Filter repositories…"
+          class="search-input"
+          [ngModel]="repoSearchQuery()"
+          (ngModelChange)="repoSearchQuery.set($event)" />
+      </div>
+
+      <div class="repo-list">
+        @if (filteredRepos().length === 0) {
+          <div class="repo-empty">No repositories match "{{ repoSearchQuery() }}"</div>
+        }
+        @for (repo of filteredRepos(); track repo.id) {
+          <button class="repo-row" (click)="selectRepo(repo)">
+            <div class="repo-main">
+              <span class="repo-name">{{ repo.fullName }}</span>
+              @if (repo.privateRepo) {
+                <span class="badge-private">private</span>
+              }
+              @if (repo.language) {
+                <span class="repo-lang">{{ repo.language }}</span>
+              }
+            </div>
+            @if (repo.description) {
+              <div class="repo-desc muted">{{ repo.description }}</div>
+            }
+          </button>
+        }
+      </div>
+    }
+  } @else {
+    <!-- ── Selected repo / confirm ──────────────────────────────────────── -->
+    <div class="selected-repo">
+      <div class="selected-info">
+        <app-icon name="folder" [size]="20"/>
+        <div>
+          <div class="selected-name">{{ selectedRepo()!.fullName }}</div>
+          <div class="selected-branch muted">branch: {{ selectedRepo()!.defaultBranch }}</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" (click)="clearSelection()">
+        <app-icon name="x" [size]="14"/>
+        Change
+      </button>
+    </div>
+
+    <div class="ingest-options">
+      <div>
+        <label for="cfg">Config format preference</label>
+        <select id="cfg"
+                [ngModel]="configFormat()"
+                (ngModelChange)="configFormat.set($event)">
+          @for (opt of configOptions; track opt) {
+            <option [value]="opt">{{ opt }}</option>
+          }
+        </select>
+      </div>
+
+      <button
+        class="btn btn-gold"
+        [disabled]="ingesting()"
+        (click)="ingest()">
+        @if (ingesting()) {
+          <app-icon name="refresh" [size]="15"/>
+          Importing…
+        } @else {
+          <app-icon name="download" [size]="15"/>
+          Import & analyse
+        }
+      </button>
+    </div>
+  }
+
+  @if (ingestError(); as err) {
+    <div class="msg-error">{{ err }}</div>
+  }
+  @if (ingestSuccess(); as msg) {
+    <div class="msg-success">
+      <app-icon name="check" [size]="15"/>
+      {{ msg }}
+    </div>
   }
 </section>
 
-<section>
-  <h2>Your projects</h2>
+<!-- ══ Projects list ══════════════════════════════════════════════════════════ -->
+<section style="margin-top: 24px">
+  <div class="section-header">
+    <h2>Your projects</h2>
+    @if (projects(); as list) {
+      <span class="count-badge">{{ list.length }}</span>
+    }
+  </div>
 
   @if (loadError(); as err) {
     <div class="empty">Could not load projects — {{ err }}</div>
   } @else if (projects() === null) {
     <div class="empty">Loading…</div>
   } @else if (projects()!.length === 0) {
-    <div class="empty">No projects yet. Upload one above to get started.</div>
+    <div class="empty">
+      <app-icon name="folder" [size]="32"/>
+      No projects yet. Import one from GitHub above to get started.
+    </div>
   } @else {
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Stack</th>
-          <th>Build</th>
-          <th>Config</th>
-          <th>Status</th>
-          <th>Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (p of projects(); track p.id) {
+    <div class="table-wrap">
+      <table>
+        <thead>
           <tr>
-            <td>
-              <div>{{ p.name }}</div>
-              <small class="mono faint">{{ p.id }}</small>
-            </td>
-            <td class="muted">{{ p.framework }}</td>
-            <td class="muted">{{ p.buildSystem }}</td>
-            <td class="muted">{{ p.configFormat }}</td>
-            <td><span class="pill" [class]="statusClass(p.status)">{{ p.status }}</span></td>
-            <td class="muted">{{ p.createdAt | date:'short' }}</td>
+            <th>Name</th>
+            <th>Framework</th>
+            <th>Build</th>
+            <th>Config</th>
+            <th>Eligible</th>
+            <th>Status</th>
+            <th>Created</th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (p of projects()!; track p.id) {
+            <tr>
+              <td>
+                <div class="project-name">{{ p.name }}</div>
+                <div class="mono faint" style="font-size:0.72rem">{{ p.id }}</div>
+              </td>
+              <td class="muted">{{ p.framework ?? '—' }}</td>
+              <td class="muted">{{ p.buildSystem ?? '—' }}</td>
+              <td class="muted">{{ p.configFormat ?? '—' }}</td>
+              <td>
+                @if (p.eligibleForMigration) {
+                  <span class="pill success">Yes</span>
+                } @else {
+                  <span class="pill">No</span>
+                }
+              </td>
+              <td><span class="pill" [class]="statusClass(p.status)">{{ p.status }}</span></td>
+              <td class="muted">{{ p.createdAt | date:'MMM d, y' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   }
 </section>

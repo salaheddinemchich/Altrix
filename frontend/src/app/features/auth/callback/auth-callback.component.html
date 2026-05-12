@@ -1,0 +1,30 @@
+<div class="callback-shell">
+  <div class="callback-card">
+
+    <ng-container *ngIf="!error">
+      <!-- Spinner -->
+      <div class="spinner" aria-label="Authenticating…" role="status">
+        <svg viewBox="0 0 36 36" fill="none">
+          <circle cx="18" cy="18" r="15"
+            stroke="rgba(11,26,42,.12)" stroke-width="3"/>
+          <path d="M18 3 A15 15 0 0 1 33 18"
+            stroke="#F5C45E" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <p class="callback-msg">Completing sign-in…</p>
+    </ng-container>
+
+    <ng-container *ngIf="error">
+      <div class="error-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="#D23B3B" stroke-width="1.5"/>
+          <path d="M12 7v5M12 16h.01"
+            stroke="#D23B3B" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <p class="callback-msg callback-msg--error">Authentication failed. No token received.</p>
+      <a class="back-link" routerLink="/auth/login">Back to sign in</a>
+    </ng-container>
+
+  </div>
+</div>

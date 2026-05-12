@@ -9,6 +9,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * JPA persistence entity for the projects table.
@@ -59,6 +60,13 @@ public class ProjectJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "config_format_preference", nullable = false, length = 20)
     private ConfigFormatPreference configFormatPreference;
+
+    @Column(name = "eligible_for_migration", nullable = false)
+    private boolean eligibleForMigration;
+
+    /** Comma-separated list of detected technologies, e.g. "SPRING_BOOT,GRADLE_KOTLIN,GCP_PUBSUB". */
+    @Column(name = "detected_technologies", columnDefinition = "TEXT")
+    private String detectedTechnologies;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

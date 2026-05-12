@@ -1,46 +1,130 @@
-<a class="back" routerLink="/jobs">← Back to jobs</a>
+<a class="back-link" routerLink="/jobs">
+  <app-icon name="chevron-right" [size]="13" style="transform:rotate(180deg)"/>
+  Back to jobs
+</a>
 
 @if (loadError(); as err) {
-  <div class="empty">Could not load job — {{ err }}</div>
+  <div class="empty" style="margin-top:16px">
+    <app-icon name="alert" [size]="28"/>
+    Could not load job — {{ err }}
+  </div>
 } @else if (!job()) {
-  <div class="empty">Loading…</div>
+  <div class="empty" style="margin-top:16px">Loading…</div>
 } @else {
+
+  <!-- ══ Job header ═════════════════════════════════════════════════════════ -->
   <header class="job-header">
-    <div>
-      <h1>Job</h1>
-      <code class="mono">{{ job()!.id }}</code>
+    <div class="job-title">
+      <h1>Job detail</h1>
+      <code class="mono job-id">{{ job()!.id }}</code>
     </div>
-    <span class="pill" [class]="statusClass(job()!.status)">{{ job()!.status }}</span>
+    <div class="job-header-actions">
+      <span class="pill" [class]="statusClass(job()!.status)">{{ job()!.status }}</span>
+      @if (canDownload()) {
+        <a class="btn btn-gold" [href]="downloadUrl()" target="_blank">
+          <app-icon name="download" [size]="15"/>
+          Download ZIP
+        </a>
+      }
+      <button class="btn" (click)="load()">
+        <app-icon name="refresh" [size]="15"/>
+        Refresh
+      </button>
+    </div>
   </header>
 
-  <section class="card details">
-    <dl>
-      <dt>Project</dt>
-      <dd class="mono">{{ job()!.projectId }}</dd>
+  <!-- ══ Live pipeline ══════════════════════════════════════════════════════ -->
+  <app-pipeline-graph
+    [jobId]="job()!.id"
+    [currentStatus]="job()!.status"/>
 
-      <dt>User</dt>
-      <dd class="mono">{{ job()!.userId }}</dd>
+  <!-- ══ Details + Session grid ════════════════════════════════════════════ -->
+  <div class="detail-grid">
 
-      <dt>Created</dt>
-      <dd class="muted">{{ job()!.createdAt | date:'medium' }}</dd>
-
-      <dt>Completed</dt>
-      <dd class="muted">{{ job()!.completedAt ? (job()!.completedAt | date:'medium') : '—' }}</dd>
-
-      <dt>Config preference</dt>
-      <dd class="muted">{{ job()!.configFormatPreference || '—' }}</dd>
-
-      @if (job()!.errorMessage) {
-        <dt>Error</dt>
-        <dd class="error">{{ job()!.errorMessage }}</dd>
-      }
-    </dl>
-
-    <div class="actions">
-      <button class="btn" (click)="refresh()">Refresh</button>
-      @if (canDownload()) {
-        <a class="btn btn-primary" [href]="downloadUrl()" target="_blank">Download migrated ZIP</a>
-      }
+    <!-- Job details card -->
+    <div class="card">
+      <h3>Job details</h3>
+      <dl class="detail-list">
+        <div class="dl-row">
+          <dt>Project ID</dt>
+          <dd class="mono">{{ job()!.projectId }}</dd>
+        </div>
+        <div class="dl-row">
+          <dt>Config preference</dt>
+          <dd class="muted">{{ job()!.configFormatPreference || '—' }}</dd>
+        </div>
+        <div class="dl-row">
+          <dt>Created</dt>
+          <dd class="muted">{{ job()!.createdAt | date:'MMM d, y · h:mm a' }}</dd>
+        </div>
+        <div class="dl-row">
+          <dt>Completed</dt>
+          <dd class="muted">{{ job()!.completedAt ? (job()!.completedAt | date:'MMM d, y · h:mm a') : '—' }}</dd>
+        </div>
+        @if (job()!.errorMessage) {
+          <div class="dl-row">
+            <dt>Error</dt>
+            <dd class="error">{{ job()!.errorMessage }}</dd>
+          </div>
+        }
+      </dl>
     </div>
-  </section>
+
+    <!-- Session card (if available) -->
+    @if (session(); as s) {
+      <div class="card session-card">
+        <div class="session-header">
+          <h3>Session</h3>
+          <span class="pill" [class]="sessionStatusClass(s.status)">{{ s.status }}</span>
+        </div>
+
+        <dl class="detail-list">
+          <div class="dl-row">
+            <dt>Session ID</dt>
+            <dd class="mono faint" style="font-size:0.75rem">{{ s.sessionId }}</dd>
+          </div>
+          <div class="dl-row">
+            <dt>Last updated</dt>
+            <dd class="muted">{{ s.updatedAt | date:'MMM d, h:mm a' }}</dd>
+          </div>
+          @if (s.errorMessage) {
+            <div class="dl-row">
+              <dt>Error</dt>
+              <dd class="error">{{ s.errorMessage }}</dd>
+            </div>
+          }
+        </dl>
+
+        <!-- Admin actions -->
+        @if (auth.isAdmin()) {
+          <div class="session-actions">
+            @if (s.status === 'AWAITING_APPROVAL') {
+              <button class="btn btn-gold" (click)="approve()">
+                <app-icon name="check" [size]="14"/>
+                Approve
+              </button>
+              <button class="btn btn-danger" (click)="reject()">
+                <app-icon name="x" [size]="14"/>
+                Reject
+              </button>
+            }
+            @if (s.status !== 'PAUSED' && s.status !== 'DONE' && s.status !== 'FAILED') {
+              <button class="btn" (click)="pauseSession()">
+                <app-icon name="pause" [size]="14"/>
+                Pause
+              </button>
+            }
+            @if (s.status === 'PAUSED') {
+              <button class="btn btn-primary" (click)="resumeSession()">
+                <app-icon name="play" [size]="14"/>
+                Resume
+              </button>
+            }
+          </div>
+        }
+      </div>
+    }
+
+  </div>
+
 }

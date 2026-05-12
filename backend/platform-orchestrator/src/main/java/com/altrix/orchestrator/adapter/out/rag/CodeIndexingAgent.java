@@ -63,7 +63,14 @@ public class CodeIndexingAgent implements CodeIndexingPort {
 
         log.info("Job '{}' — {} chunks from {} files, upserting to vector store",
                 context.jobId(), chunks.size(), files.size());
-        embeddingStore.upsert(chunks);
+        try {
+            embeddingStore.upsert(chunks);
+        } catch (IllegalStateException e) {
+            // RAG embedding model is disabled (no OpenAI/Ollama key). Continue
+            // without semantic search — agents still receive full file content
+            // through their normal context payload, so migration still works.
+            log.warn("Job '{}' — RAG indexing skipped: {}", context.jobId(), e.getMessage());
+        }
     }
 
     /**

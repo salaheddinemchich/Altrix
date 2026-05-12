@@ -4,26 +4,39 @@ import com.altrix.common.domain.model.AnalysisReport;
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.domain.service.PlanSimilarityService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MigrationPlannerAgentTest {
 
-    @Mock
-    AiPort aiPort;
-    @InjectMocks
-    MigrationPlannerAgent agent;
+    @Mock AiPort aiPort;
+    @Mock PlanSimilarityService planSimilarityService;
+    @InjectMocks MigrationPlannerAgent agent;
+
+    @BeforeEach
+    void cacheMiss() {
+        // Default: no similarity cache hit — let the AI call proceed
+        when(planSimilarityService.findSimilar(any())).thenReturn(Optional.empty());
+    }
 
     @Test
     void exposesNameAndOrder2() {
@@ -48,6 +61,22 @@ class MigrationPlannerAgentTest {
         assertThat(plan.riskLevel()).isEqualTo("MEDIUM");
         assertThat(plan.estimatedEffort()).isEqualTo("3 days");
         assertThat(plan.summary()).isEqualTo("migrate p1");
+        verify(planSimilarityService).store(any(), any());
+    }
+
+    @Test
+    void execute_similarityCacheHit_returnsCachedPlan_skipsAi() {
+        AnalysisReport input = new AnalysisReport(
+                "p1", "uploads/p1.zip", List.of("c1"), List.of("Google Pub/Sub"), "ran analysis");
+        MigrationPlan cached = new MigrationPlan("p1", "", "Spring Boot 3 + Kafka",
+                List.of("Step 1"), "LOW", "1 day", "cached plan", List.of());
+        when(planSimilarityService.findSimilar(input)).thenReturn(Optional.of(cached));
+
+        MigrationPlan plan = agent.execute(input);
+
+        assertThat(plan).isSameAs(cached);
+        // AI must not be called
+        verify(aiPort, org.mockito.Mockito.never()).chatFast(anyString(), anyString());
     }
 
     @Test

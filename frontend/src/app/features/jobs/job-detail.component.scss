@@ -1,44 +1,215 @@
-.back {
+.back-link {
   display: inline-flex;
-  margin-bottom: var(--space-4);
-  font-size: 0.85rem;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.83rem;
   color: var(--color-text-muted);
+  margin-bottom: 20px;
+  transition: color 0.12s;
+
+  &:hover { color: var(--color-text); }
 }
-.back:hover { color: var(--color-text); }
+
+// ── Job header ────────────────────────────────────────────────────────────────
 
 .job-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: var(--space-5);
-
-  h1 { margin-bottom: 0.25rem; }
-  code { font-size: 0.8rem; color: var(--color-text-muted); }
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
-.details dl {
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: var(--space-3) var(--space-4);
-  margin: 0 0 var(--space-5);
+.job-title {
+  h1 { margin-bottom: 4px; }
 }
-.details dt {
-  color: var(--color-text-muted);
-  font-size: 0.78rem;
+
+.job-id {
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+  background: var(--color-surface-2);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.job-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+// ── Timeline ──────────────────────────────────────────────────────────────────
+
+.timeline-card {
+  margin-bottom: 20px;
+  padding: 20px 24px;
+}
+
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.timeline-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.step-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-faint);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.timeline-step.completed .step-dot {
+  border-color: var(--color-success);
+  background: rgba(61,220,151,0.15);
+  color: var(--color-success);
+}
+
+.timeline-step.active .step-dot {
+  border-color: var(--color-gold);
+  background: rgba(245,196,94,0.15);
+  color: var(--color-gold);
+  box-shadow: 0 0 0 4px rgba(245,196,94,0.12);
+  animation: pulse-step 2s ease-in-out infinite;
+}
+
+.timeline-step.failed .step-dot {
+  border-color: var(--color-danger);
+  background: rgba(255,92,92,0.15);
+  color: var(--color-danger);
+}
+
+@keyframes pulse-step {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(245,196,94,0.12); }
+  50%       { box-shadow: 0 0 0 8px rgba(245,196,94,0.06); }
+}
+
+.step-label {
+  font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
+  color: var(--color-text-faint);
+  white-space: nowrap;
 }
-.details dd { margin: 0; }
-.details .error { color: var(--color-danger); }
 
-.actions {
+.timeline-step.completed .step-label,
+.timeline-step.active    .step-label { color: var(--color-text-muted); }
+
+.step-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--color-border);
+  margin-bottom: 22px;
+  transition: background 0.15s;
+
+  &.completed { background: rgba(61,220,151,0.4); }
+}
+
+.step-failed {
   display: flex;
-  gap: var(--space-3);
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255,92,92,0.1);
+  border: 1px solid rgba(255,92,92,0.25);
+  color: var(--color-danger);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
 }
 
-@media (max-width: 720px) {
-  .details dl { grid-template-columns: 1fr; gap: var(--space-1) 0; }
-  .details dt { margin-top: var(--space-2); }
+// ── Detail grid ───────────────────────────────────────────────────────────────
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+
+  @media (max-width: 700px) { grid-template-columns: 1fr; }
+}
+
+// ── Detail list (dl) ──────────────────────────────────────────────────────────
+
+.detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 0;
+}
+
+.dl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+dt {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-faint);
+}
+
+dd {
+  margin: 0;
+  font-size: 0.875rem;
+  word-break: break-all;
+}
+
+// ── Session card ──────────────────────────────────────────────────────────────
+
+.session-card h3 { margin-bottom: 0; }
+
+.session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.session-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+// ── Empty ─────────────────────────────────────────────────────────────────────
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 24px;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  app-icon { opacity: 0.35; }
 }

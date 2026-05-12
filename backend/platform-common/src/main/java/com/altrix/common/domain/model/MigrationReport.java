@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import java.time.Instant;
 
 /**
@@ -19,7 +21,7 @@ public record MigrationReport(
         /** When the report was produced. */
         Instant generatedAt
 
-) {
+) implements Serializable {
     public MigrationReport {
         if (content     == null) content     = "";
         if (generatedAt == null) generatedAt = Instant.EPOCH;

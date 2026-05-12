@@ -16,7 +16,7 @@ import java.time.Instant;
 public record RefreshToken(
         Long id,
         String tokenHash,
-        String githubId,
+        String userId,
         Instant expiresAt,
         Instant issuedAt,
         boolean revoked,

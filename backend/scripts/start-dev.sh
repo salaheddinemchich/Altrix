@@ -2,13 +2,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # start-dev.sh — boot all infrastructure, provision resources, verify health
 #
-# After this script exits successfully, run:
+# After this script exits successfully, choose ONE of:
+#   ./scripts/start-services.sh   → backend (3 services) + frontend
 #   ./scripts/analyze.sh          → SonarQube + security scans + DefectDojo
 #
-# To also start the application services open 3 extra terminals:
-#   source .env && ./gradlew :platform-project:bootRun     → :8082
-#   source .env && ./gradlew :platform-job:bootRun         → :8083
-#   source .env && ./gradlew :platform-orchestrator:bootRun → :8084
+# Or run everything in one shot:
+#   ./scripts/start-all.sh        → infrastructure + services
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -24,8 +23,15 @@ hdr()  { echo -e "\n${YELLOW}═══ $* ═══${NC}"; }
 
 # ── 0. Load environment ───────────────────────────────────────────────────────
 hdr "Loading .env"
+if [ ! -f "$ROOT/.env" ]; then
+  fail "$ROOT/.env not found — create it with your GitHub/AI credentials."
+fi
 set -a && source "$ROOT/.env" && set +a
-ok "AI key: ${AI_PROVIDER_API_KEY:0:15}..."
+ok ".env loaded"
+[ -n "${GROQ_API_KEY:-${AI_PROVIDER_API_KEY:-}}" ] && ok "Groq key:       [SET]"     || warn "Groq key:       [empty]"
+[ -n "${NVIDIA_API_KEY:-}"      ] && ok "NVIDIA key:     [SET]"     || warn "NVIDIA key:     [empty]"
+[ -n "${OPENROUTER_API_KEY:-}"  ] && ok "OpenRouter key: [SET]"     || warn "OpenRouter key: [empty]"
+[ -n "${GITHUB_CLIENT_ID:-}"    ] && ok "GitHub OAuth:   [SET]"     || warn "GitHub OAuth:   [empty]"
 
 # ── 1. SonarQube kernel requirement ──────────────────────────────────────────
 hdr "Kernel: vm.max_map_count"
@@ -110,16 +116,21 @@ docker exec altrix-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
   || (docker exec altrix-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
       -c "CREATE DATABASE orders_db OWNER $POSTGRES_USER;" > /dev/null && ok "orders_db CREATED")
 
-# ── 8. AI provider key test ───────────────────────────────────────────────────
-hdr "AI provider key"
-response=$(curl -s --max-time 10 https://api.groq.com/openai/v1/chat/completions \
-  -H "Authorization: Bearer $AI_PROVIDER_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"llama-3.1-8b-instant","messages":[{"role":"user","content":"hi"}],"max_tokens":5}' 2>/dev/null || true)
-if echo "$response" | grep -q '"content"'; then
-  ok "AI provider key: VALID"
+# ── 8. AI provider key test (Groq only — fast smoke check) ──────────────────
+hdr "AI provider key (Groq smoke test)"
+GROQ_KEY="${GROQ_API_KEY:-${AI_PROVIDER_API_KEY:-}}"
+if [ -z "$GROQ_KEY" ]; then
+  warn "GROQ_API_KEY / AI_PROVIDER_API_KEY not set — skipping smoke test"
 else
-  warn "AI provider key: could not verify — check AI_PROVIDER_API_KEY in .env"
+  response=$(curl -s --max-time 10 https://api.groq.com/openai/v1/chat/completions \
+    -H "Authorization: Bearer $GROQ_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"model":"llama-3.1-8b-instant","messages":[{"role":"user","content":"hi"}],"max_tokens":5}' 2>/dev/null || true)
+  if echo "$response" | grep -q '"content"'; then
+    ok "Groq key: VALID"
+  else
+    warn "Groq key: could not verify — check GROQ_API_KEY in .env"
+  fi
 fi
 
 # ── 9. Final summary ──────────────────────────────────────────────────────────
@@ -135,11 +146,8 @@ echo "  RedisUI:    http://localhost:8001"
 echo "  SonarQube:  http://localhost:9003  (still starting — takes ~3 min)"
 echo "  DefectDojo: http://localhost:8089  (admin / $DD_ADMIN_PASSWORD — takes ~5 min)"
 echo ""
-echo -e "${YELLOW}  Next step → run analysis:${NC}"
-echo "    ./scripts/analyze.sh"
-echo ""
-echo -e "${YELLOW}  To start application services (3 separate terminals):${NC}"
-echo "    source .env && ./gradlew :platform-project:bootRun      → :8082"
-echo "    source .env && ./gradlew :platform-job:bootRun          → :8083"
-echo "    source .env && ./gradlew :platform-orchestrator:bootRun → :8084"
+echo -e "${YELLOW}  Next steps:${NC}"
+echo "    ./scripts/start-services.sh   → backend + frontend"
+echo "    ./scripts/analyze.sh          → SonarQube + security scans"
+echo "    ./scripts/stop-dev.sh         → stop everything"
 echo ""

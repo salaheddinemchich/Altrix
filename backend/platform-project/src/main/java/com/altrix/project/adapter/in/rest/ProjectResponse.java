@@ -7,23 +7,25 @@ import com.altrix.project.domain.model.Project;
 import com.altrix.project.domain.model.ProjectStatus;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
- * HTTP response DTO returned after a successful upload.
+ * HTTP response DTO for project queries.
  *
  * <p>Never exposes the internal storage key — that is an infrastructure
  * detail the client does not need.
  */
 public record ProjectResponse(
-        String           id,
-        String           name,
-        ProjectStatus    status,
-        BuildSystem      buildSystem,
-        ConfigFormat     configFormat,
+        String id,
+        String name,
+        ProjectStatus status,
+        BuildSystem buildSystem,
+        ConfigFormat configFormat,
         DetectedFramework framework,
-        Instant          createdAt
+        boolean eligibleForMigration,
+        List<String> detectedTechnologies,
+        Instant createdAt
 ) {
-    /** Factory method — maps domain entity to response DTO. */
     public static ProjectResponse from(Project project) {
         return new ProjectResponse(
                 project.getId(),
@@ -32,6 +34,8 @@ public record ProjectResponse(
                 project.getBuildSystem(),
                 project.getConfigFormat(),
                 project.getFramework(),
+                project.isEligibleForMigration(),
+                project.getDetectedTechnologies(),
                 project.getCreatedAt()
         );
     }

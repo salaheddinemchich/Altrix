@@ -3,6 +3,10 @@ package com.altrix.project.adapter.out.persistence;
 import com.altrix.project.domain.model.Project;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Maps between the domain model {@link Project} and the JPA entity
  * {@link ProjectJpaEntity}.
@@ -24,6 +28,8 @@ class ProjectMapper {
                 .configFormat(entity.getConfigFormat())
                 .framework(entity.getFramework())
                 .configFormatPreference(entity.getConfigFormatPreference())
+                .eligibleForMigration(entity.isEligibleForMigration())
+                .detectedTechnologies(parseTechnologies(entity.getDetectedTechnologies()))
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
@@ -40,8 +46,20 @@ class ProjectMapper {
                 .configFormat(domain.getConfigFormat())
                 .framework(domain.getFramework())
                 .configFormatPreference(domain.getConfigFormatPreference())
+                .eligibleForMigration(domain.isEligibleForMigration())
+                .detectedTechnologies(joinTechnologies(domain.getDetectedTechnologies()))
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
                 .build();
+    }
+
+    private static List<String> parseTechnologies(String csv) {
+        if (csv == null || csv.isBlank()) return Collections.emptyList();
+        return Arrays.asList(csv.split(","));
+    }
+
+    private static String joinTechnologies(List<String> list) {
+        if (list == null || list.isEmpty()) return null;
+        return String.join(",", list);
     }
 }

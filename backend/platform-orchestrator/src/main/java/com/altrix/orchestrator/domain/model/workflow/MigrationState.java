@@ -36,6 +36,8 @@ public class MigrationState extends AgentState {
     public static final String RETRY_COUNT = "retry_count";
     /** Token-budgeted failure summary injected by RetryContextBuilder (#48). */
     public static final String RETRY_CONTEXT = "retry_context";
+    /** True when Agent 2 returned a plan from the similarity cache rather than calling the AI (#155). */
+    public static final String CACHE_ASSISTED = "cache_assisted";
 
     /**
      * Required by {@link org.bsc.langgraph4j.state.AgentStateFactory}.

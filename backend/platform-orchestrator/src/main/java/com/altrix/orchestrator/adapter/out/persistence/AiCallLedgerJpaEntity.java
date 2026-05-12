@@ -3,6 +3,7 @@ package com.altrix.orchestrator.adapter.out.persistence;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
@@ -39,8 +40,8 @@ public class AiCallLedgerJpaEntity {
     @Column(name = "output_tokens", nullable = false)
     private long outputTokens;
 
-    @Column(name = "cost_usd", nullable = false)
-    private double costUsd;
+    @Column(name = "cost_usd", nullable = false, precision = 12, scale = 8)
+    private BigDecimal costUsd;
 
     @Column(name = "cache_hit", nullable = false)
     private boolean cacheHit;

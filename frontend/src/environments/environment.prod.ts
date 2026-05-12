@@ -6,9 +6,10 @@
  */
 export const environment = {
   production: true,
+  apiUrl: '',  // same origin in production (behind gateway)
   api: {
     project:      '/api',
     job:          '/api',
-    orchestrator: '/api'
-  }
+    orchestrator: '/api',
+  },
 };

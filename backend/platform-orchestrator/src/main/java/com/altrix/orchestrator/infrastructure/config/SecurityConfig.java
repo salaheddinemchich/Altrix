@@ -1,9 +1,9 @@
 package com.altrix.orchestrator.infrastructure.config;
 
-import com.altrix.orchestrator.infrastructure.security.GitHubOAuth2UserService;
 import com.altrix.orchestrator.infrastructure.security.JwtAuthenticationFilter;
 import com.altrix.orchestrator.infrastructure.security.OAuth2AuthenticationSuccessHandler;
 import com.altrix.orchestrator.infrastructure.security.RateLimitingFilter;
+import com.altrix.orchestrator.infrastructure.security.oauth.MultiProviderOAuth2UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -45,7 +45,7 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final GitHubOAuth2UserService gitHubOAuth2UserService;
+    private final MultiProviderOAuth2UserService oauth2UserService;
     private final OAuth2AuthenticationSuccessHandler successHandler;
     private final StringRedisTemplate stringRedisTemplate;
     private final RateLimitConfig rateLimitConfig;
@@ -111,9 +111,9 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
 
-            // ── GitHub OAuth2 login ───────────────────────────────────────────────
+            // ── OAuth2 login (GitHub + GitLab via strategy pattern) ──────────────
             .oauth2Login(oauth2 -> oauth2
-                .userInfoEndpoint(u -> u.userService(gitHubOAuth2UserService))
+                .userInfoEndpoint(u -> u.userService(oauth2UserService))
                 .successHandler(successHandler)
             )
 

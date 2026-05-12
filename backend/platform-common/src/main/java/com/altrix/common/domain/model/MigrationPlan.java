@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import java.util.List;
 
 /**
@@ -44,7 +46,7 @@ public record MigrationPlan(
          */
         List<String> targetFiles
 
-) {
+) implements Serializable {
     public MigrationPlan {
         storageKey      = storageKey      != null ? storageKey      : "";
         targetStack     = targetStack     != null ? targetStack     : "";

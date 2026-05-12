@@ -39,7 +39,9 @@ class ProjectTest {
         Project ready = project.withDetectionApplied(
                 BuildSystem.GRADLE_KOTLIN,
                 ConfigFormat.YAML,
-                DetectedFramework.SPRING_BOOT);
+                DetectedFramework.SPRING_BOOT,
+                true,
+                java.util.List.of("SPRING_BOOT", "GRADLE_KOTLIN", "GCP_PUBSUB"));
 
         assertThat(ready.getStatus()).isEqualTo(ProjectStatus.READY);
         assertThat(ready.getBuildSystem()).isEqualTo(BuildSystem.GRADLE_KOTLIN);
@@ -51,7 +53,8 @@ class ProjectTest {
     void withDetectionApplied_isImmutable_originalUnchanged() {
         Project original = Project.create("user-1", "app.zip", "key", null);
         original.withDetectionApplied(
-                BuildSystem.MAVEN, ConfigFormat.PROPERTIES, DetectedFramework.JAKARTA_EE);
+                BuildSystem.MAVEN, ConfigFormat.PROPERTIES, DetectedFramework.JAKARTA_EE,
+                false, java.util.List.of("JAKARTA_EE", "MAVEN"));
 
         assertThat(original.getStatus()).isEqualTo(ProjectStatus.PENDING);
         assertThat(original.getBuildSystem()).isNull();

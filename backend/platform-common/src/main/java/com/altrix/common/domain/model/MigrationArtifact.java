@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import java.util.List;
 
 /**
@@ -19,7 +21,7 @@ public record MigrationArtifact(
         /** Human-readable summary of what the migrator changed. */
         String summary
 
-) {
+) implements Serializable {
     public MigrationArtifact {
         files   = files   != null ? List.copyOf(files) : List.of();
         summary = summary != null ? summary : "";

@@ -13,7 +13,7 @@ import java.util.Optional;
  */
 public interface RefreshTokenRepository {
 
-    RefreshToken save(String tokenHash, String githubId, Instant expiresAt);
+    RefreshToken save(String tokenHash, String userId, Instant expiresAt);
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
@@ -21,7 +21,7 @@ public interface RefreshTokenRepository {
     void revokeAndReplace(String tokenHash, String replacedByHash);
 
     /** Revokes all active tokens for a user (used on logout + suspicious activity). */
-    void revokeAllForUser(String githubId);
+    void revokeAllForUser(String userId);
 
     /** Purges expired rows — called by a maintenance scheduler. */
     void deleteExpiredBefore(Instant cutoff);

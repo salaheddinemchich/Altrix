@@ -11,12 +11,25 @@
 --      addition to the application-level @Enumerated(EnumType.STRING).
 
 -- ── Enum integrity guards ─────────────────────────────────────────────────────
-ALTER TABLE projects
-    ADD CONSTRAINT IF NOT EXISTS chk_projects_status
-        CHECK (status IN ('PENDING','READY','ERROR','COMPLETED','FAILED')),
+-- PostgreSQL does not support `ADD CONSTRAINT IF NOT EXISTS`. Guard with DO blocks.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'chk_projects_status'
+    ) THEN
+        ALTER TABLE projects
+            ADD CONSTRAINT chk_projects_status
+                CHECK (status IN ('PENDING','READY','ERROR','COMPLETED','FAILED'));
+    END IF;
 
-    ADD CONSTRAINT IF NOT EXISTS chk_projects_config_format_preference
-        CHECK (config_format_preference IN ('KEEP_ORIGINAL','FORCE_YAML','FORCE_PROPERTIES'));
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'chk_projects_config_format_preference'
+    ) THEN
+        ALTER TABLE projects
+            ADD CONSTRAINT chk_projects_config_format_preference
+                CHECK (config_format_preference IN ('KEEP_ORIGINAL','FORCE_YAML','FORCE_PROPERTIES'));
+    END IF;
+END$$;
 
 -- ── Coverage gap: find projects by user + framework (e.g. "all Spring Boot jobs") ──
 -- This is a low-cardinality secondary filter; a partial index keeps it small.

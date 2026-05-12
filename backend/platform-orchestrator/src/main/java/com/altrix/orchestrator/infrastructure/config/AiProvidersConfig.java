@@ -18,6 +18,7 @@ public record AiProvidersConfig(
         OpenAiCompatibleConfig openai,
         OpenAiCompatibleConfig deepseek,
         OpenAiCompatibleConfig nvidia,
+        OpenAiCompatibleConfig openrouter,
         AnthropicConfig anthropic,
         OllamaConfig ollama
 ) {

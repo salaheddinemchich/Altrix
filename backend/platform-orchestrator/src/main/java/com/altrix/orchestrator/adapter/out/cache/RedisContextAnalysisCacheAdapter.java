@@ -2,6 +2,7 @@ package com.altrix.orchestrator.adapter.out.cache;
 
 import com.altrix.common.domain.model.AnalysisReport;
 import com.altrix.orchestrator.domain.port.out.ContextAnalysisCachePort;
+import com.altrix.orchestrator.infrastructure.config.CacheConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +16,7 @@ import java.util.Optional;
  * Redis-backed implementation of {@link ContextAnalysisCachePort} (#154).
  *
  * <p>Key format: {@code ctx-analysis:{sha256hex}}
- * TTL: 1 hour — balances freshness vs. AI cost savings.
+ * TTL: configurable via {@code cache.ttl.context-analysis} (default 1 h) — #157.
  *
  * <p>All operations are best-effort: a Redis failure never propagates to the
  * calling agent; instead it falls through to the AI call.
@@ -26,10 +27,10 @@ import java.util.Optional;
 public class RedisContextAnalysisCacheAdapter implements ContextAnalysisCachePort {
 
     private static final String KEY_PREFIX = "ctx-analysis:";
-    private static final Duration TTL = Duration.ofHours(1);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final CacheConfig cacheConfig;
 
     @Override
     public Optional<AnalysisReport> get(String contentHash) {
@@ -42,7 +43,8 @@ public class RedisContextAnalysisCacheAdapter implements ContextAnalysisCachePor
             }
             AnalysisReport report = objectMapper.readValue(json, AnalysisReport.class);
             Long ttlSeconds = redisTemplate.getExpire(key);
-            long ageSeconds = TTL.getSeconds() - (ttlSeconds != null ? ttlSeconds : 0);
+            Duration ttl = cacheConfig.ttl().contextAnalysis();
+            long ageSeconds = ttl.getSeconds() - (ttlSeconds != null ? ttlSeconds : 0);
             log.debug("[ContextAnalysisCache] HIT key={} age=~{}s", key, ageSeconds);
             return Optional.of(report);
         } catch (Exception e) {
@@ -56,9 +58,11 @@ public class RedisContextAnalysisCacheAdapter implements ContextAnalysisCachePor
         String key = cacheKey(contentHash);
         try {
             String json = objectMapper.writeValueAsString(report);
-            redisTemplate.opsForValue().set(key, json, TTL);
-            log.debug("[ContextAnalysisCache] stored key={} ({} component(s), {} integration(s))",
-                    key, report.detectedComponents().size(), report.detectedIntegrations().size());
+            Duration ttl = cacheConfig.ttl().contextAnalysis();
+            redisTemplate.opsForValue().set(key, json, ttl);
+            log.debug("[ContextAnalysisCache] stored key={} ttl={}s ({} component(s), {} integration(s))",
+                    key, ttl.getSeconds(),
+                    report.detectedComponents().size(), report.detectedIntegrations().size());
         } catch (Exception e) {
             log.warn("[ContextAnalysisCache] write error key={}: {}", key, e.getMessage());
         }

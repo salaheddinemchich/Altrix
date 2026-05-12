@@ -43,7 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_ws_created_brin
 
 -- Enum guard
 ALTER TABLE workflow_sessions
-    ADD CONSTRAINT IF NOT EXISTS chk_ws_status
+    ADD CONSTRAINT chk_ws_status
         CHECK (status IN ('PENDING','CONTEXT_ANALYSED','PLAN_READY',
                           'AWAITING_APPROVAL','MIGRATING','VALIDATING',
                           'DONE','FAILED','PAUSED'));

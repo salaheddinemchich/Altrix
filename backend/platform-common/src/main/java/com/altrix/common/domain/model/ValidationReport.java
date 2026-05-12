@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import java.util.List;
 
 /**
@@ -20,7 +22,7 @@ public record ValidationReport(
 
         String summary
 
-) {
+) implements Serializable {
     public ValidationReport {
         failures = failures != null ? List.copyOf(failures) : List.of();
         summary  = summary  != null ? summary : "";

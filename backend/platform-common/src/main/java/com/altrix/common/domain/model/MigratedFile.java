@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import com.altrix.common.domain.enums.FileChangeType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,4 +34,4 @@ public record MigratedFile(
         /** Short human-readable description of what changed, shown in the report. */
         @NotBlank String diffSummary
 
-) {}
+) implements Serializable {}

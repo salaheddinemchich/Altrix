@@ -9,15 +9,27 @@
 --      routing layer quickly enumerate jobs that may only use local providers.
 
 -- ── Enum integrity guards ─────────────────────────────────────────────────────
-ALTER TABLE migration_jobs
-    ADD CONSTRAINT IF NOT EXISTS chk_jobs_status
-        CHECK (status IN ('PENDING','ANALYZING','MIGRATING','DONE','FAILED','CANCELLED')),
+-- PostgreSQL does not support `ADD CONSTRAINT IF NOT EXISTS`. Guard with DO blocks.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_jobs_status') THEN
+        ALTER TABLE migration_jobs
+            ADD CONSTRAINT chk_jobs_status
+                CHECK (status IN ('PENDING','ANALYZING','MIGRATING','DONE','FAILED','CANCELLED'));
+    END IF;
 
-    ADD CONSTRAINT IF NOT EXISTS chk_jobs_config_format_preference
-        CHECK (config_format_preference IN ('KEEP_ORIGINAL','FORCE_YAML','FORCE_PROPERTIES')),
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_jobs_config_format_preference') THEN
+        ALTER TABLE migration_jobs
+            ADD CONSTRAINT chk_jobs_config_format_preference
+                CHECK (config_format_preference IN ('KEEP_ORIGINAL','FORCE_YAML','FORCE_PROPERTIES'));
+    END IF;
 
-    ADD CONSTRAINT IF NOT EXISTS chk_jobs_provider_profile
-        CHECK (provider_profile IN ('DEFAULT','ALL_LOCAL'));
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_jobs_provider_profile') THEN
+        ALTER TABLE migration_jobs
+            ADD CONSTRAINT chk_jobs_provider_profile
+                CHECK (provider_profile IN ('DEFAULT','ALL_LOCAL'));
+    END IF;
+END$$;
 
 -- ── Provider-profile routing index ────────────────────────────────────────────
 -- Covers: SELECT … WHERE provider_profile = 'ALL_LOCAL' AND status = ?

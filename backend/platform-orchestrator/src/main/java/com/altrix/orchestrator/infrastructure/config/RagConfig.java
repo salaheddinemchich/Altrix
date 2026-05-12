@@ -1,8 +1,11 @@
 package com.altrix.orchestrator.infrastructure.config;
 
+import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.ollama.OllamaEmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
+import dev.langchain4j.model.output.Response;
+import dev.langchain4j.data.embedding.Embedding;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -11,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Configures the embedding model used by the RAG pipeline.
@@ -33,9 +37,10 @@ public class RagConfig {
             @Value("${rag.embedding.openai.model:text-embedding-3-small}") String model
     ) {
         if (apiKey.isBlank()) {
-            log.warn("RAG: rag.embedding.openai.api-key is not set — embedding calls will fail at runtime. "
+            log.warn("RAG: rag.embedding.openai.api-key is not set — RAG features disabled. "
                     + "Set OPENAI_API_KEY or rag.embedding.openai.api-key, "
                     + "or switch to rag.embedding.provider=ollama for a local model.");
+            return new DisabledEmbeddingModel();
         }
         log.info("RAG embedding model: OpenAI {}", model);
         return OpenAiEmbeddingModel.builder()
@@ -43,6 +48,14 @@ public class RagConfig {
                 .modelName(model)
                 .timeout(Duration.ofSeconds(30))
                 .build();
+    }
+
+    private static class DisabledEmbeddingModel implements EmbeddingModel {
+        @Override
+        public Response<List<Embedding>> embedAll(List<TextSegment> textSegments) {
+            throw new IllegalStateException(
+                    "RAG embedding is disabled — set OPENAI_API_KEY or switch rag.embedding.provider=ollama");
+        }
     }
 
     @Bean

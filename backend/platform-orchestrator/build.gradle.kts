@@ -85,3 +85,16 @@ dependencies {
     testImplementation("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4jVersion")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
 }
+
+// Load .env from the backend root into bootRun environment automatically.
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    val envFile = rootProject.file(".env")
+    if (envFile.exists()) {
+        envFile.readLines()
+            .filter { it.isNotBlank() && !it.startsWith("#") && it.contains("=") }
+            .forEach { line ->
+                val (key, value) = line.split("=", limit = 2)
+                environment(key.trim(), value.trim())
+            }
+    }
+}

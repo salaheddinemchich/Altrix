@@ -1,0 +1,217 @@
+[
+  {
+    "patternId": "pubsub-to-kafka-basic",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring boot", "spring mvc"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub dependency with spring-kafka",
+        "Rewrite @PubSubListener classes to @KafkaListener",
+        "Replace PubSubTemplate with KafkaTemplate for publishing",
+        "Update application.yml: pubsub config → spring.kafka.*",
+        "Add schema registry config if using Avro",
+        "Remove GCP project/credentials configuration"
+      ],
+      "riskLevel": "MEDIUM",
+      "estimatedEffort": "3–5 days",
+      "summary": "Standard Google Cloud Pub/Sub to Apache Kafka migration for a Spring Boot 2.x service. Listener and publisher classes require direct rewrites; configuration externalization is straightforward.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-with-jpa",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring boot", "spring data jpa", "postgresql"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka",
+        "Migrate @PubSubListener to @KafkaListener with @Transactional",
+        "Configure Kafka consumer group and topic bindings",
+        "Ensure idempotent consumer pattern (check DB before processing)",
+        "Replace PubSubTemplate with KafkaTemplate",
+        "Update datasource config for Spring Boot 3 compatibility",
+        "Run Flyway migration scripts for any schema changes"
+      ],
+      "riskLevel": "MEDIUM",
+      "estimatedEffort": "4–6 days",
+      "summary": "Pub/Sub to Kafka migration in a JPA-backed service. Idempotency must be preserved at the consumer level since Kafka does not guarantee exactly-once without explicit handling.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-with-redis",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring boot", "spring data redis", "lettuce"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka",
+        "Rewrite message listeners and publishers",
+        "Verify Redis caching layer is unaffected by messaging change",
+        "Add Kafka consumer offset management config",
+        "Update Spring Boot 3 property namespaces"
+      ],
+      "riskLevel": "LOW",
+      "estimatedEffort": "2–4 days",
+      "summary": "Pub/Sub to Kafka migration with Redis caching. The Redis layer is independent of messaging and requires no changes; risk is low.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-oauth2",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring security", "oauth2", "spring boot"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka",
+        "Migrate Spring Security OAuth2 config to Spring Boot 3 style",
+        "Update SecurityFilterChain lambda DSL (deprecated configurer removed)",
+        "Rewrite Pub/Sub listeners to Kafka consumers",
+        "Add Kafka SASL/SSL config if broker requires auth"
+      ],
+      "riskLevel": "HIGH",
+      "estimatedEffort": "5–8 days",
+      "summary": "Pub/Sub to Kafka migration alongside Spring Security OAuth2 upgrade. Spring Boot 3 removed the WebSecurityConfigurerAdapter — security configuration requires a full rewrite to lambda-based SecurityFilterChain.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-rest-api",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring boot", "spring mvc", "rest", "openapi"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka",
+        "Migrate REST controllers: javax.* → jakarta.* package rename",
+        "Update springdoc-openapi dependency to v2 (Spring Boot 3 compatible)",
+        "Rewrite Pub/Sub listeners/publishers to Kafka equivalents",
+        "Update application.yml property namespaces"
+      ],
+      "riskLevel": "MEDIUM",
+      "estimatedEffort": "3–5 days",
+      "summary": "Pub/Sub to Kafka migration for a REST API service. The javax → jakarta package rename affects all controller and filter classes and must be done systematically.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-flyway",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring boot", "flyway", "spring data jpa"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka",
+        "Verify Flyway version compatibility with Spring Boot 3 (requires Flyway 9+)",
+        "Rewrite listeners and publishers to Kafka",
+        "Update JPA entity annotations: javax.persistence.* → jakarta.persistence.*",
+        "Run existing Flyway migrations against dev database to verify"
+      ],
+      "riskLevel": "MEDIUM",
+      "estimatedEffort": "4–6 days",
+      "summary": "Pub/Sub to Kafka migration for a Flyway-managed service. Flyway 9+ is required for Spring Boot 3; existing migration scripts are unaffected but must be re-validated.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-batch",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring batch", "spring boot", "spring data jpa"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka",
+        "Upgrade Spring Batch to 5.x (Spring Boot 3 compatible)",
+        "Update Spring Batch schema: @EnableBatchProcessing no longer needed",
+        "Rewrite Pub/Sub-triggered batch jobs to Kafka-triggered equivalents",
+        "Update job repository config to new Spring Batch 5 API"
+      ],
+      "riskLevel": "HIGH",
+      "estimatedEffort": "6–10 days",
+      "summary": "Pub/Sub to Kafka migration for a Spring Batch service. Spring Batch 5 introduced breaking API changes alongside Boot 3; significant refactoring is required.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-multimodule",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring boot", "spring data jpa", "spring mvc", "spring security"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka across all modules",
+        "Global javax.* → jakarta.* rename (servlet, persistence, validation)",
+        "Rewrite Spring Security config to lambda DSL",
+        "Update each module's Spring Boot parent version to 3.x",
+        "Rewrite all Pub/Sub listeners and publishers",
+        "Validate inter-module Kafka topic contracts",
+        "Update integration tests to embedded Kafka"
+      ],
+      "riskLevel": "HIGH",
+      "estimatedEffort": "8–12 days",
+      "summary": "Large multi-module Pub/Sub to Kafka migration. The javax → jakarta rename, Spring Security rewrite, and Kafka topic contract validation make this the highest-effort pattern.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-cloud-storage",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "google cloud storage", "spring boot", "spring data jpa"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka",
+        "Keep google-cloud-storage dependency (retain GCS integration)",
+        "Rewrite GCS event notifications from Pub/Sub to Kafka-based polling or webhook",
+        "Update Spring Boot 3 auto-configuration",
+        "Migrate javax.* → jakarta.* where applicable"
+      ],
+      "riskLevel": "MEDIUM",
+      "estimatedEffort": "4–6 days",
+      "summary": "Pub/Sub to Kafka migration for a service that also uses Google Cloud Storage. GCS itself is retained; only the notification mechanism changes from Pub/Sub to Kafka.",
+      "targetFiles": []
+    }
+  },
+  {
+    "patternId": "pubsub-to-kafka-actuator",
+    "springBootMajor": "2",
+    "depSignature": ["google pub/sub", "spring boot", "spring actuator", "micrometer"],
+    "migrationPlan": {
+      "projectId": "__warmup__",
+      "storageKey": "",
+      "targetStack": "Spring Boot 3 + Apache Kafka",
+      "steps": [
+        "Replace google-cloud-pubsub with spring-kafka",
+        "Update Micrometer to 1.11+ for Spring Boot 3 Actuator compatibility",
+        "Add Kafka consumer lag metric via KafkaConsumerMetrics",
+        "Rewrite listeners and publishers",
+        "Update management endpoint security config for Spring Boot 3"
+      ],
+      "riskLevel": "LOW",
+      "estimatedEffort": "2–3 days",
+      "summary": "Pub/Sub to Kafka migration for an observable service. Kafka consumer lag metrics replace Pub/Sub subscription metrics; Micrometer 1.11+ provides built-in Kafka support.",
+      "targetFiles": []
+    }
+  }
+]

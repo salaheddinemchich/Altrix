@@ -16,14 +16,8 @@ import java.time.Instant;
 public class UserJpaEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(name = "github_id", nullable = false, unique = true, length = 50)
-    private String githubId;
-
-    @Column(name = "github_login", nullable = false, length = 100)
-    private String githubLogin;
+    @Column(nullable = false, updatable = false, length = 36)
+    private String id;
 
     @Column(length = 200)
     private String email;
@@ -33,9 +27,6 @@ public class UserJpaEntity {
 
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
-
-    @Column(name = "encrypted_access_token", columnDefinition = "TEXT")
-    private String encryptedAccessToken;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

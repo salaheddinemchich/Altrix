@@ -1,100 +1,121 @@
-<header class="page-header">
+<div class="page-header">
   <div>
     <h1>AI Providers</h1>
-    <p class="muted">
-      Override per-provider settings (API key, models, enabled flag) at runtime.
-      Changes apply immediately — no restart needed.
-    </p>
+    <p class="muted">Override per-provider settings at runtime. Changes apply immediately — no restart needed.</p>
   </div>
-  <button class="btn" (click)="refresh()" [disabled]="providers() === null">Refresh</button>
-</header>
+  <button class="btn" (click)="refresh()" [disabled]="providers() === null">
+    <app-icon name="refresh" [size]="15"/>
+    Refresh
+  </button>
+</div>
 
 @if (loadError(); as err) {
-  <div class="empty">Could not load providers — {{ err }}</div>
+  <div class="empty">
+    <app-icon name="alert" [size]="28"/>
+    Could not load providers — {{ err }}
+  </div>
 } @else if (providers() === null) {
   <div class="empty">Loading…</div>
 } @else if (providers()!.length === 0) {
   <div class="empty">No providers configured.</div>
 } @else {
-  <div class="providers">
-    @for (p of providers(); track p.providerId) {
-      <div class="card provider" [class.expanded]="expandedId() === p.providerId">
-        <button class="provider-head" (click)="toggle(p)">
-          <div>
-            <div class="provider-name">{{ p.providerId }}</div>
-            <div class="provider-meta">
-              <span class="pill" [class]="p.costTier === 'FREE' ? 'success' : 'info'">
-                {{ p.costTier }}
-              </span>
-              <span class="pill" [class]="p.effectiveEnabled ? 'success' : 'danger'">
-                {{ p.effectiveEnabled ? 'enabled' : 'disabled' }}
-              </span>
-              @if (p.hasCustomApiKey) {
-                <span class="pill warning">custom key</span>
-              }
+
+  <div class="providers-grid">
+    @for (p of providers()!; track p.providerId) {
+      <div class="provider-card" [class.expanded]="expandedId() === p.providerId">
+
+        <!-- Card header -->
+        <div class="provider-head">
+          <div class="provider-info">
+            <div class="provider-emoji">{{ providerIcon(p.providerId) }}</div>
+            <div>
+              <div class="provider-name">{{ p.providerId }}</div>
+              <div class="provider-badges">
+                <span class="pill" [class]="p.costTier === 'FREE' ? 'success' : 'gold'">{{ p.costTier }}</span>
+                @if (p.hasCustomApiKey) {
+                  <span class="pill warning">custom key</span>
+                }
+              </div>
             </div>
           </div>
-          <div class="provider-models">
-            <div><span class="muted">analysis:</span> <code class="mono">{{ p.effectiveModelAnalysis || '—' }}</code></div>
-            <div><span class="muted">migration:</span> <code class="mono">{{ p.effectiveModelMigration || '—' }}</code></div>
-          </div>
-          <span class="chevron">{{ expandedId() === p.providerId ? '−' : '+' }}</span>
-        </button>
 
+          <div class="provider-status">
+            <!-- Enabled toggle (read-only display) -->
+            <div class="status-dot" [class.enabled]="p.effectiveEnabled"
+                 [title]="p.effectiveEnabled ? 'Enabled' : 'Disabled'">
+            </div>
+            <button class="btn btn-ghost btn-sm" (click)="toggle(p)">
+              <app-icon [name]="expandedId() === p.providerId ? 'chevron-down' : 'settings'" [size]="14"/>
+              Configure
+            </button>
+          </div>
+        </div>
+
+        <!-- Model info row -->
+        <div class="provider-models">
+          <div class="model-item">
+            <span class="model-label">Analysis</span>
+            <code class="mono model-value">{{ p.effectiveModelAnalysis || '—' }}</code>
+          </div>
+          <div class="model-item">
+            <span class="model-label">Migration</span>
+            <code class="mono model-value">{{ p.effectiveModelMigration || '—' }}</code>
+          </div>
+        </div>
+
+        <!-- Expanded form -->
         @if (expandedId() === p.providerId && edit(p.providerId); as e) {
-          <div class="provider-body">
-            <div class="grid">
+          <div class="provider-form">
+            <div class="form-divider"></div>
+
+            <!-- Enabled toggle (editable) -->
+            <label class="toggle" (click)="toggleEnabled(p.providerId)">
+              <input type="checkbox" [checked]="e.enabled" readonly/>
+              <span class="track"></span>
+              <span>{{ e.enabled ? 'Enabled' : 'Disabled' }}</span>
+            </label>
+
+            <div class="form-grid">
               <div>
                 <label>API key</label>
-                <input
-                  type="password"
-                  placeholder="(leave blank to keep current)"
-                  [ngModel]="e.apiKey"
-                  (ngModelChange)="patchEdit(p.providerId, { apiKey: $event })"
-                />
+                <input type="password"
+                       placeholder="Leave blank to keep current"
+                       [ngModel]="e.apiKey"
+                       (ngModelChange)="patchEdit(p.providerId, { apiKey: $event })"/>
               </div>
-
-              <div class="enabled-toggle">
-                <label>Enabled</label>
-                <label class="checkbox">
-                  <input
-                    type="checkbox"
-                    [ngModel]="e.enabled"
-                    (ngModelChange)="patchEdit(p.providerId, { enabled: $event })"
-                  />
-                  <span>{{ e.enabled ? 'Yes' : 'No' }}</span>
-                </label>
-              </div>
-
               <div>
                 <label>Analysis model</label>
-                <input
-                  type="text"
-                  [ngModel]="e.modelAnalysis"
-                  (ngModelChange)="patchEdit(p.providerId, { modelAnalysis: $event })"
-                />
+                <input type="text"
+                       [ngModel]="e.modelAnalysis"
+                       (ngModelChange)="patchEdit(p.providerId, { modelAnalysis: $event })"/>
               </div>
-
               <div>
                 <label>Migration model</label>
-                <input
-                  type="text"
-                  [ngModel]="e.modelMigration"
-                  (ngModelChange)="patchEdit(p.providerId, { modelMigration: $event })"
-                />
+                <input type="text"
+                       [ngModel]="e.modelMigration"
+                       (ngModelChange)="patchEdit(p.providerId, { modelMigration: $event })"/>
               </div>
             </div>
 
-            @if (e.error) { <p class="error">{{ e.error }}</p> }
+            @if (e.error) {
+              <div class="error" style="margin-top:8px">{{ e.error }}</div>
+            }
 
-            <div class="actions">
-              <button class="btn" (click)="toggle(p)">Cancel</button>
-              <button class="btn btn-primary" (click)="save(p)" [disabled]="e.saving">
-                {{ e.saving ? 'Saving…' : 'Save' }}
+            <div class="form-actions">
+              <button class="btn btn-ghost btn-sm" (click)="toggle(p)">Cancel</button>
+              <button class="btn btn-primary btn-sm" (click)="save(p)" [disabled]="e.saving">
+                @if (e.saving) {
+                  <app-icon name="refresh" [size]="13"/>
+                  Saving…
+                } @else {
+                  <app-icon name="check" [size]="13"/>
+                  Save changes
+                }
               </button>
             </div>
           </div>
         }
+
       </div>
     }
   </div>

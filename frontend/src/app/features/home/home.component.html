@@ -1,63 +1,121 @@
-<section class="hero">
-  <h1>Welcome to Altrix</h1>
-  <p class="muted">
-    AI-powered migration platform — automated codebase analysis, planning,
-    transformation, and validation across any stack.
-  </p>
-  <div class="hero-actions">
-    <a class="btn btn-primary" routerLink="/projects">Upload a project</a>
-    <a class="btn" routerLink="/jobs">View migration jobs</a>
+<!-- ══ Welcome header ═══════════════════════════════════════════════════════ -->
+<header class="welcome">
+  <div>
+    <h1 class="welcome-title">
+      @if (auth.user(); as u) {
+        Welcome back, <span class="gold">{{ u.login }}</span>
+      } @else {
+        Dashboard
+      }
+    </h1>
+    <p class="muted">Here's what's happening with your migration projects.</p>
   </div>
-</section>
+  <a class="btn btn-gold" routerLink="/projects">
+    <app-icon name="upload" [size]="15"/>
+    New project
+  </a>
+</header>
 
-<section class="stats">
-  <div class="card stat">
-    <div class="stat-label">Projects</div>
-    <div class="stat-value">{{ projectCount() ?? '—' }}</div>
-    <a class="stat-link" routerLink="/projects">Manage →</a>
-  </div>
-  <div class="card stat">
-    <div class="stat-label">Jobs</div>
-    <div class="stat-value">{{ jobCount() ?? '—' }}</div>
-    <a class="stat-link" routerLink="/jobs">View all →</a>
-  </div>
-  <div class="card stat">
-    <div class="stat-label">Enabled providers</div>
-    <div class="stat-value">{{ enabledProvs() ?? '—' }}</div>
-    <a class="stat-link" routerLink="/providers">Configure →</a>
-  </div>
-</section>
+<!-- ══ Stat cards ════════════════════════════════════════════════════════════ -->
+<div class="stats-grid">
 
-<section>
-  <h2>Recent jobs</h2>
+  <a class="stat-card" routerLink="/projects">
+    <div class="stat-icon stat-icon--blue">
+      <app-icon name="folder" [size]="20"/>
+    </div>
+    <div class="stat-body">
+      <div class="stat-value">
+        @if (projectCount() !== null) { {{ projectCount() }} } @else { <span class="skeleton" style="width:40px;height:28px;display:inline-block"></span> }
+      </div>
+      <div class="stat-label">Total Projects</div>
+    </div>
+  </a>
+
+  <a class="stat-card" routerLink="/jobs">
+    <div class="stat-icon stat-icon--gold">
+      <app-icon name="briefcase" [size]="20"/>
+    </div>
+    <div class="stat-body">
+      <div class="stat-value">
+        @if (jobCount() !== null) { {{ jobCount() }} } @else { <span class="skeleton" style="width:40px;height:28px;display:inline-block"></span> }
+      </div>
+      <div class="stat-label">Migration Jobs</div>
+    </div>
+    @if (runningJobs() > 0) {
+      <div class="stat-badge running">{{ runningJobs() }} running</div>
+    }
+  </a>
+
+  <a class="stat-card" routerLink="/sessions">
+    <div class="stat-icon stat-icon--teal">
+      <app-icon name="layers" [size]="20"/>
+    </div>
+    <div class="stat-body">
+      <div class="stat-value">
+        @if (sessionCount() !== null) { {{ sessionCount() }} } @else { <span class="skeleton" style="width:40px;height:28px;display:inline-block"></span> }
+      </div>
+      <div class="stat-label">Sessions</div>
+    </div>
+  </a>
+
+  <a class="stat-card" routerLink="/providers">
+    <div class="stat-icon stat-icon--purple">
+      <app-icon name="cpu" [size]="20"/>
+    </div>
+    <div class="stat-body">
+      <div class="stat-value">
+        @if (enabledProvs() !== null) { {{ enabledProvs() }} } @else { <span class="skeleton" style="width:40px;height:28px;display:inline-block"></span> }
+      </div>
+      <div class="stat-label">Enabled Providers</div>
+    </div>
+  </a>
+
+</div>
+
+<!-- ══ Recent jobs ═══════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="section-header">
+    <h2>Recent jobs</h2>
+    <a class="btn btn-ghost btn-sm" routerLink="/jobs">View all</a>
+  </div>
 
   @if (jobList() === null) {
-    <div class="empty">Loading…</div>
+    <div class="empty">
+      <app-icon name="clock" [size]="24"/>
+      Loading jobs…
+    </div>
   } @else if (recentJobs().length === 0) {
     <div class="empty">
-      No migration jobs yet.
-      <a routerLink="/projects">Upload a project</a> to start.
+      <app-icon name="briefcase" [size]="32"/>
+      <div>No migration jobs yet.</div>
+      <a routerLink="/projects">Upload a project to start →</a>
     </div>
   } @else {
-    <table>
-      <thead>
-        <tr>
-          <th>Job</th>
-          <th>Project</th>
-          <th>Status</th>
-          <th>Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (job of recentJobs(); track job.id) {
+    <div class="table-wrap">
+      <table>
+        <thead>
           <tr>
-            <td class="mono">{{ job.id.slice(0, 8) }}…</td>
-            <td class="mono muted">{{ job.projectId.slice(0, 8) }}…</td>
-            <td><span class="pill" [class]="statusClass(job.status)">{{ job.status }}</span></td>
-            <td class="muted">{{ job.createdAt | date:'short' }}</td>
+            <th>Job ID</th>
+            <th>Project</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th></th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (job of recentJobs(); track job.id) {
+            <tr [routerLink]="['/jobs', job.id]">
+              <td class="mono faint">{{ job.id.slice(0, 8) }}…</td>
+              <td class="mono muted">{{ job.projectId.slice(0, 8) }}…</td>
+              <td><span class="pill" [class]="statusClass(job.status)">{{ job.status }}</span></td>
+              <td class="muted">{{ job.createdAt | date:'MMM d, h:mm a' }}</td>
+              <td class="row-action">
+                <app-icon name="chevron-right" [size]="15"/>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   }
 </section>

@@ -67,8 +67,8 @@ public class ProviderRegistry implements ProviderRefreshPort {
                 .toList();
 
         if (built.isEmpty()) {
-            throw new IllegalStateException(
-                    "No AI provider is enabled. Enable at least one under ai.providers.* in application.yml.");
+            log.warn("No AI provider is enabled — AI features will be unavailable. " +
+                     "Set at least one API key under ai.providers.* in application.yml.");
         }
         return built;
     }

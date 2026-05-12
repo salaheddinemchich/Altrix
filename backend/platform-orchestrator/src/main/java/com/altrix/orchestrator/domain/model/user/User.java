@@ -1,18 +1,20 @@
 package com.altrix.orchestrator.domain.model.user;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
- * Domain model for an authenticated user (#81).
+ * Provider-agnostic user aggregate. Identity is the internal UUID — never tied
+ * to a specific OAuth provider. Provider links (GitHub, GitLab, …) live in the
+ * separate {@link UserAuthProvider} table so a single user can authenticate
+ * through multiple providers.
  *
- * <p>The GitHub access token is NOT stored here — it lives only in the persistence
- * layer (encrypted) to prevent accidental leakage through serialisation.
+ * <p>Access tokens are never stored on this aggregate — they belong on
+ * {@link UserAuthProvider} so the model stays clean of credentials.
  */
 public class User {
 
-    private Long id;
-    private final String githubId;
-    private String githubLogin;
+    private final String id;
     private String email;
     private String displayName;
     private String avatarUrl;
@@ -20,12 +22,9 @@ public class User {
     private final Instant createdAt;
     private Instant updatedAt;
 
-    public User(Long id, String githubId, String githubLogin, String email,
-                String displayName, String avatarUrl, UserRole role,
-                Instant createdAt, Instant updatedAt) {
+    public User(String id, String email, String displayName, String avatarUrl,
+                UserRole role, Instant createdAt, Instant updatedAt) {
         this.id = id;
-        this.githubId = githubId;
-        this.githubLogin = githubLogin;
         this.email = email;
         this.displayName = displayName;
         this.avatarUrl = avatarUrl;
@@ -34,24 +33,20 @@ public class User {
         this.updatedAt = updatedAt;
     }
 
-    public static User create(String githubId, String githubLogin,
-                              String email, String displayName, String avatarUrl) {
+    public static User create(String email, String displayName, String avatarUrl) {
         Instant now = Instant.now();
-        return new User(null, githubId, githubLogin, email, displayName, avatarUrl,
+        return new User(UUID.randomUUID().toString(), email, displayName, avatarUrl,
                 UserRole.ROLE_USER, now, now);
     }
 
-    public void update(String githubLogin, String email, String displayName, String avatarUrl) {
-        this.githubLogin = githubLogin;
+    public void update(String email, String displayName, String avatarUrl) {
         this.email = email;
         this.displayName = displayName;
         this.avatarUrl = avatarUrl;
         this.updatedAt = Instant.now();
     }
 
-    public Long id() { return id; }
-    public String githubId() { return githubId; }
-    public String githubLogin() { return githubLogin; }
+    public String id() { return id; }
     public String email() { return email; }
     public String displayName() { return displayName; }
     public String avatarUrl() { return avatarUrl; }

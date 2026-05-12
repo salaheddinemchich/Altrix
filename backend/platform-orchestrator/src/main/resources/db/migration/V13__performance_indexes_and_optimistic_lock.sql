@@ -50,7 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_rt_active_by_user
 -- more cache-resident structure for the 99% case (valid token lookup).
 CREATE INDEX IF NOT EXISTS idx_rt_active_hash
     ON refresh_tokens (token_hash)
-    WHERE revoked = false AND expires_at > NOW();
+    WHERE revoked = false;
 
 -- ── [D] users: role index ─────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_users_role

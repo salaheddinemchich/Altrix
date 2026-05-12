@@ -22,8 +22,8 @@ interface RefreshTokenJpaRepository extends JpaRepository<RefreshTokenJpaEntity,
                          @Param("replacedByHash") String replacedByHash);
 
     @Modifying
-    @Query("UPDATE RefreshTokenJpaEntity r SET r.revoked = true WHERE r.githubId = :githubId AND r.revoked = false")
-    int revokeAllForUser(@Param("githubId") String githubId);
+    @Query("UPDATE RefreshTokenJpaEntity r SET r.revoked = true WHERE r.userId = :userId AND r.revoked = false")
+    int revokeAllForUser(@Param("userId") String userId);
 
     @Modifying
     @Query("DELETE FROM RefreshTokenJpaEntity r WHERE r.expiresAt < :cutoff")

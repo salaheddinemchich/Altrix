@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
  * 1 min → 2 min → 4 min → … → 60 min.
  *
  * <p>{@code key} is typically the client IP address; for authenticated endpoints
- * it can be the githubId to track per-user abuse regardless of IP.
+ * it can be the userId to track per-user abuse regardless of IP.
  */
 @Slf4j
 @Component

@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import java.time.Instant;
 
 /**
@@ -29,7 +31,7 @@ public record ApprovedPlan(
          */
         String retryContext
 
-) {
+) implements Serializable {
     public ApprovedPlan {
         if (plan == null) throw new IllegalArgumentException("plan must not be null");
         if (approvedBy == null) approvedBy = "auto";

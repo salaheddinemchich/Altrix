@@ -39,18 +39,19 @@ public class JwtTokenProvider {
 
     // ── Token issuance ────────────────────────────────────────────────────────
 
-    public String issueAccessToken(String githubId, String login, String email, String role) {
+    public String issueAccessToken(String userId, String login, String email, String role, String provider) {
         Date now    = new Date();
         Date expiry = new Date(now.getTime() + (long) config.accessTokenExpiryMinutes() * 60_000L);
 
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())   // jti — enables blacklisting
-                .subject(githubId)
+                .subject(userId)
                 .claims(Map.of(
-                        "login", login,
-                        "email", email != null ? email : "",
-                        "role",  role,
-                        "type",  "access"
+                        "login",    login != null ? login : "",
+                        "email",    email != null ? email : "",
+                        "role",     role,
+                        "provider", provider != null ? provider : "",
+                        "type",     "access"
                 ))
                 .issuedAt(now)
                 .expiration(expiry)
@@ -59,13 +60,13 @@ public class JwtTokenProvider {
     }
 
     /** Minimal refresh token — only sub + jti, no PII exposed if the token is intercepted. */
-    public String issueRefreshToken(String githubId) {
+    public String issueRefreshToken(String userId) {
         Date now    = new Date();
         Date expiry = new Date(now.getTime() + (long) config.refreshTokenExpiryDays() * 86_400_000L);
 
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
-                .subject(githubId)
+                .subject(userId)
                 .claim("type", "refresh")
                 .issuedAt(now)
                 .expiration(expiry)

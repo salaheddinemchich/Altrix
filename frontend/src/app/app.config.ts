@@ -4,6 +4,7 @@ import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/
 import { provideClientHydration } from '@angular/platform-browser';
 
 import { routes } from './app.routes';
+import { authInterceptor } from './core/auth/interceptors/auth.interceptor';
 import { userIdInterceptor } from './core/interceptors/user-id.interceptor';
 
 export const appConfig: ApplicationConfig = {
@@ -13,7 +14,7 @@ export const appConfig: ApplicationConfig = {
     provideClientHydration(),
     provideHttpClient(
       withFetch(),
-      withInterceptors([userIdInterceptor])
-    )
-  ]
+      withInterceptors([authInterceptor, userIdInterceptor])
+    ),
+  ],
 };

@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 import java.util.List;
 
 /**
@@ -25,7 +27,7 @@ public record AnalysisReport(
         /** Free-form summary the planner can include in its prompt. */
         String summary
 
-) {
+) implements Serializable {
     public AnalysisReport {
         storageKey           = storageKey           != null ? storageKey           : "";
         detectedComponents   = detectedComponents   != null ? List.copyOf(detectedComponents)   : List.of();

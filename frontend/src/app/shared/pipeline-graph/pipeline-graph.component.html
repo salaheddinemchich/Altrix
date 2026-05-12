@@ -1,0 +1,37 @@
+<div class="pipeline">
+  <!-- ── Nodes + connecting edges ────────────────────────────────────────── -->
+  <div class="rail" [attr.data-active]="activeIndex()">
+    @for (node of nodes(); track node.id; let i = $index) {
+      <div class="node-wrap">
+        <div class="node" [class]="'status-' + node.status.toLowerCase()">
+          <div class="node-icon">
+            <app-icon [name]="nodeIcon(node.status)" [size]="16"/>
+          </div>
+          <div class="node-body">
+            <div class="node-label">{{ node.label }}</div>
+            <div class="node-desc">{{ node.message ?? node.description }}</div>
+          </div>
+        </div>
+        @if (i < nodes().length - 1) {
+          <div class="edge"
+               [class.edge-active]="node.status === 'DONE' || node.status === 'ACTIVE'"
+               [class.edge-flowing]="node.status === 'ACTIVE'">
+            <span class="edge-line"></span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <!-- ── Latest event ticker ─────────────────────────────────────────────── -->
+  @if (lastEvent(); as e) {
+    <div class="ticker">
+      <span class="ticker-dot"></span>
+      <span class="ticker-agent">{{ e.agentName }}</span>
+      <span class="ticker-status">{{ e.status }}</span>
+      @if (e.message) {
+        <span class="ticker-msg muted">— {{ e.message }}</span>
+      }
+    </div>
+  }
+</div>

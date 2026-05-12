@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import java.io.Serializable;
+
 /**
  * Outcome of a single {@link com.altrix.common.domain.port.MigrationAgent}
  * execution — either a successful value or a structured failure.
@@ -9,7 +11,8 @@ package com.altrix.common.domain.model;
  *
  * @param <T> the agent's output type on success
  */
-public sealed interface AgentResult<T> permits AgentResult.Success, AgentResult.Failure {
+public sealed interface AgentResult<T> extends Serializable
+        permits AgentResult.Success, AgentResult.Failure {
 
     boolean isSuccess();
 

@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 
@@ -24,7 +25,7 @@ import java.util.List;
 @EnableScheduling
 @EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class,
         EncryptionConfig.class, McpConfig.class, ApprovalConfig.class, AutoPauseConfig.class,
-        ApprovalNotificationConfig.class, JwtConfig.class, RateLimitConfig.class})
+        ApprovalNotificationConfig.class, JwtConfig.class, RateLimitConfig.class, CacheConfig.class})
 public class BeanConfig {
 
     @Bean
@@ -98,11 +99,24 @@ public class BeanConfig {
     }
 
     @Bean
+    public PlanSimilarityService planSimilarityService(
+            PlanSimilarityCachePort planSimilarityCache,
+            @Value("${ai.plan-similarity.threshold:0.85}") double threshold
+    ) {
+        return new PlanSimilarityService(planSimilarityCache, threshold);
+    }
+
+    @Bean
     public TokenService tokenService(
             RefreshTokenRepository refreshTokenRepository,
             TokenBlacklistPort tokenBlacklistPort
     ) {
         return new TokenService(refreshTokenRepository, tokenBlacklistPort);
+    }
+
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
     }
 
     @Bean

@@ -1,0 +1,98 @@
+<div class="page-header">
+  <div>
+    <h1>Sessions</h1>
+    <p class="muted">AI workflow sessions — each corresponds to a migration job run.</p>
+  </div>
+  <button class="btn" (click)="load()" [disabled]="sessions() === null">
+    <app-icon name="refresh" [size]="15"/>
+    Refresh
+  </button>
+</div>
+
+<!-- Filter chips -->
+<div class="filters">
+  @for (f of filters; track f) {
+    <button class="chip" [class.active]="activeFilter() === f" (click)="setFilter(f)">
+      {{ f }}
+    </button>
+  }
+</div>
+
+@if (actionError(); as err) {
+  <div class="error" style="margin-bottom:12px">{{ err }}</div>
+}
+
+@if (loadError(); as err) {
+  <div class="empty">
+    <app-icon name="alert" [size]="28"/>
+    Could not load sessions — {{ err }}
+  </div>
+} @else if (sessions() === null) {
+  <div class="empty">Loading…</div>
+} @else if (visible().length === 0) {
+  <div class="empty">
+    <app-icon name="layers" [size]="32"/>
+    No sessions found.
+  </div>
+} @else {
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Session ID</th>
+          <th>Job</th>
+          <th>Status</th>
+          <th>Updated</th>
+          @if (auth.isAdmin()) { <th>Actions</th> }
+        </tr>
+      </thead>
+      <tbody>
+        @for (s of visible(); track s.sessionId) {
+          <tr>
+            <td class="mono faint" style="font-size:0.75rem">{{ s.sessionId }}</td>
+            <td class="mono muted" style="font-size:0.78rem">
+              <a [routerLink]="['/jobs', s.jobId]" (click)="$event.stopPropagation()">
+                {{ s.jobId.slice(0, 8) }}…
+              </a>
+            </td>
+            <td>
+              <span class="pill" [class]="statusClass(s.status)">{{ s.status }}</span>
+              @if (s.pausedFrom) {
+                <span class="pill" style="margin-left:4px">paused from {{ s.pausedFrom }}</span>
+              }
+            </td>
+            <td class="muted">{{ s.updatedAt | date:'MMM d, h:mm a' }}</td>
+            @if (auth.isAdmin()) {
+              <td class="actions-cell">
+                @if (s.status === 'AWAITING_APPROVAL') {
+                  <button class="btn btn-gold btn-sm" (click)="approve(s); $event.stopPropagation()">
+                    <app-icon name="check" [size]="12"/>
+                    Approve
+                  </button>
+                  <button class="btn btn-danger btn-sm" (click)="reject(s); $event.stopPropagation()">
+                    <app-icon name="x" [size]="12"/>
+                    Reject
+                  </button>
+                }
+                @if (s.status !== 'PAUSED' && s.status !== 'DONE' && s.status !== 'FAILED') {
+                  <button class="btn btn-sm" (click)="pause(s); $event.stopPropagation()">
+                    <app-icon name="pause" [size]="12"/>
+                  </button>
+                }
+                @if (s.status === 'PAUSED') {
+                  <button class="btn btn-primary btn-sm" (click)="resume(s); $event.stopPropagation()">
+                    <app-icon name="play" [size]="12"/>
+                    Resume
+                  </button>
+                }
+              </td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  <div class="total-hint muted">
+    Showing {{ visible().length }} of {{ total() }} sessions
+  </div>
+}

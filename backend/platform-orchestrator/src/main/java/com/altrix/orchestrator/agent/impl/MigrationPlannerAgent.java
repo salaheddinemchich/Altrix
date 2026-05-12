@@ -5,6 +5,7 @@ import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.domain.service.PlanSimilarityService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -13,16 +14,19 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Agent 2 — Migration Planner.
  *
- * <p>Consumes an {@link AnalysisReport} and generates a full {@link MigrationPlan}
- * by asking the fast AI model for a structured migration strategy — including the
- * target stack, ordered steps, risk level, and effort estimate.
+ * <p>Consumes an {@link AnalysisReport} and generates a full {@link MigrationPlan}.
+ * Before calling the AI, it checks the similarity cache (#155): if a plan with
+ * Jaccard dependency-overlap ≥ the configured threshold exists for a project with
+ * the same Spring Boot major version, that plan is returned immediately (marked
+ * {@code CACHE_ASSISTED} in workflow state) and the AI call is skipped entirely.
  *
- * <p>Degrades gracefully: if the AI call fails, a minimal fallback plan is returned
- * so the pipeline continues without blocking on a transient provider error.
+ * <p>Degrades gracefully: AI failures produce a minimal fallback plan so the
+ * pipeline never blocks on a transient provider error.
  */
 @Slf4j
 @Component("migrationPlannerAgent")
@@ -50,6 +54,7 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final AiPort aiPort;
+    private final PlanSimilarityService planSimilarityService;
 
     @Override
     public String getName() {
@@ -66,9 +71,19 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
         if (input == null) throw new AgentFailureException(getName(), "input AnalysisReport was null");
         log.info("[{}] planning migration for project '{}'", getName(), input.projectId());
 
+        // Similarity cache check — skip AI when a close-enough plan already exists
+        Optional<MigrationPlan> cached = planSimilarityService.findSimilar(input);
+        if (cached.isPresent()) {
+            log.info("[{}] similarity cache HIT for project='{}' — skipping AI call",
+                    getName(), input.projectId());
+            return cached.get();
+        }
+
         try {
             String response = aiPort.chatFast(SYSTEM_PROMPT, buildUserContent(input));
-            return parsePlan(input.projectId(), input.storageKey(), response);
+            MigrationPlan plan = parsePlan(input.projectId(), input.storageKey(), response);
+            planSimilarityService.store(input, plan);
+            return plan;
         } catch (Exception e) {
             log.warn("[{}] AI planning failed ({}), using fallback plan", getName(), e.getMessage());
             return fallbackPlan(input);
@@ -92,7 +107,8 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
             String estimatedEffort = root.path("estimatedEffort").asText("TBD");
             String summary = root.path("summary").asText("");
             List<String> targetFiles = toStringList(root.path("targetFiles"));
-            return new MigrationPlan(projectId, storageKey, targetStack, steps, riskLevel, estimatedEffort, summary, targetFiles);
+            return new MigrationPlan(projectId, storageKey, targetStack, steps,
+                    riskLevel, estimatedEffort, summary, targetFiles);
         } catch (Exception e) {
             log.warn("[{}] failed to parse AI response: {}", getName(), e.getMessage());
             throw new RuntimeException("Plan parse failed", e);
@@ -116,9 +132,7 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
     private static List<String> toStringList(JsonNode node) {
         if (node == null || node.isMissingNode() || !node.isArray()) return List.of();
         List<String> result = new ArrayList<>();
-        node.forEach(n -> {
-            if (!n.asText("").isBlank()) result.add(n.asText());
-        });
+        node.forEach(n -> { if (!n.asText("").isBlank()) result.add(n.asText()); });
         return result;
     }
 }

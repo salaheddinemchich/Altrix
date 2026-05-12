@@ -36,7 +36,7 @@ import java.util.List;
 public record McpConfig(
         @DefaultValue("false") boolean enabled,
         @DefaultValue("5") int maxToolIterations,
-        @DefaultValue("") List<McpServer> servers
+        List<McpServer> servers
 ) {
 
     /**
