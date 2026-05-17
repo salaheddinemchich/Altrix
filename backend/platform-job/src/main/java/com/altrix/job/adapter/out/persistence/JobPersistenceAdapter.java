@@ -34,4 +34,9 @@ public class JobPersistenceAdapter implements JobRepositoryPort {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public void deleteById(String jobId) {
+        jpaRepository.deleteById(jobId);
+    }
 }

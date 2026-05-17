@@ -42,4 +42,8 @@ export class SessionService {
   resume(sessionId: string): Observable<Session> {
     return this.http.post<Session>(`${this.base}/${sessionId}/resume`, {});
   }
+
+  delete(sessionId: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${sessionId}`);
+  }
 }

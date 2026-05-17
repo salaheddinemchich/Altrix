@@ -129,6 +129,21 @@ public class SessionController {
         return ResponseEntity.ok(SessionStatusResponse.from(session));
     }
 
+    // ── Delete ────────────────────────────────────────────────────────────────
+
+    /**
+     * DELETE /api/v1/sessions/{sessionId} — removes a workflow session row.
+     * Useful for clearing terminal (DONE/FAILED) sessions or aborting stale ones.
+     */
+    @DeleteMapping("/{sessionId}")
+    public ResponseEntity<Void> delete(@PathVariable String sessionId) {
+        WorkflowSessionId id = toId(sessionId);
+        sessionRepository.findById(id)
+                .orElseThrow(() -> new SessionNotFoundException(id));
+        sessionRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // ── helper ────────────────────────────────────────────────────────────────
 
     private static WorkflowSessionId toId(String raw) {

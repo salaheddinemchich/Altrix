@@ -40,4 +40,7 @@ public interface WorkflowSessionRepository {
      * Paginated list of all sessions, optionally filtered by status (#117).
      */
     SessionPage findAll(int page, int size, String sortBy, boolean descending, SessionStatus statusFilter);
+
+    /** Removes a session row. Idempotent — missing IDs are silently ignored. */
+    void deleteById(WorkflowSessionId id);
 }

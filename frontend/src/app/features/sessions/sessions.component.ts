@@ -84,6 +84,15 @@ export class SessionsComponent {
     });
   }
 
+  delete(session: Session): void {
+    if (!confirm(`Delete session ${session.sessionId.substring(0, 8)}…? This cannot be undone.`)) return;
+    this.sessApi.delete(session.sessionId).subscribe({
+      next: () => this.sessions.update(list =>
+        list ? list.filter(s => s.sessionId !== session.sessionId) : list),
+      error: err => this.actionError.set(err?.message ?? 'Delete failed'),
+    });
+  }
+
   private patchSession(updated: Session): void {
     this.sessions.update(list =>
       list ? list.map(s => s.sessionId === updated.sessionId ? updated : s) : list);

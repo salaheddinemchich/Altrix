@@ -27,4 +27,8 @@ export class JobService {
   downloadUrl(jobId: string): string {
     return `${this.base}/${jobId}/download`;
   }
+
+  delete(jobId: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${jobId}`);
+  }
 }

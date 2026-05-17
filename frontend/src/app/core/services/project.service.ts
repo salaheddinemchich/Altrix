@@ -25,4 +25,8 @@ export class ProjectService {
     }
     return this.http.post<Project>(`${this.base}/upload`, form);
   }
+
+  delete(projectId: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${projectId}`);
+  }
 }

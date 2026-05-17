@@ -109,6 +109,15 @@ export class ProjectsComponent {
     });
   }
 
+  deleteProject(p: Project, ev: Event): void {
+    ev.stopPropagation();
+    if (!confirm(`Delete project "${p.name}"? This cannot be undone.`)) return;
+    this.projectsApi.delete(p.id).subscribe({
+      next: () => this.refresh(),
+      error: err => alert('Delete failed: ' + this.describe(err)),
+    });
+  }
+
   statusClass(status: Project['status']): string {
     switch (status) {
       case 'READY':      return 'success';

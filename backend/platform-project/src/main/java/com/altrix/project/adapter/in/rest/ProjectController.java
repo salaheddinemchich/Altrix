@@ -4,6 +4,7 @@ import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.project.domain.model.Project;
 import com.altrix.project.domain.port.in.GetProjectQuery;
 import com.altrix.project.domain.port.in.UploadProjectUseCase;
+import com.altrix.project.domain.port.out.ProjectRepositoryPort;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,7 @@ public class ProjectController {
 
     private final UploadProjectUseCase uploadProjectUseCase;
     private final GetProjectQuery getProjectQuery;
+    private final ProjectRepositoryPort projectRepository;
 
     /**
      * POST /api/v1/projects/upload
@@ -91,5 +93,34 @@ public class ProjectController {
                 .stream()
                 .map(ProjectResponse::from)
                 .toList();
+    }
+
+    /**
+     * DELETE /api/v1/projects/{projectId}
+     *
+     * <p>Removes the project row. The user must own the project — checked by
+     * matching {@code X-User-Id} to the stored {@code user_id}. Returns 404
+     * if not found, 403 if owned by someone else.
+     *
+     * <p>Object-storage cleanup of the ZIP is best-effort — failure to remove
+     * the blob from MinIO does not roll back the DB delete.
+     */
+    @DeleteMapping("/{projectId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(
+            @RequestHeader("X-User-Id") @NotBlank String userId,
+            @PathVariable @NotBlank String projectId
+    ) {
+        var project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Project not found: " + projectId));
+
+        if (!userId.equals(project.getUserId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Project belongs to another user");
+        }
+
+        log.info("Deleting project '{}' for user '{}'", projectId, userId);
+        projectRepository.deleteById(projectId);
     }
 }

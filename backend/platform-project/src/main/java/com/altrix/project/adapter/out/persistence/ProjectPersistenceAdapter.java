@@ -44,4 +44,9 @@ public class ProjectPersistenceAdapter implements ProjectRepositoryPort {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public void deleteById(String projectId) {
+        jpaRepository.deleteById(projectId);
+    }
 }

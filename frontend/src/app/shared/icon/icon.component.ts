@@ -122,6 +122,13 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
         @case ('moon') {
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         }
+        @case ('trash') {
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/>
+          <path d="M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        }
         @case ('git-branch') {
           <line x1="6" y1="3" x2="6" y2="15"/>
           <circle cx="18" cy="6" r="3"/>

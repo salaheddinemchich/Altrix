@@ -17,4 +17,7 @@ public interface JobRepositoryPort {
     Optional<MigrationJob> findById(String jobId);
 
     List<MigrationJob> findAll(JobFilter filter);
+
+    /** Removes the job row. Cache eviction is left to callers. */
+    void deleteById(String jobId);
 }

@@ -98,6 +98,12 @@ public class WorkflowSessionPersistenceAdapter implements WorkflowSessionReposit
         );
     }
 
+    @Override
+    @Transactional
+    public void deleteById(WorkflowSessionId id) {
+        repository.deleteById(id.value());
+    }
+
     // ── Mapping ───────────────────────────────────────────────────────────────
 
     private WorkflowSessionJpaEntity toEntity(WorkflowSession s) {

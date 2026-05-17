@@ -1,45 +1,85 @@
 <div class="page-header">
   <div>
     <h1>Migration Jobs</h1>
-    <p class="muted">Every analysis, plan, and transformation Altrix has run.</p>
+
+    <p class="muted">
+      Every analysis, plan, and transformation Altrix has run.
+    </p>
   </div>
-  <button class="btn" (click)="refresh()" [disabled]="jobs() === null">
-    <app-icon name="refresh" [size]="15"/>
+
+  <button
+    class="btn"
+    (click)="refresh()"
+    [disabled]="jobs() === null">
+
+    <app-icon
+      name="refresh"
+      [size]="15"/>
+
     Refresh
   </button>
 </div>
 
-<!-- Filter chips -->
+<!-- Filters -->
 <div class="filters">
   @for (f of filters; track f) {
+
     <button
       class="chip"
       [class.active]="activeFilter() === f"
       (click)="setFilter(f)">
+
       {{ f }}
+
       @if (jobs() !== null) {
-        <span class="chip-count">{{ counts()[f] || 0 }}</span>
+        <span class="chip-count">
+          {{ counts()[f] || 0 }}
+        </span>
       }
     </button>
   }
 </div>
 
-<!-- Content -->
+<!-- Error -->
 @if (loadError(); as err) {
+
   <div class="empty">
-    <app-icon name="alert" [size]="28"/>
+    <app-icon
+      name="alert"
+      [size]="28"/>
+
     Could not load jobs — {{ err }}
   </div>
-} @else if (visibleJobs() === null) {
-  <div class="empty">Loading…</div>
-} @else if (visibleJobs()!.length === 0) {
+
+}
+<!-- Loading -->
+@else if (visibleJobs() === null) {
+
   <div class="empty">
-    <app-icon name="briefcase" [size]="32"/>
+    Loading…
+  </div>
+
+}
+<!-- Empty -->
+@else if (visibleJobs()!.length === 0) {
+
+  <div class="empty">
+
+    <app-icon
+      name="briefcase"
+      [size]="32"/>
+
     No jobs match this filter.
   </div>
-} @else {
+
+}
+<!-- Table -->
+@else {
+
   <div class="table-wrap">
+
     <table>
+
       <thead>
         <tr>
           <th>Job ID</th>
@@ -50,20 +90,72 @@
           <th></th>
         </tr>
       </thead>
+
       <tbody>
+
         @for (job of visibleJobs()!; track job.id) {
-          <tr [routerLink]="['/jobs', job.id]">
-            <td class="mono" style="font-size:0.8rem">{{ job.id }}</td>
-            <td class="mono muted" style="font-size:0.8rem">{{ job.projectId }}</td>
-            <td><span class="pill" [class]="statusClass(job.status)">{{ job.status }}</span></td>
-            <td class="muted">{{ job.createdAt | date:'MMM d, h:mm a' }}</td>
-            <td class="muted">{{ job.completedAt ? (job.completedAt | date:'MMM d, h:mm a') : '—' }}</td>
-            <td class="row-action">
-              <app-icon name="chevron-right" [size]="15"/>
+
+          <tr
+            class="clickable-row"
+            (click)="goToJob(job.id)">
+
+            <td
+              class="mono"
+              style="font-size:0.8rem">
+
+              {{ job.id }}
             </td>
+
+            <td
+              class="mono muted"
+              style="font-size:0.8rem">
+
+              {{ job.projectId }}
+            </td>
+
+            <td>
+              <span
+                class="pill"
+                [class]="statusClass(job.status)">
+
+                {{ job.status }}
+              </span>
+            </td>
+
+            <td class="muted">
+              {{ job.createdAt | date:'MMM d, h:mm a' }}
+            </td>
+
+            <td class="muted">
+              {{
+                job.completedAt
+                  ? (job.completedAt | date:'MMM d, h:mm a')
+                  : '—'
+              }}
+            </td>
+
+            <td class="row-action" style="white-space:nowrap">
+              <button class="btn btn-sm"
+                      [routerLink]="['/jobs', job.id]"
+                      (click)="$event.stopPropagation()"
+                      title="Open job & live pipeline">
+                <app-icon name="chevron-right" [size]="13"/>
+                Open
+              </button>
+              <button class="btn btn-sm btn-danger"
+                      (click)="deleteJob(job, $event)"
+                      title="Delete job"
+                      style="margin-left:6px">
+                <app-icon name="trash" [size]="13"/>
+              </button>
+            </td>
+
           </tr>
         }
+
       </tbody>
+
     </table>
+
   </div>
 }

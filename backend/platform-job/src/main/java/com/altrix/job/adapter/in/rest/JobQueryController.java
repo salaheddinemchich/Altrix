@@ -5,6 +5,9 @@ import com.altrix.job.domain.port.in.JobFilter;
 import com.altrix.job.adapter.out.storage.MinioJobStorageAdapter;
 import com.altrix.job.domain.model.MigrationJob;
 import com.altrix.job.domain.port.in.GetJobQuery;
+import com.altrix.job.domain.port.out.JobRepositoryPort;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +29,7 @@ public class JobQueryController {
 
     private final GetJobQuery getJobQuery;
     private final MinioJobStorageAdapter minioStorage;
+    private final JobRepositoryPort jobRepository;
 
     @GetMapping("/{jobId}")
     public JobResponse findById(@PathVariable @NotBlank String jobId) {
@@ -78,5 +82,30 @@ public class JobQueryController {
                         "attachment; filename=\"migrated-" + jobId + ".zip\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(body);
+    }
+
+    /**
+     * DELETE /api/v1/jobs/{jobId}
+     *
+     * <p>Removes the job row. The caller must own the job (matched on
+     * {@code X-User-Id}). 404 if not found, 403 if owned by a different user.
+     */
+    @DeleteMapping("/{jobId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(
+            @RequestHeader("X-User-Id") @NotBlank String userId,
+            @PathVariable @NotBlank String jobId
+    ) {
+        MigrationJob job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Job not found: " + jobId));
+
+        if (!userId.equals(job.getUserId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Job belongs to another user");
+        }
+
+        log.info("Deleting job '{}' for user '{}'", jobId, userId);
+        jobRepository.deleteById(jobId);
     }
 }

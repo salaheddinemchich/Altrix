@@ -155,6 +155,7 @@
             <th>Eligible</th>
             <th>Status</th>
             <th>Created</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -176,6 +177,11 @@
               </td>
               <td><span class="pill" [class]="statusClass(p.status)">{{ p.status }}</span></td>
               <td class="muted">{{ p.createdAt | date:'MMM d, y' }}</td>
+              <td class="row-action">
+                <button class="btn btn-sm btn-danger" (click)="deleteProject(p, $event)" title="Delete project" aria-label="Delete project">
+                  <app-icon name="trash" [size]="14"/>
+                </button>
+              </td>
             </tr>
           }
         </tbody>

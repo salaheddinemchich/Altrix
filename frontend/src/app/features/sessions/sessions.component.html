@@ -44,6 +44,7 @@
           <th>Status</th>
           <th>Updated</th>
           @if (auth.isAdmin()) { <th>Actions</th> }
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -87,6 +88,14 @@
                 }
               </td>
             }
+            <td class="row-action">
+              <button class="btn btn-sm btn-danger"
+                      (click)="delete(s); $event.stopPropagation()"
+                      title="Delete session"
+                      aria-label="Delete session">
+                <app-icon name="trash" [size]="13"/>
+              </button>
+            </td>
           </tr>
         }
       </tbody>

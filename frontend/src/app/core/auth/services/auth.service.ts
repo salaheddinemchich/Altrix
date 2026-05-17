@@ -7,6 +7,17 @@ import { AuthState, TokenResponse, UserProfile } from '../models/auth.models';
 
 const ACCESS_TOKEN_KEY = 'altrix_access_token';
 
+/** Decode the `sub` claim from a JWT without verifying its signature. */
+function decodeJwtSub(token: string): string {
+  try {
+    const payload = token.split('.')[1];
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(json).sub ?? '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Singleton auth service — owns all auth state via signals.
  *
@@ -40,6 +51,19 @@ export class AuthService {
   readonly isLoading = computed(() => this._state().loading);
   readonly error = computed(() => this._state().error);
   readonly isAdmin = computed(() => this._state().user?.role === 'ROLE_ADMIN');
+
+  /**
+   * Synchronous userId derived from the JWT `sub` claim — available the moment
+   * the token is stored, without waiting for /api/v1/auth/me to return. This
+   * lets the X-User-Id interceptor populate the header on the very first
+   * request after a page reload.
+   */
+  readonly userId = computed<string>(() => {
+    const u = this._state().user?.userId;
+    if (u) return u;
+    const tok = this._state().accessToken;
+    return tok ? decodeJwtSub(tok) : '';
+  });
 
   // ── OAuth2 initiation ────────────────────────────────────────────────────
 

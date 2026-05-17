@@ -25,4 +25,7 @@ public interface ProjectRepositoryPort {
 
     /** Finds all projects for a given user, ordered by creation date descending. */
     List<Project> findAllByUserId(String userId);
+
+    /** Removes the project row. Caller is responsible for removing the ZIP from object storage. */
+    void deleteById(String projectId);
 }
