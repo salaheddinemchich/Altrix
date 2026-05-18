@@ -46,6 +46,12 @@ warn() { echo -e "${YELLOW}  ! $*${NC}"; }
 fail() { echo -e "${RED}  ✗ $*${NC}"; }
 hdr()  { echo -e "\n${YELLOW}═══ $* ═══${NC}"; }
 
+# ── Python detection (python3 on Linux/macOS, python on some Windows setups) ──
+PY=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)
+if [ -z "$PY" ]; then
+  warn "python3 / python not found in PATH — DefectDojo JSON parsing will be skipped"
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 0. Pre-flight: verify required containers are up
 # ─────────────────────────────────────────────────────────────────────────────
@@ -98,7 +104,7 @@ if [ "$SECURITY_ONLY" = false ]; then
   else
     echo "  Waiting for SonarQube at $SONAR_HOST ..."
     for i in $(seq 1 24); do
-      STATUS=$(curl -sf "$SONAR_HOST/api/system/status" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
+      STATUS=$(curl -sf "$SONAR_HOST/api/system/status" 2>/dev/null | "$PY" -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
       [ "$STATUS" = "UP" ] && break
       printf "."; sleep 5
     done
@@ -110,9 +116,12 @@ if [ "$SECURITY_ONLY" = false ]; then
       ok "SonarQube is UP"
       echo "  Sending analysis..."
 
+      # Use the project's Docker network so the scanner reaches SonarQube by
+      # container name. --network=host is Linux-only; it breaks on Docker
+      # Desktop for Windows/macOS where the host is a WSL2 VM, not the OS.
       SONAR_OUTPUT=$(docker run --rm \
-        --network=host \
-        -e SONAR_HOST_URL="$SONAR_HOST" \
+        --network=altrix-net \
+        -e SONAR_HOST_URL="http://altrix-sonarqube:9000" \
         -e SONAR_TOKEN="$SONAR_TOKEN" \
         -v "$ROOT:/usr/src" \
         sonarsource/sonar-scanner-cli:latest 2>&1) && SONAR_OK=true || SONAR_OK=false
@@ -151,8 +160,9 @@ if [ "$SONAR_ONLY" = false ]; then
 
   # 3b. Semgrep — SAST (JSON for DefectDojo "Semgrep JSON Report" parser)
   echo "  [2/3] Semgrep (SAST)..."
+  # Semgrep fetches rules from the internet — standard bridge network is fine.
+  # --network=host is not needed and breaks on Docker Desktop for Windows/macOS.
   SEMGREP_OUTPUT=$(docker run --rm \
-    --network=host \
     -v "$ROOT:/src" \
     -e SEMGREP_SEND_METRICS=off \
     semgrep/semgrep:latest semgrep scan \
@@ -193,7 +203,7 @@ if [ "$SONAR_ONLY" = false ]; then
   DD_TOKEN=$(curl -s -X POST "$DD_HOST/api/v2/api-token-auth/" \
     -H "Content-Type: application/json" \
     -d "{\"username\":\"admin\",\"password\":\"${DD_ADMIN_PASSWORD}\"}" \
-    2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])" 2>/dev/null || true)
+    2>/dev/null | "$PY" -c "import sys,json; print(json.load(sys.stdin)['token'])" 2>/dev/null || true)
 
   if [ -z "${DD_TOKEN:-}" ]; then
     fail "Could not get DefectDojo token — check DD_ADMIN_PASSWORD in .env and that DefectDojo is running"
@@ -209,7 +219,7 @@ if [ "$SONAR_ONLY" = false ]; then
 
     DD_PRODUCT_ID=$(curl -s "$DD_HOST/api/v2/products/?name=${DD_PRODUCT}&limit=1" \
       -H "Authorization: Token $DD_TOKEN" \
-      2>/dev/null | python3 -c "import sys,json; r=json.load(sys.stdin); print(r['results'][0]['id'])" 2>/dev/null || true)
+      2>/dev/null | "$PY" -c "import sys,json; r=json.load(sys.stdin); print(r['results'][0]['id'])" 2>/dev/null || true)
 
     if [ -z "${DD_PRODUCT_ID:-}" ]; then
       fail "Could not resolve DefectDojo product ID for '${DD_PRODUCT}'"
@@ -228,7 +238,7 @@ if [ "$SONAR_ONLY" = false ]; then
       -H "Authorization: Token $DD_TOKEN" \
       -H "Content-Type: application/json" \
       -d "{\"name\":\"${ENG_NAME}\",\"product\":${DD_PRODUCT_ID},\"target_start\":\"${TODAY}\",\"target_end\":\"${TODAY}\",\"status\":\"In Progress\",\"engagement_type\":\"CI/CD\",\"commit_hash\":\"${COMMIT}\",\"branch_tag\":\"${BRANCH}\"}" \
-      2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null || true)
+      2>/dev/null | "$PY" -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null || true)
 
     if [ -z "${ENG_ID:-}" ]; then
       fail "Could not create DefectDojo engagement"
@@ -256,10 +266,10 @@ if [ "$SONAR_ONLY" = false ]; then
           "$DD_HOST/api/v2/import-scan/" 2>/dev/null) || true
         if [ "${status:-0}" -ge 200 ] && [ "${status:-0}" -lt 300 ]; then
           local count
-          count=$(python3 -c "import json; d=json.load(open('/tmp/dd-resp.json')); print(d.get('statistics',{}).get('after',{}).get('info',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('low',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('medium',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('high',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('critical',{}).get('total',0))" 2>/dev/null || echo "?")
+          count=$("$PY" -c "import json; d=json.load(open('/tmp/dd-resp.json')); print(d.get('statistics',{}).get('after',{}).get('info',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('low',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('medium',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('high',{}).get('total',0) + d.get('statistics',{}).get('after',{}).get('critical',{}).get('total',0))" 2>/dev/null || echo "?")
           ok "$label uploaded ($count findings)"
         else
-          warn "$label failed (HTTP ${status:-0}): $(cat /tmp/dd-resp.json 2>/dev/null | python3 -m json.tool 2>/dev/null | head -3 || true)"
+          warn "$label failed (HTTP ${status:-0}): $(cat /tmp/dd-resp.json 2>/dev/null | "${PY}" -m json.tool 2>/dev/null | head -3 || true)"
         fi
       }
 

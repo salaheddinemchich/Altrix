@@ -1,0 +1,54 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .gitattributes — enforce consistent line endings across platforms
+#
+# Shell scripts (*.sh, gradlew) MUST have LF endings.
+# CRLF endings break bash immediately with "$'\r': command not found" errors.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Auto-detect text files and normalise to LF in the repo
+* text=auto
+
+# Shell scripts — always LF, even on Windows checkout
+*.sh     text eol=lf
+gradlew  text eol=lf
+
+# Windows-native scripts — keep CRLF
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+*.ps1    text eol=crlf
+
+# Source / config / markup — normalise to LF
+*.java   text eol=lf
+*.kt     text eol=lf
+*.kts    text eol=lf
+*.xml    text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.sql    text eol=lf
+*.md     text eol=lf
+*.html   text eol=lf
+*.ts     text eol=lf
+*.css    text eol=lf
+*.scss   text eol=lf
+*.properties text eol=lf
+*.gitignore  text eol=lf
+Dockerfile*  text eol=lf
+
+# Binary — never touch
+*.jar    binary
+*.zip    binary
+*.tar    binary
+*.gz     binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.ttf    binary
+*.woff   binary
+*.woff2  binary
+*.eot    binary
+*.class  binary
+*.keystore binary
