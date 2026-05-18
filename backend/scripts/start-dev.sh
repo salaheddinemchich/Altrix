@@ -87,12 +87,12 @@ hdr "Starting Docker Compose"
 if [ "$MINIMAL" = true ]; then
   warn "Minimal mode — core services only (Postgres, Redis, Kafka, MinIO + UIs)"
   warn "Skipped: SonarQube, DefectDojo, PubSub emulator"
-  docker compose up -d postgres pgadmin redis redis-insight kafka kafdrop minio
+  docker compose up -d postgres pgadmin redis redis-insight kafka kafdrop minio || true
 elif [ "$NO_SONAR" = true ]; then
   warn "--no-sonar — skipping SonarQube and DefectDojo"
-  docker compose up -d postgres pgadmin redis redis-insight kafka kafdrop minio pubsub-emulator
+  docker compose up -d postgres pgadmin redis redis-insight kafka kafdrop minio pubsub-emulator || true
 else
-  docker compose up -d
+  docker compose up -d || true
 fi
 ok "Containers started — waiting for health checks..."
 
@@ -149,7 +149,15 @@ hdr "PubSub emulator"
 if [ "$MINIMAL" = true ]; then
   warn "Skipped (--minimal mode)"
 else
-  until curl -sf "http://localhost:8085" > /dev/null 2>&1; do printf "."; sleep 2; done
+  _ps_retries=0
+  until curl -sf "http://localhost:8085" > /dev/null 2>&1; do
+    printf "."; sleep 2
+    _ps_retries=$((_ps_retries + 1))
+    if [ "$_ps_retries" -ge 30 ]; then
+      warn "PubSub emulator not responding after 60s — continuing anyway"
+      break
+    fi
+  done
   echo ""
   for topic in orders.created orders.updated orders.cancelled; do
     curl -s -X PUT "http://localhost:8085/v1/projects/my-local-project/topics/$topic" > /dev/null
