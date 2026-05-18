@@ -37,6 +37,13 @@ warn() { echo -e "${YELLOW}  ! $*${NC}"; }
 fail() { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
 hdr()  { echo -e "\n${YELLOW}═══ $* ═══${NC}"; }
 
+# ── Cross-platform docker exec helper ─────────────────────────────────────────
+# Git Bash (MSYS2) converts Unix absolute paths like /opt/kafka/... to Windows
+# paths before handing them to Docker, which breaks docker exec with in-container
+# binary paths.  MSYS_NO_PATHCONV=1 disables that conversion for one command.
+# On Linux/macOS the variable is unknown and silently ignored — safe everywhere.
+docker_exec_abs() { MSYS_NO_PATHCONV=1 docker exec "$@"; }
+
 # ── 0. Load environment ───────────────────────────────────────────────────────
 hdr "Loading .env"
 if [ ! -f "$ROOT/.env" ]; then
@@ -125,13 +132,13 @@ ok "altrix-projects bucket ready"
 
 # ── 5. Kafka topics ───────────────────────────────────────────────────────────
 hdr "Kafka topics"
-until docker exec altrix-kafka /opt/kafka/bin/kafka-topics.sh \
+until docker_exec_abs altrix-kafka /opt/kafka/bin/kafka-topics.sh \
     --bootstrap-server localhost:9092 --list > /dev/null 2>&1; do
   printf "."; sleep 3
 done
 echo ""
 for topic in project.registered migration.job.created migration.job.status.update migration.job.completed; do
-  docker exec altrix-kafka /opt/kafka/bin/kafka-topics.sh \
+  docker_exec_abs altrix-kafka /opt/kafka/bin/kafka-topics.sh \
     --bootstrap-server localhost:9092 --create --if-not-exists \
     --topic "$topic" --partitions 1 --replication-factor 1 > /dev/null 2>&1
   ok "$topic"
