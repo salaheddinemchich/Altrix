@@ -30,6 +30,23 @@ warn() { echo -e "${YELLOW}  ! $*${NC}"; }
 fail() { echo -e "${RED}  ✗ $*${NC}"; }
 hdr()  { echo -e "\n${YELLOW}═══ $* ═══${NC}"; }
 
+# ── Cross-platform helpers ─────────────────────────────────────────────────────
+
+# Return PIDs listening on a TCP port.
+# Uses lsof on Linux/macOS; falls back to netstat on Windows (Git Bash).
+pids_on_port() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti tcp:"$port" 2>/dev/null || true
+  else
+    # Windows (Git Bash): netstat -ano lists PID in the last column
+    # Field 2 is "IP:PORT" — match lines where it ends with ":PORT" (exact)
+    netstat -ano 2>/dev/null \
+      | awk -v p=":${port}" '$2 ~ (p"$") && $4 == "LISTENING" { print $NF }' \
+      | sort -u || true
+  fi
+}
+
 # ── Args ──────────────────────────────────────────────────────────────────────
 NO_FRONTEND=false
 ONLY=""
@@ -70,7 +87,7 @@ start_backend() {
   local pidf="$LOG_DIR/${name}.pid"
 
   # If already running on the port, skip
-  if lsof -ti tcp:"$port" > /dev/null 2>&1; then
+  if [ -n "$(pids_on_port "$port")" ]; then
     warn "$name already running on :$port — skipping"
     return 0
   fi
@@ -103,7 +120,7 @@ start_frontend() {
     warn "Frontend folder not found at $fe — skipping"
     return 0
   fi
-  if lsof -ti tcp:4200 > /dev/null 2>&1; then
+  if [ -n "$(pids_on_port 4200)" ]; then
     warn "Something is already on :4200 — skipping frontend"
     return 0
   fi

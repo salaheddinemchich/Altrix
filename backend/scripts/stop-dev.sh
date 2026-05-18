@@ -17,7 +17,39 @@ cd "$ROOT"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}  ✓ $*${NC}"; }
+warn() { echo -e "${YELLOW}  ! $*${NC}"; }
 hdr()  { echo -e "\n${YELLOW}═══ $* ═══${NC}"; }
+
+# ── Cross-platform helpers ─────────────────────────────────────────────────────
+
+# True when running inside Git Bash / MSYS2 on Windows
+is_windows() {
+  [[ "$OSTYPE" == "msys"* ]] || [[ "$OSTYPE" == "cygwin"* ]] || [[ "${OS:-}" == "Windows_NT" ]]
+}
+
+# Return PIDs listening on a TCP port.
+pids_on_port() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti tcp:"$port" 2>/dev/null || true
+  else
+    netstat -ano 2>/dev/null \
+      | awk -v p=":${port}" '$2 ~ (p"$") && $4 == "LISTENING" { print $NF }' \
+      | sort -u || true
+  fi
+}
+
+# Kill processes matching a command-line pattern.
+# Uses pkill on Linux/macOS. On Windows Git Bash pkill is absent — silently
+# skips (port-based kills above already handle the main processes).
+kill_by_pattern() {
+  local pattern="$1"
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -f "$pattern" 2>/dev/null || true
+  else
+    warn "pkill unavailable — skipping pattern kill: $pattern"
+  fi
+}
 
 KEEP_DOCKER=false
 for arg in "$@"; do
@@ -32,17 +64,28 @@ hdr "Stopping application processes"
 stop_port() {
   local name="$1" port="$2"
   local pids
-  pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
+  pids=$(pids_on_port "$port")
   if [ -n "$pids" ]; then
     echo "  $name (:$port) — pids: $pids"
-    # shellcheck disable=SC2086
-    kill -SIGTERM $pids 2>/dev/null || true
-    sleep 2
-    # If still alive, force-kill
-    pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
-    if [ -n "$pids" ]; then
+    if is_windows; then
+      # Windows: taskkill sends WM_CLOSE first (graceful), then /F forces
+      for pid in $pids; do
+        taskkill //PID "$pid" 2>/dev/null || true
+      done
+      sleep 2
+      pids=$(pids_on_port "$port")
+      for pid in $pids; do
+        taskkill //F //PID "$pid" 2>/dev/null || true
+      done
+    else
       # shellcheck disable=SC2086
-      kill -SIGKILL $pids 2>/dev/null || true
+      kill -SIGTERM $pids 2>/dev/null || true
+      sleep 2
+      pids=$(pids_on_port "$port")
+      if [ -n "$pids" ]; then
+        # shellcheck disable=SC2086
+        kill -SIGKILL $pids 2>/dev/null || true
+      fi
     fi
     ok "$name stopped"
   else
@@ -57,11 +100,11 @@ stop_port "frontend (ng serve)"   4200
 
 # ── 2. Sweep any leftover bootRun / ng-serve / Gradle processes by name ──────
 hdr "Sweeping stray Gradle / Node processes"
-pkill -f "platform-project:bootRun"      2>/dev/null || true
-pkill -f "platform-job:bootRun"          2>/dev/null || true
-pkill -f "platform-orchestrator:bootRun" 2>/dev/null || true
-pkill -f "ng serve"                      2>/dev/null || true
-pkill -f "@angular/cli/bin/ng"           2>/dev/null || true
+kill_by_pattern "platform-project:bootRun"
+kill_by_pattern "platform-job:bootRun"
+kill_by_pattern "platform-orchestrator:bootRun"
+kill_by_pattern "ng serve"
+kill_by_pattern "@angular/cli/bin/ng"
 ok "named processes terminated"
 
 # ── 3. Tell Gradle to release file locks ─────────────────────────────────────

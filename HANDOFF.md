@@ -270,6 +270,8 @@ Three Flyway migration histories (one per service, separated by `flyway_schema_h
 
 ## 12. Day-1 recovery checklist
 
+### Linux / macOS (original workflow — unchanged)
+
 1. ☐ Install: Java 21, Node 20+, Docker, Angular CLI 18, Maven (for the sample project).
 2. ☐ Clone the repo.
 3. ☐ Recreate `backend/.env` (§ 8 above).
@@ -279,6 +281,56 @@ Three Flyway migration histories (one per service, separated by `flyway_schema_h
 7. ☐ **First-time-after-recovery fix verification**: `cd frontend && npx ng build --configuration=development` and check no `ReferenceError: global`. Restart `ng serve`, hard-reload (`Ctrl+Shift+R`), sign in via GitHub, click "Open" on any job — the pipeline graph should render.
 8. ☐ Tackle the optimistic-lock issue on `workflow_sessions.version` next.
 9. ☐ Re-import `salaheddinemchich/test-altrix` and watch the agent pipeline run to completion (or surface the next bug).
+
+### Windows 10 — additional one-time setup
+
+**Prerequisites:**
+- Git for Windows (includes Git Bash — use this for all script execution)
+- Docker Desktop for Windows with the **WSL2 backend** enabled
+- JDK 21 in PATH (e.g. via `winget install --id EclipseAdoptium.Temurin.21.JDK`)
+- Node 20+ (`winget install OpenJS.NodeJS.LTS`) + Angular CLI (`npm i -g @angular/cli@18`)
+
+**One-time: set `vm.max_map_count` for SonarQube (optional — skip if using `--minimal`)**
+
+Create or edit `C:\Users\<you>\.wslconfig`:
+```ini
+[wsl2]
+kernelCommandLine=sysctl.vm.max_map_count=524288
+```
+Then from PowerShell: `wsl --shutdown` and restart Docker Desktop.
+Without this, SonarQube will crash. Use `--minimal` to skip SonarQube entirely.
+
+**Daily workflow (run everything in Git Bash):**
+```bash
+# Open Git Bash, navigate to repo
+cd /c/Users/SALAH/Projects/Altrix/backend
+
+# Start infrastructure (core services only — fastest, no SonarQube overhead)
+bash scripts/start-dev.sh --minimal
+
+# OR: start everything including SonarQube/DefectDojo (needs vm.max_map_count above)
+bash scripts/start-dev.sh
+
+# Start backend services + frontend
+bash scripts/start-services.sh
+
+# Stop everything
+bash scripts/stop-dev.sh
+```
+
+**Gradle commands (from Git Bash or PowerShell):**
+```bash
+# Git Bash (after line-ending fix is committed — scripts are now LF):
+./gradlew build -x test --parallel
+
+# PowerShell (always works, no line-ending concern):
+.\gradlew build -x test --parallel
+```
+
+**Important differences vs Ubuntu:**
+- `./gradlew` in Git Bash requires the `gradlew` file to have LF endings (handled by `.gitattributes` since the `windows-compat-setup` branch).
+- The `analyze.sh` SonarQube scanner now uses `--network=altrix-net` (not `--network=host`) so it works on Docker Desktop.
+- `pkill` is not available in Git Bash. Stop scripts fall back to port-based kill, which handles the main services. If a stray process persists, use Task Manager or `taskkill /PID <pid> /F` in PowerShell.
 
 ---
 
