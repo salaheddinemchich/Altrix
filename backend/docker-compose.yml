@@ -196,7 +196,7 @@ services:
       - altrix-net
 
   defectdojo-initializer:
-    image: defectdojo/defectdojo-django:latest
+    image: defectdojo/defectdojo-django:2.58.2
     container_name: altrix-defectdojo-init
     depends_on:
       defectdojo-db:
@@ -220,7 +220,7 @@ services:
       - altrix-net
 
   defectdojo:
-    image: defectdojo/defectdojo-django:latest
+    image: defectdojo/defectdojo-django:2.58.2
     container_name: altrix-defectdojo
     depends_on:
       defectdojo-initializer:
@@ -247,7 +247,7 @@ services:
     restart: unless-stopped
 
   defectdojo-nginx:
-    image: defectdojo/defectdojo-nginx:latest
+    image: defectdojo/defectdojo-nginx:2.58.2
     container_name: altrix-defectdojo-nginx
     depends_on:
       defectdojo:
@@ -262,7 +262,7 @@ services:
     restart: unless-stopped
 
   defectdojo-celery-worker:
-    image: defectdojo/defectdojo-django:latest
+    image: defectdojo/defectdojo-django:2.58.2
     container_name: altrix-defectdojo-celery-worker
     depends_on:
       defectdojo-initializer:
@@ -280,7 +280,7 @@ services:
     restart: unless-stopped
 
   defectdojo-celery-beat:
-    image: defectdojo/defectdojo-django:latest
+    image: defectdojo/defectdojo-django:2.58.2
     container_name: altrix-defectdojo-celery-beat
     depends_on:
       defectdojo-initializer:
