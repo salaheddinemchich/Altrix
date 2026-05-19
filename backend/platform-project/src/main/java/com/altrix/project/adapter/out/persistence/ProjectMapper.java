@@ -30,6 +30,9 @@ class ProjectMapper {
                 .configFormatPreference(entity.getConfigFormatPreference())
                 .eligibleForMigration(entity.isEligibleForMigration())
                 .detectedTechnologies(parseTechnologies(entity.getDetectedTechnologies()))
+                .repoUrl(entity.getRepoUrl())
+                .trackedBranch(entity.getTrackedBranch())
+                .source(entity.getSource())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
@@ -48,6 +51,9 @@ class ProjectMapper {
                 .configFormatPreference(domain.getConfigFormatPreference())
                 .eligibleForMigration(domain.isEligibleForMigration())
                 .detectedTechnologies(joinTechnologies(domain.getDetectedTechnologies()))
+                .repoUrl(domain.getRepoUrl())
+                .trackedBranch(domain.getTrackedBranch())
+                .source(domain.getSource())
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
                 .build();

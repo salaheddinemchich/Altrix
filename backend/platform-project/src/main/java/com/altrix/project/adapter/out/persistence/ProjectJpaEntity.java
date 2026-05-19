@@ -4,6 +4,7 @@ import com.altrix.common.domain.enums.BuildSystem;
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.common.domain.enums.DetectedFramework;
+import com.altrix.project.domain.model.ProjectSource;
 import com.altrix.project.domain.model.ProjectStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -67,6 +68,18 @@ public class ProjectJpaEntity {
     /** Comma-separated list of detected technologies, e.g. "SPRING_BOOT,GRADLE_KOTLIN,GCP_PUBSUB". */
     @Column(name = "detected_technologies", columnDefinition = "TEXT")
     private String detectedTechnologies;
+
+    // ── Issue #90 — git ingestion provenance ─────────────────────────────
+
+    @Column(name = "repo_url", length = 512)
+    private String repoUrl;
+
+    @Column(name = "tracked_branch", length = 255)
+    private String trackedBranch;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source", length = 16)
+    private ProjectSource source;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

@@ -4,6 +4,7 @@ import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.common.exception.ProjectNotFoundException;
 import com.altrix.common.exception.RepositoryIngestionException;
 import com.altrix.project.domain.model.Project;
+import com.altrix.project.domain.model.ProjectSource;
 import com.altrix.project.domain.model.RepositorySnapshot;
 import com.altrix.project.domain.port.in.GetProjectQuery;
 import com.altrix.project.domain.port.in.IngestGitRepositoryUseCase;
@@ -110,8 +111,17 @@ public class ProjectService implements UploadProjectUseCase, GetProjectQuery, In
             // 2. Project name = last path segment of the URL, sans .git
             String name = deriveProjectName(cmd.repoUrl());
 
-            // 3. Create + detect + persist + publish — mirrors the upload flow
-            Project project = Project.create(cmd.userId(), name, storageKey, cmd.configFormatPreference());
+            // 3. Create + detect + persist + publish — mirrors the upload flow.
+            //    createFromGit records repoUrl + tracked branch + source so the
+            //    webhook auto-trigger consumer (#90) can later find this row.
+            Project project = Project.createFromGit(
+                    cmd.userId(),
+                    name,
+                    storageKey,
+                    cmd.configFormatPreference(),
+                    cmd.repoUrl(),
+                    snapshot.branch(),
+                    ProjectSource.GIT_CLONE);
 
             try (InputStream zipStream = new ByteArrayInputStream(zipBytes)) {
                 project = buildSystemDetector.detect(project, zipStream);

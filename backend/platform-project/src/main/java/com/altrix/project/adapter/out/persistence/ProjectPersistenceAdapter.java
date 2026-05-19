@@ -49,4 +49,10 @@ public class ProjectPersistenceAdapter implements ProjectRepositoryPort {
     public void deleteById(String projectId) {
         jpaRepository.deleteById(projectId);
     }
+
+    @Override
+    public Optional<Project> findLatestByRepoUrl(String repoUrl) {
+        return jpaRepository.findFirstByRepoUrlOrderByCreatedAtDesc(repoUrl)
+                .map(mapper::toDomain);
+    }
 }

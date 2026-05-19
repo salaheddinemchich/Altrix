@@ -56,12 +56,26 @@ public final class Project {
     /** Technologies detected during analysis (e.g. GCP_PUBSUB, SPRING_BOOT). */
     private final List<String> detectedTechnologies;
 
+    // ── Issue #90 — git-ingestion provenance ──────────────────────────────
+
+    /** HTTPS clone URL when the project was ingested via git, else {@code null}. */
+    private final String repoUrl;
+
+    /** Branch / tag checked out at clone time, else {@code null}. */
+    private final String trackedBranch;
+
+    /** Where this project row came from; {@code null} on rows created before #90. */
+    private final ProjectSource source;
+
     private final Instant createdAt;
     private final Instant updatedAt;
 
     /**
      * Factory method — creates a brand-new project in PENDING status.
      * Assigns a new UUID and sets timestamps to now.
+     *
+     * <p>Used by the legacy ZIP-upload path; produces a row with no git
+     * provenance ({@code source = MANUAL}).
      */
     public static Project create(
             String userId,
@@ -79,6 +93,40 @@ public final class Project {
                 .configFormatPreference(
                         Objects.requireNonNullElse(configFormatPreference,
                                 ConfigFormatPreference.KEEP_ORIGINAL))
+                .source(ProjectSource.MANUAL)
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+    }
+
+    /**
+     * Factory for projects ingested via git clone (#90).
+     *
+     * <p>Stores {@code repoUrl}, {@code trackedBranch}, and {@code source} so
+     * webhook consumers can locate this project when a push arrives.
+     */
+    public static Project createFromGit(
+            String userId,
+            String name,
+            String storageKey,
+            ConfigFormatPreference configFormatPreference,
+            String repoUrl,
+            String trackedBranch,
+            ProjectSource source
+    ) {
+        Instant now = Instant.now();
+        return Project.builder()
+                .id(UUID.randomUUID().toString())
+                .userId(userId)
+                .name(name)
+                .storageKey(storageKey)
+                .status(ProjectStatus.PENDING)
+                .configFormatPreference(
+                        Objects.requireNonNullElse(configFormatPreference,
+                                ConfigFormatPreference.KEEP_ORIGINAL))
+                .repoUrl(Objects.requireNonNull(repoUrl, "repoUrl"))
+                .trackedBranch(trackedBranch)
+                .source(Objects.requireNonNullElse(source, ProjectSource.GIT_CLONE))
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
