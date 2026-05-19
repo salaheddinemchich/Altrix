@@ -3,9 +3,11 @@ package com.altrix.project.adapter.in.rest;
 import com.altrix.project.domain.model.webhook.WebhookDelivery;
 import com.altrix.project.domain.model.webhook.WebhookProcessingStatus;
 import com.altrix.project.domain.port.out.WebhookDeliveryRepositoryPort;
+import com.altrix.project.domain.service.WebhookTriggerService;
 import com.altrix.project.infrastructure.security.WebhookSignatureVerifier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -48,6 +50,10 @@ public class WebhookController {
 
     private final WebhookSignatureVerifier signatureVerifier;
     private final WebhookDeliveryRepositoryPort deliveryRepository;
+    private final WebhookTriggerService triggerService;
+
+    @Value("${webhook.auto-trigger.enabled:false}")
+    private boolean autoTriggerEnabled;
 
     @PostMapping(value = "/github", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> receiveGitHub(
@@ -77,6 +83,19 @@ public class WebhookController {
         if (!valid) {
             log.warn("Rejected webhook delivery {} — bad signature", deliveryId);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("invalid signature");
+        }
+
+        // Auto-trigger re-migration on push (#90) — runs only for ACCEPTED push
+        // events, only when the feature flag is on, and only after the audit
+        // row is committed so a downstream failure cannot leave the delivery
+        // un-recorded.  Any throw here is swallowed to keep GitHub's 10-second
+        // response window safe.
+        if (status == WebhookProcessingStatus.ACCEPTED && "push".equals(eventType)) {
+            try {
+                triggerService.onPush(rawBody, deliveryId, autoTriggerEnabled);
+            } catch (Exception e) {
+                log.error("Auto-trigger failed for delivery {}: {}", deliveryId, e.getMessage());
+            }
         }
 
         log.info("Webhook {} ({}): {}", deliveryId, eventType, status);
