@@ -3,8 +3,11 @@ package com.altrix.project.adapter.in.rest;
 import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.project.domain.model.Project;
 import com.altrix.project.domain.port.in.GetProjectQuery;
+import com.altrix.project.domain.port.in.IngestGitRepositoryUseCase;
+import com.altrix.project.domain.port.in.IngestGitRepositoryUseCase.GitIngestionCommand;
 import com.altrix.project.domain.port.in.UploadProjectUseCase;
 import com.altrix.project.domain.port.out.ProjectRepositoryPort;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +42,7 @@ import java.util.List;
 public class ProjectController {
 
     private final UploadProjectUseCase uploadProjectUseCase;
+    private final IngestGitRepositoryUseCase ingestGitRepositoryUseCase;
     private final GetProjectQuery getProjectQuery;
     private final ProjectRepositoryPort projectRepository;
 
@@ -70,6 +74,38 @@ public class ProjectController {
                 file.getSize(),
                 configFormatPreference
         );
+
+        return ProjectResponse.from(project);
+    }
+
+    /**
+     * POST /api/v1/projects/clone — Issue #12.
+     *
+     * <p>Accepts a JSON body {@link CloneProjectRequest} describing a remote Git
+     * URL.  JGit clones it into a workspace, the working tree is re-packaged as
+     * a ZIP and stored in MinIO, then the existing detection pipeline runs.
+     *
+     * <p>This endpoint coexists with {@link #upload} for now; once all callers
+     * have migrated to git ingestion the legacy ZIP path will be removed.
+     */
+    @PostMapping(value = "/clone", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProjectResponse clone(
+            @RequestHeader("X-User-Id") @NotBlank String userId,
+            @Valid @RequestBody CloneProjectRequest request
+    ) {
+        // Never log the token, even if the caller sent one.
+        log.info("Clone request from user '{}': repoUrl='{}' branch='{}' shallow={}",
+                userId, request.repoUrl(), request.branch(), request.shallow());
+
+        Project project = ingestGitRepositoryUseCase.ingestFromGit(new GitIngestionCommand(
+                userId,
+                request.repoUrl(),
+                request.branch(),
+                request.accessToken(),
+                request.shallow(),
+                request.configFormatPreference()
+        ));
 
         return ProjectResponse.from(project);
     }
