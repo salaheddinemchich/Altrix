@@ -79,3 +79,15 @@ app:
   workspace:
     base-dir:       ${WORKSPACE_BASE_DIR:${java.io.tmpdir}/migrator-workspaces}
     max-size-bytes: ${WORKSPACE_MAX_SIZE_BYTES:524288000}   # 500 MB hard cap
+
+# Issue #89, #91 — GitHub webhook receiver.
+# secret: shared secret configured in the GitHub repository's webhook settings;
+#         used to verify X-Hub-Signature-256.  Leave blank to fail closed (all
+#         deliveries rejected, useful for non-production environments).
+# purge:  retention window and cron for WebhookDeliveryPurgeScheduler.
+webhook:
+  github:
+    secret: ${GITHUB_WEBHOOK_SECRET:}
+  purge:
+    retention-days: ${WEBHOOK_RETENTION_DAYS:30}
+    cron:           ${WEBHOOK_PURGE_CRON:0 0 2 * * ?}
