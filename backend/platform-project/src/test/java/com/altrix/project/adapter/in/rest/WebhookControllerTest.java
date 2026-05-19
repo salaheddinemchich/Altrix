@@ -3,15 +3,18 @@ package com.altrix.project.adapter.in.rest;
 import com.altrix.project.domain.model.webhook.WebhookDelivery;
 import com.altrix.project.domain.model.webhook.WebhookProcessingStatus;
 import com.altrix.project.domain.port.out.WebhookDeliveryRepositoryPort;
+import com.altrix.project.domain.service.WebhookTriggerService;
 import com.altrix.project.infrastructure.security.WebhookSignatureVerifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
@@ -20,14 +23,19 @@ class WebhookControllerTest {
 
     private WebhookSignatureVerifier verifier;
     private WebhookDeliveryRepositoryPort repository;
+    private WebhookTriggerService triggerService;
     private WebhookController controller;
 
     @BeforeEach
     void setUp() {
         verifier = mock(WebhookSignatureVerifier.class);
         repository = mock(WebhookDeliveryRepositoryPort.class);
+        triggerService = mock(WebhookTriggerService.class);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        controller = new WebhookController(verifier, repository);
+        controller = new WebhookController(verifier, repository, triggerService);
+        // Feature flag is injected via @Value; tests inject directly so we
+        // can flip it without standing up a full Spring context.
+        ReflectionTestUtils.setField(controller, "autoTriggerEnabled", true);
     }
 
     @Test
@@ -104,6 +112,51 @@ class WebhookControllerTest {
         var response = controller.receiveGitHub("push", "del-6", "sha256=ok", body);
 
         // GitHub still sees 200 — audit-log failures must not retry-storm us
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+    }
+
+    // ── Auto-trigger wiring (#90) ────────────────────────────────────────────
+
+    @Test
+    void accepted_push_event_invokes_triggerService_with_feature_flag() {
+        byte[] body = "{\"ref\":\"refs/heads/main\"}".getBytes(StandardCharsets.UTF_8);
+        when(verifier.verify(any(), any())).thenReturn(true);
+
+        controller.receiveGitHub("push", "del-trigger", "sha256=ok", body);
+
+        verify(triggerService).onPush(eq(body), eq("del-trigger"), eq(true));
+    }
+
+    @Test
+    void accepted_ping_event_does_NOT_invoke_triggerService() {
+        byte[] body = "{\"zen\":\"ok\"}".getBytes(StandardCharsets.UTF_8);
+        when(verifier.verify(any(), any())).thenReturn(true);
+
+        controller.receiveGitHub("ping", "del-ping", "sha256=ok", body);
+
+        verify(triggerService, never()).onPush(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void rejected_push_event_does_NOT_invoke_triggerService() {
+        byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
+        when(verifier.verify(any(), any())).thenReturn(false);
+
+        controller.receiveGitHub("push", "del-bad", "sha256=bad", body);
+
+        verify(triggerService, never()).onPush(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void triggerService_throwing_does_not_break_the_response() {
+        byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
+        when(verifier.verify(any(), any())).thenReturn(true);
+        when(triggerService.onPush(any(), any(), anyBoolean()))
+                .thenThrow(new RuntimeException("kafka unreachable"));
+
+        var response = controller.receiveGitHub("push", "del-throw", "sha256=ok", body);
+
+        // GitHub still sees 200 — trigger failures must not retry-storm us.
         assertThat(response.getStatusCode().value()).isEqualTo(200);
     }
 

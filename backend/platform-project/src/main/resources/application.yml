@@ -60,6 +60,8 @@ minio:
 kafka:
   topics:
     project-registered: project.registered
+    # Issue #90 — emitted by the webhook receiver after an ACCEPTED push.
+    commit-detected:    migration.commit.detected
 
 management:
   endpoints:
@@ -91,3 +93,7 @@ webhook:
   purge:
     retention-days: ${WEBHOOK_RETENTION_DAYS:30}
     cron:           ${WEBHOOK_PURGE_CRON:0 0 2 * * ?}
+  # Issue #90 — when true, accepted push events publish
+  # migration.commit.detected for downstream re-migration triggering.
+  auto-trigger:
+    enabled: ${WEBHOOK_AUTO_TRIGGER:false}

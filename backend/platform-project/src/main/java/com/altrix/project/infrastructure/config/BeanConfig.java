@@ -4,8 +4,11 @@ import com.altrix.project.domain.port.out.FileStoragePort;
 import com.altrix.project.domain.port.out.ProjectEventPublisherPort;
 import com.altrix.project.domain.port.out.ProjectRepositoryPort;
 import com.altrix.project.domain.port.out.RepositoryIngestionPort;
+import com.altrix.project.domain.port.out.WebhookEventPublisherPort;
 import com.altrix.project.domain.service.BuildSystemDetector;
 import com.altrix.project.domain.service.ProjectService;
+import com.altrix.project.domain.service.WebhookTriggerService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -44,6 +47,14 @@ public class BeanConfig {
                 buildSystemDetector,
                 repositoryIngestion
         );
+    }
+
+    @Bean
+    public WebhookTriggerService webhookTriggerService(
+            ObjectMapper objectMapper,
+            WebhookEventPublisherPort webhookEventPublisher
+    ) {
+        return new WebhookTriggerService(objectMapper, webhookEventPublisher);
     }
 
     @Bean
