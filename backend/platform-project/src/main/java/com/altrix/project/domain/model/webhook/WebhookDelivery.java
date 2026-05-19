@@ -19,7 +19,9 @@ public record WebhookDelivery(
         String payload,
         String errorMessage,
         Instant receivedAt,
-        Instant processedAt
+        Instant processedAt,
+        /** Issue #92 — id of the original delivery this row replays, or null. */
+        String replayOf
 ) {
     public WebhookDelivery {
         Objects.requireNonNull(id, "id");

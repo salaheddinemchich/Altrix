@@ -48,6 +48,7 @@ public class WebhookDeliveryPersistenceAdapter implements WebhookDeliveryReposit
                 .errorMessage(d.errorMessage())
                 .receivedAt(d.receivedAt())
                 .processedAt(d.processedAt())
+                .replayOf(d.replayOf())
                 .build();
     }
 
@@ -61,7 +62,8 @@ public class WebhookDeliveryPersistenceAdapter implements WebhookDeliveryReposit
                 e.getPayload(),
                 e.getErrorMessage(),
                 e.getReceivedAt(),
-                e.getProcessedAt()
+                e.getProcessedAt(),
+                e.getReplayOf()
         );
     }
 }

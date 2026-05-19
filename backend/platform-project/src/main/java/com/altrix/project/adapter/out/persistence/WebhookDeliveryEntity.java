@@ -55,4 +55,8 @@ public class WebhookDeliveryEntity {
 
     @Column(name = "processed_at")
     private Instant processedAt;
+
+    /** Issue #92 — id of the original delivery if this row is a replay, else null. */
+    @Column(name = "replay_of", length = 36)
+    private String replayOf;
 }

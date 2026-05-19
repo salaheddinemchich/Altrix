@@ -101,7 +101,8 @@ public class WebhookController {
                     new String(rawBody, StandardCharsets.UTF_8),
                     errorMessage,
                     Instant.now(),
-                    status == WebhookProcessingStatus.ACCEPTED ? Instant.now() : null
+                    status == WebhookProcessingStatus.ACCEPTED ? Instant.now() : null,
+                    null  // replayOf — first-time delivery, not a replay
             );
             deliveryRepository.save(delivery);
         } catch (Exception e) {
