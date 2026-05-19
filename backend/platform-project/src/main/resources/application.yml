@@ -72,3 +72,10 @@ management:
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:4200,http://localhost:8080}
+
+# Issue #74 — workspace where JGit clones repositories.  Each clone gets a
+# unique sub-directory; WorkspaceCleanupScheduler (follow-up) sweeps stale ones.
+app:
+  workspace:
+    base-dir:       ${WORKSPACE_BASE_DIR:${java.io.tmpdir}/migrator-workspaces}
+    max-size-bytes: ${WORKSPACE_MAX_SIZE_BYTES:524288000}   # 500 MB hard cap

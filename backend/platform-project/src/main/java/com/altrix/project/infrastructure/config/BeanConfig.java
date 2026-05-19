@@ -3,6 +3,7 @@ package com.altrix.project.infrastructure.config;
 import com.altrix.project.domain.port.out.FileStoragePort;
 import com.altrix.project.domain.port.out.ProjectEventPublisherPort;
 import com.altrix.project.domain.port.out.ProjectRepositoryPort;
+import com.altrix.project.domain.port.out.RepositoryIngestionPort;
 import com.altrix.project.domain.service.BuildSystemDetector;
 import com.altrix.project.domain.service.ProjectService;
 import io.minio.MinioClient;
@@ -33,13 +34,15 @@ public class BeanConfig {
             ProjectRepositoryPort     projectRepository,
             FileStoragePort           fileStoragePort,
             ProjectEventPublisherPort eventPublisher,
-            BuildSystemDetector   buildSystemDetector
+            BuildSystemDetector       buildSystemDetector,
+            RepositoryIngestionPort   repositoryIngestion
     ) {
         return new ProjectService(
                 projectRepository,
                 fileStoragePort,
                 eventPublisher,
-                buildSystemDetector
+                buildSystemDetector,
+                repositoryIngestion
         );
     }
 

@@ -26,6 +26,9 @@ dependencies {
     // Object storage — stores uploaded ZIPs in MinIO
     implementation("io.minio:minio:8.5.12")
 
+    // Git ingestion (#74) — clone remote repositories into a workspace
+    implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
+
     // Observability
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 

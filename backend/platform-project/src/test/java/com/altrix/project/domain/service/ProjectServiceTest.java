@@ -10,6 +10,7 @@ import com.altrix.project.domain.model.ProjectStatus;
 import com.altrix.project.domain.port.out.FileStoragePort;
 import com.altrix.project.domain.port.out.ProjectEventPublisherPort;
 import com.altrix.project.domain.port.out.ProjectRepositoryPort;
+import com.altrix.project.domain.port.out.RepositoryIngestionPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,14 +36,16 @@ class ProjectServiceTest {
     @Mock ProjectRepositoryPort     projectRepository;
     @Mock FileStoragePort           fileStoragePort;
     @Mock ProjectEventPublisherPort eventPublisher;
-    @Mock BuildSystemDetector  buildSystemDetector;
+    @Mock BuildSystemDetector       buildSystemDetector;
+    @Mock RepositoryIngestionPort   repositoryIngestion;
 
     ProjectService projectService;
 
     @BeforeEach
     void setUp() {
         projectService = new ProjectService(
-                projectRepository, fileStoragePort, eventPublisher, buildSystemDetector);
+                projectRepository, fileStoragePort, eventPublisher,
+                buildSystemDetector, repositoryIngestion);
     }
 
     @Test
@@ -104,5 +107,96 @@ class ProjectServiceTest {
                 .hasMessageContaining("Detection failed");
 
         verify(projectRepository).save(argThat(p -> p.getStatus() == ProjectStatus.ERROR));
+    }
+
+    // ── Issue #12: git ingestion ──────────────────────────────────────────────
+
+    @Test
+    void ingestFromGit_clones_zips_detects_persists_publishes_andCleansUp(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) throws Exception {
+        // 1. Fake workspace on disk: a single README.md (BuildSystemDetector is mocked)
+        java.nio.file.Path workspace = tmp.resolve("clone");
+        java.nio.file.Files.createDirectories(workspace);
+        java.nio.file.Files.writeString(workspace.resolve("README.md"), "# project\n");
+
+        com.altrix.project.domain.model.RepositorySnapshot snapshot =
+                new com.altrix.project.domain.model.RepositorySnapshot(
+                        workspace,
+                        "https://github.com/acme/widgets.git",
+                        "main",
+                        "0".repeat(40),
+                        12L,
+                        false,
+                        java.time.Instant.now());
+
+        when(repositoryIngestion.clone(any())).thenReturn(snapshot);
+        when(fileStoragePort.store(any(), anyLong(), any())).thenReturn("uploads/clone-key.zip");
+
+        Project detected = Project.create("user-1", "widgets", "uploads/clone-key.zip", null)
+                .withDetectionApplied(BuildSystem.MAVEN, ConfigFormat.YAML, DetectedFramework.SPRING_BOOT,
+                        false, List.of("SPRING_BOOT"));
+        when(buildSystemDetector.detect(any(), any(InputStream.class))).thenReturn(detected);
+        when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Project result = projectService.ingestFromGit(
+                new com.altrix.project.domain.port.in.IngestGitRepositoryUseCase.GitIngestionCommand(
+                        "user-1",
+                        "https://github.com/acme/widgets.git",
+                        "main",
+                        null,
+                        false,
+                        ConfigFormatPreference.KEEP_ORIGINAL));
+
+        // Repo URL → project name (.git stripped)
+        assertThat(result.getName()).isEqualTo("widgets");
+        assertThat(result.getStatus()).isEqualTo(ProjectStatus.READY);
+
+        // ZIP is stored exactly once with application/zip content-type
+        verify(fileStoragePort).store(any(), anyLong(), eq("application/zip"));
+        // Domain event fired
+        verify(eventPublisher).publishProjectRegistered(any());
+        // Workspace is cleaned up after success
+        verify(repositoryIngestion).cleanup(workspace);
+    }
+
+    @Test
+    void ingestFromGit_cleansUpWorkspace_evenWhenDetectionFails(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) throws Exception {
+        java.nio.file.Path workspace = tmp.resolve("clone");
+        java.nio.file.Files.createDirectories(workspace);
+        java.nio.file.Files.writeString(workspace.resolve("pom.xml"), "<project/>");
+
+        when(repositoryIngestion.clone(any())).thenReturn(new com.altrix.project.domain.model.RepositorySnapshot(
+                workspace, "https://example.com/r.git", "main", "0".repeat(40),
+                10L, false, java.time.Instant.now()));
+        when(fileStoragePort.store(any(), anyLong(), any())).thenReturn("k");
+        when(buildSystemDetector.detect(any(), any())).thenThrow(new RuntimeException("boom"));
+        when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        assertThatThrownBy(() -> projectService.ingestFromGit(
+                new com.altrix.project.domain.port.in.IngestGitRepositoryUseCase.GitIngestionCommand(
+                        "u", "https://example.com/r.git", null, null, false, null)))
+                .isInstanceOf(RuntimeException.class);
+
+        // Project saved in ERROR state, workspace always cleaned up
+        verify(projectRepository).save(argThat(p -> p.getStatus() == ProjectStatus.ERROR));
+        verify(repositoryIngestion).cleanup(workspace);
+    }
+
+    @Test
+    void zipWorkspace_skipsGitDirectory(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) throws Exception {
+        java.nio.file.Path workspace = tmp.resolve("ws");
+        java.nio.file.Files.createDirectories(workspace.resolve(".git/objects"));
+        java.nio.file.Files.writeString(workspace.resolve(".git/HEAD"), "ref: refs/heads/main");
+        java.nio.file.Files.writeString(workspace.resolve("src.java"), "class A {}");
+
+        byte[] zipped = ProjectService.zipWorkspace(workspace);
+
+        // Read entries back — only src.java should appear, never anything under .git
+        try (var zin = new java.util.zip.ZipInputStream(new ByteArrayInputStream(zipped))) {
+            java.util.List<String> entries = new java.util.ArrayList<>();
+            java.util.zip.ZipEntry e;
+            while ((e = zin.getNextEntry()) != null) entries.add(e.getName());
+            assertThat(entries).contains("src.java");
+            assertThat(entries).noneMatch(name -> name.startsWith(".git"));
+        }
     }
 }
