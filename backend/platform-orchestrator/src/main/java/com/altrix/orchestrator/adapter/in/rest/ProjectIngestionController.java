@@ -1,7 +1,6 @@
 package com.altrix.orchestrator.adapter.in.rest;
 
 import com.altrix.orchestrator.adapter.in.rest.dto.IngestProjectRequest;
-import com.altrix.orchestrator.adapter.out.github.GitHubApiClient;
 import com.altrix.orchestrator.domain.model.user.AuthProviderType;
 import com.altrix.orchestrator.domain.port.out.ApiKeyEncryptionPort;
 import com.altrix.orchestrator.domain.port.out.UserRepository;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -27,27 +25,24 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.UUID;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 /**
- * Ingests a GitHub repository as a new project.
+ * Ingests a GitHub repository as a new project (#12, #15 foundation).
  *
  * <p>Flow:
  * <ol>
- *   <li>Decrypt the user's stored GitHub token.</li>
- *   <li>Download the repository ZIP from GitHub API.</li>
- *   <li>Forward the ZIP to platform-project's upload endpoint as a multipart form.</li>
+ *   <li>Decrypt the user's stored GitHub PAT.</li>
+ *   <li>POST {@code {repoUrl, branch, accessToken, ...}} to platform-project's
+ *       {@code /api/v1/projects/clone} endpoint, which performs a JGit clone,
+ *       runs detection, and emits the {@code project.registered} event.</li>
  *   <li>Return platform-project's response verbatim.</li>
  * </ol>
  *
- * <p>The multipart body is written by hand using {@link HttpClient} so we have
- * full control over the wire format — Spring's {@code RestTemplate} multipart
- * pipeline mis-set the Content-Type in some setups, yielding 415 from the
- * receiving service.
- *
- * <p>The frontend never sees the raw GitHub token.
+ * <p>Replaces the previous GitHub-API-ZIP-download-and-multipart-forward flow.
+ * The frontend never sees the raw GitHub token — it is only used in transit
+ * between this controller and platform-project's clone endpoint.
  */
 @Slf4j
 @RestController
@@ -63,7 +58,6 @@ public class ProjectIngestionController {
 
     private final UserRepository userRepository;
     private final ApiKeyEncryptionPort encryption;
-    private final GitHubApiClient gitHubApiClient;
 
     @Value("${platform-project.base-url}")
     private String platformProjectBaseUrl;
@@ -81,68 +75,68 @@ public class ProjectIngestionController {
                         "No GitHub token found for user — please re-authenticate via GitHub"));
 
         String accessToken = encryption.decrypt(encryptedToken);
-        byte[] zipBytes = gitHubApiClient.downloadZip(accessToken, request.repoFullName(), request.defaultBranch());
+        String repoUrl = "https://github.com/" + request.repoFullName() + ".git";
+        String configPref = request.configFormatPreference() != null
+                ? "\"" + request.configFormatPreference().name() + "\""
+                : "null";
 
-        String fileName = request.repoFullName().replace("/", "-") + ".zip";
-        String boundary = "----AltrixBoundary" + UUID.randomUUID().toString().replace("-", "");
-
-        byte[] multipartBody = buildMultipartBody(
-                boundary,
-                fileName,
-                zipBytes,
-                request.configFormatPreference() != null ? request.configFormatPreference().name() : null
-        );
+        // Build the JSON body for platform-project's /clone endpoint by hand —
+        // an out-of-the-box ObjectMapper is overkill for 5 fixed fields and
+        // would force the controller to depend on Jackson types directly.
+        String jsonBody = String.format(
+                "{\"repoUrl\":\"%s\",\"branch\":\"%s\",\"accessToken\":\"%s\",\"shallow\":false,\"configFormatPreference\":%s}",
+                jsonEscape(repoUrl),
+                jsonEscape(request.defaultBranch()),
+                jsonEscape(accessToken),
+                configPref);
 
         HttpRequest httpRequest = HttpRequest.newBuilder()
-                .uri(URI.create(platformProjectBaseUrl + "/api/v1/projects/upload"))
+                .uri(URI.create(platformProjectBaseUrl + "/api/v1/projects/clone"))
                 .timeout(Duration.ofMinutes(2))
-                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .header("Content-Type", "application/json")
                 .header("X-User-Id", userId)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(multipartBody))
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
                 .build();
 
         HttpResponse<String> response = HTTP.send(httpRequest, HttpResponse.BodyHandlers.ofString());
         int status = response.statusCode();
-        log.info("platform-project returned {} for repo '{}' ({} bytes)",
-                status, request.repoFullName(), zipBytes.length);
+        log.info("platform-project /clone returned {} for repo '{}'",
+                status, request.repoFullName());
 
         if (status >= 400) {
-            log.error("platform-project rejected upload: {} — body: {}", status, response.body());
+            log.error("platform-project rejected clone: {} — body: {}", status, response.body());
         }
 
         return ResponseEntity.status(HttpStatus.valueOf(status)).body(response.body());
     }
 
     /**
-     * Build a {@code multipart/form-data} body by hand. Each part is preceded
-     * by {@code --boundary\r\n}; the terminator is {@code --boundary--\r\n}.
+     * Escape a string so it is safe to embed verbatim between JSON double quotes.
+     * Handles every character listed in <a href="https://tools.ietf.org/html/rfc8259#section-7">RFC 8259 §7</a>
+     * — backslash, quote, the eight short escapes, and any control byte below 0x20.
      */
-    private static byte[] buildMultipartBody(String boundary,
-                                             String filename,
-                                             byte[] zipBytes,
-                                             String configFormatPreference) throws IOException {
-        String delim = "--" + boundary + "\r\n";
-        String end   = "--" + boundary + "--\r\n";
-        ByteArrayOutputStream out = new ByteArrayOutputStream(zipBytes.length + 1024);
-
-        // Part 1: the ZIP file
-        out.write(delim.getBytes(StandardCharsets.US_ASCII));
-        String fileHeader = "Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"\r\n"
-                + "Content-Type: application/zip\r\n\r\n";
-        out.write(fileHeader.getBytes(StandardCharsets.US_ASCII));
-        out.write(zipBytes);
-        out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
-
-        // Part 2: the optional configFormatPreference
-        if (configFormatPreference != null) {
-            out.write(delim.getBytes(StandardCharsets.US_ASCII));
-            String prefHeader = "Content-Disposition: form-data; name=\"configFormatPreference\"\r\n\r\n";
-            out.write(prefHeader.getBytes(StandardCharsets.US_ASCII));
-            out.write(configFormatPreference.getBytes(StandardCharsets.UTF_8));
-            out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
+    private static String jsonEscape(String s) {
+        if (s == null) return "";
+        StringBuilder out = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"'  -> out.append("\\\"");
+                case '\\' -> out.append("\\\\");
+                case '\b' -> out.append("\\b");
+                case '\f' -> out.append("\\f");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        out.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        out.append(c);
+                    }
+                }
+            }
         }
-
-        out.write(end.getBytes(StandardCharsets.US_ASCII));
-        return out.toByteArray();
+        return out.toString();
     }
 }
