@@ -69,5 +69,25 @@ class ProjectMapperTest {
         assertThat(restored.getStatus()).isEqualTo(original.getStatus());
         assertThat(restored.getUserId()).isEqualTo(original.getUserId());
         assertThat(restored.getName()).isEqualTo(original.getName());
+        // #90 — MANUAL source is recorded for legacy ZIP uploads
+        assertThat(restored.getSource()).isEqualTo(
+                com.altrix.project.domain.model.ProjectSource.MANUAL);
+        assertThat(restored.getRepoUrl()).isNull();
+    }
+
+    @Test
+    void roundTrip_preservesGitProvenance() {
+        Project original = Project.createFromGit(
+                "user-1", "widgets", "k", null,
+                "https://github.com/acme/widgets.git",
+                "main",
+                com.altrix.project.domain.model.ProjectSource.GIT_CLONE);
+
+        Project restored = mapper.toDomain(mapper.toJpaEntity(original));
+
+        assertThat(restored.getRepoUrl()).isEqualTo("https://github.com/acme/widgets.git");
+        assertThat(restored.getTrackedBranch()).isEqualTo("main");
+        assertThat(restored.getSource()).isEqualTo(
+                com.altrix.project.domain.model.ProjectSource.GIT_CLONE);
     }
 }

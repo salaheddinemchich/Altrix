@@ -131,7 +131,13 @@ class ProjectServiceTest {
         when(repositoryIngestion.clone(any())).thenReturn(snapshot);
         when(fileStoragePort.store(any(), anyLong(), any())).thenReturn("uploads/clone-key.zip");
 
-        Project detected = Project.create("user-1", "widgets", "uploads/clone-key.zip", null)
+        // Detector preserves repoUrl/branch/source via @With behaviour — the
+        // mock returns a project built with createFromGit so the assertions
+        // below match what the real detector would do (withDetectionApplied
+        // is a @With-based copy that retains all non-detection fields).
+        Project detected = Project.createFromGit("user-1", "widgets", "uploads/clone-key.zip", null,
+                        "https://github.com/acme/widgets.git", "main",
+                        com.altrix.project.domain.model.ProjectSource.GIT_CLONE)
                 .withDetectionApplied(BuildSystem.MAVEN, ConfigFormat.YAML, DetectedFramework.SPRING_BOOT,
                         false, List.of("SPRING_BOOT"));
         when(buildSystemDetector.detect(any(), any(InputStream.class))).thenReturn(detected);
@@ -149,6 +155,10 @@ class ProjectServiceTest {
         // Repo URL → project name (.git stripped)
         assertThat(result.getName()).isEqualTo("widgets");
         assertThat(result.getStatus()).isEqualTo(ProjectStatus.READY);
+        // #90 — git provenance is recorded so webhook consumers can find this row
+        assertThat(result.getRepoUrl()).isEqualTo("https://github.com/acme/widgets.git");
+        assertThat(result.getTrackedBranch()).isEqualTo("main");
+        assertThat(result.getSource()).isEqualTo(com.altrix.project.domain.model.ProjectSource.GIT_CLONE);
 
         // ZIP is stored exactly once with application/zip content-type
         verify(fileStoragePort).store(any(), anyLong(), eq("application/zip"));
@@ -156,6 +166,21 @@ class ProjectServiceTest {
         verify(eventPublisher).publishProjectRegistered(any());
         // Workspace is cleaned up after success
         verify(repositoryIngestion).cleanup(workspace);
+    }
+
+    @Test
+    void findLatestByRepoUrl_delegates_to_repository_port() {
+        Project p = Project.createFromGit("user-1", "widgets", "k", null,
+                "https://github.com/acme/widgets.git", "main",
+                com.altrix.project.domain.model.ProjectSource.GIT_CLONE);
+        when(projectRepository.findLatestByRepoUrl("https://github.com/acme/widgets.git"))
+                .thenReturn(Optional.of(p));
+
+        Optional<Project> found = projectRepository.findLatestByRepoUrl(
+                "https://github.com/acme/widgets.git");
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getRepoUrl()).isEqualTo("https://github.com/acme/widgets.git");
     }
 
     @Test

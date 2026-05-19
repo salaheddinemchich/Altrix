@@ -28,4 +28,12 @@ public interface ProjectRepositoryPort {
 
     /** Removes the project row. Caller is responsible for removing the ZIP from object storage. */
     void deleteById(String projectId);
+
+    /**
+     * #90 — locate the most recently ingested project for a repository URL.
+     *
+     * <p>Used by webhook consumers to map a {@code migration.commit.detected}
+     * event back to the user and access token that should drive the re-clone.
+     */
+    Optional<Project> findLatestByRepoUrl(String repoUrl);
 }
