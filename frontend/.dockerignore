@@ -1,0 +1,29 @@
+# Keep the build context small + reproducible.
+
+# Dependencies — re-installed by `npm ci` inside the image
+node_modules
+npm-debug.log
+
+# Build output — produced inside the image, not on the host
+dist
+.angular
+
+# Editor / IDE / OS noise
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Docker self-reference
+Dockerfile
+.dockerignore
+
+# Tests + git history (not needed at runtime)
+coverage
+karma.conf.js
+.git
+.gitignore
+
+# Local env files — never bake secrets into an image
+.env
+.env.*
