@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { MigratedFile, MigrationPlan, PauseRecord, Session, SessionPage, SessionStatus } from '../models/session.model';
+import { FileDiff, MigratedFile, MigrationPlan, PauseRecord, Session, SessionPage, SessionStatus } from '../models/session.model';
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -21,6 +21,12 @@ export class SessionService {
 
   getFiles(sessionId: string): Observable<MigratedFile[]> {
     return this.http.get<MigratedFile[]>(`${this.base}/${sessionId}/files`);
+  }
+
+  /** #119 — fetch both sides of the diff for a single file. */
+  getFileDiff(sessionId: string, path: string): Observable<FileDiff> {
+    const params = new HttpParams().set('path', path);
+    return this.http.get<FileDiff>(`${this.base}/${sessionId}/files/diff`, { params });
   }
 
   /** Issue #123 — returns the patch URL the browser can hit directly. */

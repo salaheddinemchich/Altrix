@@ -149,18 +149,33 @@ export class DiffViewerComponent implements AfterViewInit, OnDestroy {
   private renderDiff(f: MigratedFile): void {
     if (!this.monaco || !this.diffEditor) return;
 
+    // #119 — fetch the original-side content from the backend so MODIFIED
+    // files actually show a real diff (previously the "before" pane was
+    // empty for everything except DELETED).  Render an immediate placeholder
+    // so the editor doesn't flash blank between selections.
+    this.applyToEditor(f, '', f.changeType === 'DELETED' ? '' : f.content);
+
+    this.sessApi.getFileDiff(this.sessionId(), f.newPath || f.originalPath).subscribe({
+      next: diff => {
+        // Component may have moved to a different file before the response
+        // landed — guard so we don't overwrite the new selection.
+        if (this.selected()?.newPath !== f.newPath) return;
+        this.applyToEditor(f, diff.originalContent ?? '', diff.migratedContent ?? '');
+      },
+      error: () => {
+        // Diff endpoint unavailable (no MinIO source, file not found, …) —
+        // keep the immediate placeholder; the user still sees the migrated
+        // content on the right.
+      },
+    });
+  }
+
+  /** Sets both Monaco models, disposing the previous pair to avoid leaks. */
+  private applyToEditor(f: MigratedFile, before: string, after: string): void {
+    if (!this.monaco || !this.diffEditor) return;
     const language = detectLanguage(f.newPath || f.originalPath);
-
-    // For DELETED files the "before" is the (unknown) original content and
-    // the "after" is empty — flip the panes accordingly so users see what is
-    // being removed rather than blank.
-    const beforeContent = f.changeType === 'DELETED' ? f.content : '';
-    const afterContent  = f.changeType === 'DELETED' ? ''        : f.content;
-
-    const original = this.monaco.editor.createModel(beforeContent, language);
-    const modified = this.monaco.editor.createModel(afterContent,  language);
-
-    // Dispose the previous models to avoid a memory leak between file switches.
+    const original = this.monaco.editor.createModel(before, language);
+    const modified = this.monaco.editor.createModel(after,  language);
     const old = this.diffEditor.getModel();
     this.diffEditor.setModel({ original, modified });
     old?.original.dispose();

@@ -24,4 +24,16 @@ public interface FileReaderPort {
      * @return map of relative file path → file content as UTF-8 string
      */
     Map<String, String> readAllFiles(String storageKey);
+
+    /**
+     * Reads a single file by its path inside the uploaded ZIP (#119).
+     * Used by the diff endpoint so the reviewer can see before/after side
+     * by side without loading the entire archive.
+     *
+     * @param storageKey MinIO object key of the uploaded ZIP
+     * @param path       repository-relative path of the file to read
+     * @return file content as UTF-8 string, or {@code null} if the path is
+     *         not present in the archive
+     */
+    String readSingleFile(String storageKey, String path);
 }

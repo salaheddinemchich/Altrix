@@ -1,6 +1,7 @@
 package com.altrix.orchestrator.adapter.in.rest;
 
 import com.altrix.orchestrator.adapter.in.rest.dto.EditPlanRequest;
+import com.altrix.orchestrator.adapter.in.rest.dto.FileDiffResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.PauseRecordResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionPageResponse;
@@ -12,6 +13,7 @@ import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.in.EditPlanUseCase;
 import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
+import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.domain.port.out.SessionPauseHistoryPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import jakarta.validation.Valid;
@@ -52,6 +54,7 @@ public class SessionController {
     private final EditPlanUseCase editPlan;
     private final WorkflowSessionRepository sessionRepository;
     private final SessionPauseHistoryPort pauseHistoryPort;
+    private final FileReaderPort fileReader;
 
     // ── GET ───────────────────────────────────────────────────────────────────
 
@@ -84,6 +87,50 @@ public class SessionController {
                 .map(MigratedFileResponse::from)
                 .toList();
         return ResponseEntity.ok(files);
+    }
+
+    /**
+     * GET /api/v1/sessions/{id}/files/diff?path=<originalPath> — returns both
+     * sides of the diff for a single file (#119).  Powers the Monaco diff
+     * viewer's left pane.  originalContent comes from MinIO via
+     * {@link FileReaderPort#readSingleFile(String, String)} using the
+     * storageKey on the session's plan.
+     */
+    @GetMapping("/{sessionId}/files/diff")
+    public ResponseEntity<FileDiffResponse> getFileDiff(
+            @PathVariable String sessionId,
+            @RequestParam String path
+    ) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        WorkflowSession session = sessionRepository.findById(id)
+                .orElseThrow(() -> new SessionNotFoundException(id));
+
+        var migrated = session.migratedFiles().stream()
+                .filter(f -> path.equals(f.originalPath()) || path.equals(f.newPath()))
+                .findFirst()
+                .orElse(null);
+
+        if (migrated == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // CREATED files have no original; DELETED files have no migrated.
+        boolean isCreated = "CREATED".equalsIgnoreCase(String.valueOf(migrated.changeType()));
+        boolean isDeleted = "DELETED".equalsIgnoreCase(String.valueOf(migrated.changeType()));
+
+        String originalContent = null;
+        if (!isCreated && session.plan() != null && session.plan().storageKey() != null) {
+            originalContent = fileReader.readSingleFile(session.plan().storageKey(), migrated.originalPath());
+        }
+
+        return ResponseEntity.ok(new FileDiffResponse(
+                migrated.originalPath(),
+                migrated.newPath(),
+                migrated.changeType(),
+                originalContent,
+                isDeleted ? null : migrated.content(),
+                migrated.diffSummary()
+        ));
     }
 
     /**

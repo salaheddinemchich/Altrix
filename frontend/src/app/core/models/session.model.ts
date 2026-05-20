@@ -46,6 +46,18 @@ export interface MigratedFile {
   content: string;
 }
 
+/** #119 — both sides of the diff for a single file. */
+export interface FileDiff {
+  originalPath: string;
+  newPath: string;
+  changeType: string;
+  /** null for CREATED files (nothing existed before). */
+  originalContent: string | null;
+  /** null for DELETED files (nothing remains after). */
+  migratedContent: string | null;
+  diffSummary: string | null;
+}
+
 export interface PauseRecord {
   id: number;
   pausedFrom: string;

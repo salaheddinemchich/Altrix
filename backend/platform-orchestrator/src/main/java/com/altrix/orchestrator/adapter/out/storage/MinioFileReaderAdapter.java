@@ -119,4 +119,36 @@ public class MinioFileReaderAdapter implements FileReaderPort {
         String lower = name.toLowerCase();
         return SKIP_PATH_FRAGMENTS.stream().anyMatch(lower::contains);
     }
+
+    /**
+     * Issue #119 — single-file extraction.  Streams the ZIP entry-by-entry
+     * and returns the first match, so memory usage stays O(1) per request
+     * regardless of archive size.  Reads up to a generous 1 MB cap per file
+     * (the AI-side {@link #MAX_FILE_BYTES} 32 KB cap is irrelevant here —
+     * we are serving the raw file for human review, not feeding the LLM).
+     */
+    @Override
+    public String readSingleFile(String storageKey, String path) {
+        if (path == null || path.isBlank()) return null;
+        final int diffMaxBytes = 1024 * 1024;
+
+        try (InputStream raw = minioClient.getObject(
+                GetObjectArgs.builder().bucket(bucket).object(storageKey).build());
+             ZipInputStream zip = new ZipInputStream(raw)) {
+
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (!entry.isDirectory() && path.equals(entry.getName())) {
+                    byte[] bytes = zip.readNBytes(diffMaxBytes);
+                    return new String(bytes, StandardCharsets.UTF_8);
+                }
+                zip.closeEntry();
+            }
+            return null;
+
+        } catch (Exception e) {
+            log.warn("Could not read '{}' from '{}': {}", path, storageKey, e.getMessage());
+            return null;
+        }
+    }
 }
