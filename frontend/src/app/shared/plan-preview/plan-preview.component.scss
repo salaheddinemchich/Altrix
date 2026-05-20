@@ -1,0 +1,82 @@
+.plan-card {
+  background: var(--surface, #fafafa);
+  border: 1px solid var(--border, #e5e5e5);
+  border-left: 3px solid #3b82f6;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.plan-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+
+  .meta {
+    color: var(--muted, #666);
+    font-size: 12px;
+  }
+}
+
+.risk-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  background: #e5e5e5;
+  color: #555;
+
+  &.risk-low    { background: #dcfce7; color: #166534; }
+  &.risk-medium { background: #fef3c7; color: #92400e; }
+  &.risk-high   { background: #fee2e2; color: #991b1b; }
+}
+
+.summary {
+  margin: 4px 0 8px;
+  color: var(--muted, #444);
+  font-style: italic;
+}
+
+details {
+  margin-top: 6px;
+
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 4px 0;
+    user-select: none;
+
+    &:hover { color: #3b82f6; }
+  }
+}
+
+.steps {
+  margin: 4px 0 4px 20px;
+  padding: 0;
+
+  li {
+    margin: 4px 0;
+    line-height: 1.4;
+  }
+}
+
+.files {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+
+  li {
+    font-size: 12px;
+    padding: 2px 8px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 3px;
+    margin: 2px 0;
+  }
+}

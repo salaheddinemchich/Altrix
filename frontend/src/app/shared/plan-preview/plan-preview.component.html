@@ -1,0 +1,42 @@
+<div class="plan-card">
+  <header class="plan-header">
+    <strong>AI proposed plan</strong>
+    @if (plan().targetStack) {
+      <span class="meta">→ {{ plan().targetStack }}</span>
+    }
+    @if (plan().riskLevel) {
+      <span class="risk-pill" [class]="riskClass(plan().riskLevel)">
+        risk: {{ plan().riskLevel }}
+      </span>
+    }
+    @if (plan().estimatedEffort) {
+      <span class="meta">effort: {{ plan().estimatedEffort }}</span>
+    }
+  </header>
+
+  @if (plan().summary) {
+    <p class="summary">{{ plan().summary }}</p>
+  }
+
+  @if (plan().steps.length > 0) {
+    <details open>
+      <summary>Steps ({{ plan().steps.length }})</summary>
+      <ol class="steps">
+        @for (step of plan().steps; track $index) {
+          <li>{{ step }}</li>
+        }
+      </ol>
+    </details>
+  }
+
+  @if (plan().targetFiles.length > 0) {
+    <details>
+      <summary>Files to migrate ({{ plan().targetFiles.length }})</summary>
+      <ul class="files">
+        @for (path of plan().targetFiles; track path) {
+          <li class="mono">{{ path }}</li>
+        }
+      </ul>
+    </details>
+  }
+</div>

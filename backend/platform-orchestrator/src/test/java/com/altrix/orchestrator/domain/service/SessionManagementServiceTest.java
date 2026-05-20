@@ -5,12 +5,14 @@ import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
+import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.concurrent.Executor;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,8 +29,18 @@ class SessionManagementServiceTest {
     @Mock
     WorkflowSessionRepository sessionRepository;
 
-    @InjectMocks
+    @Mock
+    ResumeMigrationUseCase resumeMigration;
+
+    /** Runs tasks synchronously so the test asserts the resume hook actually fires. */
+    final Executor resumeExecutor = Runnable::run;
+
     SessionManagementService service;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        service = new SessionManagementService(sessionRepository, resumeMigration, resumeExecutor);
+    }
 
     // ── approve ───────────────────────────────────────────────────────────────
 
@@ -44,6 +56,33 @@ class SessionManagementServiceTest {
 
         assertThat(result.status()).isEqualTo(SessionStatus.MIGRATING);
         verify(sessionRepository).save(session);
+    }
+
+    @Test
+    void approve_kicksOffTheResumePipeline() {
+        WorkflowSession session = awaitingApproval();
+        WorkflowSessionId id = session.id();
+        when(sessionRepository.findById(id)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.approve(id);
+
+        verify(resumeMigration).resume(id);
+    }
+
+    @Test
+    void approve_resumeFailure_does_not_break_approval_response() {
+        WorkflowSession session = awaitingApproval();
+        WorkflowSessionId id = session.id();
+        when(sessionRepository.findById(id)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new RuntimeException("kafka down")).when(resumeMigration).resume(id);
+
+        // Should NOT propagate the resume failure — the REST 200 has already been
+        // promised to the client; downstream failure is surfaced via WebSocket.
+        WorkflowSession result = service.approve(id);
+
+        assertThat(result.status()).isEqualTo(SessionStatus.MIGRATING);
     }
 
     @Test

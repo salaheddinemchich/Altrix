@@ -2,6 +2,7 @@ package com.altrix.orchestrator.domain.service;
 
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
+import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
@@ -85,6 +86,23 @@ public class OrchestratorService implements RunPipelineUseCase {
             session = sessionRepository.save(session);
 
             MigrationState result = workflowExecution.execute(initial);
+
+            // #10 — When workflow.require-approval.enabled is true the graph
+            // halts at END right after the planner without producing an
+            // ApprovedPlan.  Detect that here, persist the plan onto the
+            // session, transition to AWAITING_APPROVAL, and exit cleanly so
+            // the reviewer can take over via the approval REST endpoints.
+            if (isHaltedForApproval(result)) {
+                MigrationPlan plan = result.migrationPlan().orElseThrow();
+                session.completePlan(plan);
+                session.requestApproval();
+                sessionRepository.save(session);
+                progressNotifierPort.notify(jobId, "Pipeline", "AWAITING_APPROVAL",
+                        "Plan ready — awaiting human review.");
+                log.info("Pipeline halted for approval — job '{}' session '{}'",
+                        jobId, session.id());
+                return initial;
+            }
 
             List<MigratedFile> files = result.migrationArtifact()
                     .map(MigrationArtifact::files)
@@ -188,5 +206,15 @@ public class OrchestratorService implements RunPipelineUseCase {
             return ctx.detectionResult().framework().name();
         }
         return "unknown";
+    }
+
+    /**
+     * The graph produces a plan but no approved plan when it halts at the
+     * approval gate (#10) — there's no artifact / validation either.
+     */
+    private static boolean isHaltedForApproval(MigrationState state) {
+        return state.migrationPlan().isPresent()
+                && state.approvedPlan().isEmpty()
+                && state.migrationArtifact().isEmpty();
     }
 }

@@ -277,6 +277,13 @@ oauth2:
 workflow:
   auto-pause:
     threshold: ${AUTO_PAUSE_THRESHOLD:3}
+  # Issue #10 — human-in-the-loop approval gate.
+  # When true, the pipeline halts after the Migration Planner so a reviewer can
+  # inspect (and optionally edit) the plan via POST /api/v1/sessions/{id}/approve.
+  # Approval kicks off ResumeMigrationUseCase which runs migrator -> validator
+  # -> reporter on the approved plan.  Disable for batch / unattended runs.
+  require-approval:
+    enabled: ${WORKFLOW_REQUIRE_APPROVAL:true}
 
 # ── Cache TTL and health monitoring (#157) ─────────────────────────────────────
 cache:
