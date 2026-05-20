@@ -7,6 +7,7 @@ import { JobService } from '../../core/services/job.service';
 import { SessionService } from '../../core/services/session.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { PipelineGraphComponent } from '../../shared/pipeline-graph/pipeline-graph.component';
+import { SessionTimelineComponent } from '../../shared/session-timeline/session-timeline.component';
 import { AuthService } from '../../core/auth/services/auth.service';
 
 const STAGES: JobStatus[] = ['PENDING', 'ANALYZING', 'MIGRATING', 'DONE'];
@@ -14,7 +15,7 @@ const STAGES: JobStatus[] = ['PENDING', 'ANALYZING', 'MIGRATING', 'DONE'];
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [RouterLink, DatePipe, IconComponent, PipelineGraphComponent],
+  imports: [RouterLink, DatePipe, IconComponent, PipelineGraphComponent, SessionTimelineComponent],
   templateUrl: './job-detail.component.html',
   styleUrl: './job-detail.component.scss',
 })
