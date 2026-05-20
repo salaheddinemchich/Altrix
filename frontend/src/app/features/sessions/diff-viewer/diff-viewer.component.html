@@ -1,0 +1,68 @@
+<div class="diff-page">
+  <header class="diff-header">
+    <a class="back" [routerLink]="['/sessions']">
+      <app-icon name="arrow-left" [size]="14"/>
+      Back to sessions
+    </a>
+    <h2>Session diff</h2>
+    <span class="session-id">{{ sessionId() }}</span>
+    <div class="spacer"></div>
+    <div class="nav">
+      <button class="btn btn-sm" (click)="previous()"
+              [disabled]="selectedIdx() === 0"
+              title="Previous file (Alt+←)">
+        <app-icon name="arrow-left" [size]="12"/>
+      </button>
+      <button class="btn btn-sm" (click)="next()"
+              [disabled]="selectedIdx() >= files().length - 1"
+              title="Next file (Alt+→)">
+        <app-icon name="arrow-right" [size]="12"/>
+      </button>
+    </div>
+  </header>
+
+  @if (loadError()) {
+    <div class="alert alert-danger">{{ loadError() }}</div>
+  }
+
+  <div class="diff-layout">
+    <!-- ── Left: file list ─────────────────────────────────────────────── -->
+    <aside class="file-list" aria-label="Migrated files">
+      <div class="file-list-header">
+        Files <span class="count">({{ files().length }})</span>
+      </div>
+      @if (files().length === 0 && !loadError()) {
+        <div class="empty">No migrated files yet.</div>
+      }
+      <ul>
+        @for (file of files(); track file.newPath; let i = $index) {
+          <li [class.selected]="i === selectedIdx()"
+              (click)="select(i)">
+            <span class="badge" [class]="changeTypeClass(file.changeType)">
+              {{ file.changeType }}
+            </span>
+            <span class="path" [title]="file.newPath">{{ file.newPath }}</span>
+          </li>
+        }
+      </ul>
+    </aside>
+
+    <!-- ── Right: Monaco diff editor ───────────────────────────────────── -->
+    <section class="editor-pane">
+      @if (selected(); as sel) {
+        <div class="diff-meta">
+          <span class="badge" [class]="changeTypeClass(sel.changeType)">{{ sel.changeType }}</span>
+          <span class="meta-path">{{ sel.newPath }}</span>
+          @if (sel.diffSummary) {
+            <span class="meta-summary">— {{ sel.diffSummary }}</span>
+          }
+        </div>
+      }
+      <!--
+        Monaco mounts inside this host on AfterViewInit; reserved height so
+        the editor's internal layout has something measurable to fill.
+      -->
+      <div #editorHost class="editor-host"></div>
+    </section>
+  </div>
+</div>
