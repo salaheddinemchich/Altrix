@@ -1,0 +1,31 @@
+<ol class="timeline" aria-label="Session timeline">
+  @for (step of steps(); track step.id; let last = $last) {
+    <li class="step" [attr.data-status]="step.status">
+      <div class="marker">
+        <span class="dot" [class.pulse]="step.status === 'ACTIVE'">
+          <app-icon [name]="statusIcon(step.status)" [size]="12"/>
+        </span>
+        @if (!last) { <span class="connector" aria-hidden="true"></span> }
+      </div>
+
+      <div class="content">
+        <div class="row">
+          <span class="label">{{ step.label }}</span>
+          <span class="status" [attr.data-status]="step.status">{{ step.status }}</span>
+          @if (step.startedAt) {
+            <span class="elapsed">{{ elapsedLabel(step) }}</span>
+          }
+        </div>
+        <div class="description">{{ step.description }}</div>
+        @if (step.message) {
+          <div class="message">{{ step.message }}</div>
+        }
+        @if (step.lastUpdate) {
+          <div class="updated">
+            updated {{ step.lastUpdate | date:'mediumTime' }}
+          </div>
+        }
+      </div>
+    </li>
+  }
+</ol>
