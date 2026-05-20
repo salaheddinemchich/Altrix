@@ -86,6 +86,58 @@ public class SessionController {
         return ResponseEntity.ok(files);
     }
 
+    /**
+     * GET /api/v1/sessions/{id}/files/patch — exports all migrated files as a
+     * single text/plain unified-diff blob the user can pipe through
+     * {@code git apply} (#123).
+     *
+     * <p>Until the original-content endpoint (#119) lands the patch carries
+     * the migrated content as "added" lines for every file — semantically
+     * correct for {@code CREATED} files, an additions-only diff for the rest.
+     * The header comment in the response makes that explicit.
+     */
+    @GetMapping(value = "/{sessionId}/files/patch", produces = "text/plain")
+    public ResponseEntity<String> getMigratedFilesPatch(@PathVariable String sessionId) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        WorkflowSession session = sessionRepository.findById(id)
+                .orElseThrow(() -> new SessionNotFoundException(id));
+
+        StringBuilder out = new StringBuilder();
+        out.append("# Altrix migration patch — session ").append(sessionId).append('\n');
+        out.append("# Note: original-side content is not yet available (#119);\n");
+        out.append("# MODIFIED files are exported as additions-only diffs.\n\n");
+
+        for (var f : session.migratedFiles()) {
+            appendUnifiedDiff(out, f);
+        }
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"session-" + sessionId + ".patch\"")
+                .body(out.toString());
+    }
+
+    /** Emits a minimal-but-valid unified diff block for one migrated file. */
+    private static void appendUnifiedDiff(StringBuilder out, com.altrix.common.domain.model.MigratedFile f) {
+        String oldPath = f.originalPath() == null || f.originalPath().isBlank() ? "/dev/null" : "a/" + f.originalPath();
+        String newPath = f.newPath() == null      || f.newPath().isBlank()      ? "/dev/null" : "b/" + f.newPath();
+        boolean isDelete = "DELETED".equalsIgnoreCase(String.valueOf(f.changeType()));
+        boolean isCreate = "CREATED".equalsIgnoreCase(String.valueOf(f.changeType()));
+
+        out.append("diff --git ").append(oldPath).append(' ').append(newPath).append('\n');
+        out.append("--- ").append(isCreate ? "/dev/null" : oldPath).append('\n');
+        out.append("+++ ").append(isDelete ? "/dev/null" : newPath).append('\n');
+
+        String[] lines = (f.content() == null ? "" : f.content()).split("\n", -1);
+        int n = lines.length;
+        // Hunk header — single hunk covering the whole file
+        out.append("@@ -0,0 +1,").append(n).append(" @@\n");
+        char prefix = isDelete ? '-' : '+';
+        for (String line : lines) {
+            out.append(prefix).append(line).append('\n');
+        }
+        out.append('\n');
+    }
+
     // ── Pause history (#72) ───────────────────────────────────────────────────
 
     @GetMapping("/{sessionId}/pauses")

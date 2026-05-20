@@ -101,6 +101,10 @@ export class DiffViewerComponent implements AfterViewInit, OnDestroy {
     this.diffEditor?.dispose();
   }
 
+  // ── Issue #123 — .patch download helpers ───────────────────────────────
+  patchUrl(): string { return this.sessApi.patchDownloadUrl(this.sessionId()); }
+  patchFilename(): string { return `session-${this.sessionId()}.patch`; }
+
   // ── Keyboard navigation (Alt+← / Alt+→) ─────────────────────────────────
   @HostListener('window:keydown', ['$event'])
   onKey(ev: KeyboardEvent): void {

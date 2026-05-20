@@ -18,6 +18,15 @@
               title="Next file (Alt+→)">
         <app-icon name="arrow-right" [size]="12"/>
       </button>
+      <!-- #123 — download all migrated files as a .patch -->
+      <a class="btn btn-sm"
+         [href]="patchUrl()"
+         [download]="patchFilename()"
+         [class.disabled]="files().length === 0"
+         title="Download as a .patch file for git apply">
+        <app-icon name="download" [size]="12"/>
+        .patch
+      </a>
     </div>
   </header>
 

@@ -23,6 +23,11 @@ export class SessionService {
     return this.http.get<MigratedFile[]>(`${this.base}/${sessionId}/files`);
   }
 
+  /** Issue #123 — returns the patch URL the browser can hit directly. */
+  patchDownloadUrl(sessionId: string): string {
+    return `${this.base}/${sessionId}/files/patch`;
+  }
+
   getPauses(sessionId: string): Observable<PauseRecord[]> {
     return this.http.get<PauseRecord[]>(`${this.base}/${sessionId}/pauses`);
   }
