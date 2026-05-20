@@ -63,6 +63,12 @@ export const routes: Routes = [
           import('./features/sessions/sessions.component').then(m => m.SessionsComponent),
       },
       {
+        path: 'sessions/:id/files',
+        title: 'Altrix — Session diff',
+        loadComponent: () =>
+          import('./features/sessions/diff-viewer/diff-viewer.component').then(m => m.DiffViewerComponent),
+      },
+      {
         path: 'providers',
         title: 'Altrix — AI Providers',
         loadComponent: () =>

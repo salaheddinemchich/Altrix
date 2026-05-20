@@ -1,0 +1,176 @@
+// Issue #120 — diff viewer layout: full-height column with header + 2-pane row.
+
+.diff-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px); // leaves room for the shell header
+  padding: 12px;
+  gap: 12px;
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+    color: inherit;
+    opacity: 0.7;
+
+    &:hover { opacity: 1; }
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .session-id {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    opacity: 0.6;
+  }
+
+  .spacer { flex: 1; }
+
+  .nav { display: flex; gap: 6px; }
+}
+
+.alert {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+
+  &.alert-danger {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+    border: 1px solid rgba(220, 38, 38, 0.3);
+  }
+}
+
+.diff-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 12px;
+  flex: 1;
+  min-height: 0; // critical — lets the editor pane actually shrink
+}
+
+// ── Left panel: file list ───────────────────────────────────────────────
+.file-list {
+  background: var(--surface, #fafafa);
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  .file-list-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border, #e5e5e5);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+
+    .count {
+      font-weight: 400;
+      opacity: 0.6;
+    }
+  }
+
+  .empty {
+    padding: 16px 12px;
+    font-size: 13px;
+    opacity: 0.6;
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border, #f0f0f0);
+    font-size: 12px;
+
+    &:hover { background: rgba(0, 0, 0, 0.03); }
+
+    &.selected {
+      background: rgba(59, 130, 246, 0.12);
+      border-left: 3px solid #3b82f6;
+      padding-left: 9px;
+    }
+
+    .path {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: ui-monospace, monospace;
+    }
+  }
+}
+
+// Change-type badges — colour-coded so users can scan the file list at a glance
+.badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #e5e5e5;
+  color: #555;
+
+  &.created  { background: #dcfce7; color: #166534; }
+  &.modified { background: #fef3c7; color: #92400e; }
+  &.deleted  { background: #fee2e2; color: #991b1b; }
+}
+
+// ── Right panel: Monaco diff editor ─────────────────────────────────────
+.editor-pane {
+  background: var(--surface, #fafafa);
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.diff-meta {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #e5e5e5);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+
+  .meta-path {
+    font-family: ui-monospace, monospace;
+    font-weight: 500;
+  }
+
+  .meta-summary { opacity: 0.6; }
+}
+
+.editor-host {
+  flex: 1;
+  min-height: 0; // again, critical for Monaco's automaticLayout to size correctly
+  width: 100%;
+}

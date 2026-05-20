@@ -89,6 +89,14 @@
               </td>
             }
             <td class="row-action">
+              <a class="btn btn-sm"
+                 [routerLink]="['/sessions', s.sessionId, 'files']"
+                 (click)="$event.stopPropagation()"
+                 title="View migrated file diff"
+                 aria-label="View diff">
+                <app-icon name="layers" [size]="13"/>
+                Diff
+              </a>
               <button class="btn btn-sm btn-danger"
                       (click)="delete(s); $event.stopPropagation()"
                       title="Delete session"
