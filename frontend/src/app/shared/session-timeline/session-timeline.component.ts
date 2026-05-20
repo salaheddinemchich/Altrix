@@ -51,6 +51,55 @@ export class SessionTimelineComponent implements OnDestroy {
     this.steps().some(s => s.status === 'ACTIVE')
   );
 
+  // ── Issue #115 — overall progress + ETA ─────────────────────────────────
+
+  /**
+   * Done steps count fully; an ACTIVE step counts as half-done so the bar
+   * advances during a long agent run instead of jumping in 20% chunks.
+   */
+  readonly percentComplete = computed(() => {
+    const list = this.steps();
+    if (list.length === 0) return 0;
+    const score = list.reduce((sum, s) => {
+      if (s.status === 'DONE')   return sum + 1;
+      if (s.status === 'ACTIVE') return sum + 0.5;
+      return sum;
+    }, 0);
+    return Math.round((score / list.length) * 100);
+  });
+
+  /**
+   * Heuristic ETA derived from observed runtimes on this run:
+   *   avg(elapsed of DONE steps) × remaining (PENDING + ACTIVE) steps.
+   * Returns null when no step has completed yet (no signal to project from).
+   */
+  readonly etaSeconds = computed<number | null>(() => {
+    const list = this.steps();
+    const now  = this.now();
+    const completed = list.filter(s => s.status === 'DONE' && s.startedAt && s.endedAt);
+    if (completed.length === 0) return null;
+
+    const avgMs = completed.reduce((sum, s) => sum + (s.endedAt! - s.startedAt!), 0) / completed.length;
+    const remaining = list.filter(s => s.status === 'PENDING' || s.status === 'ACTIVE').length;
+    if (remaining === 0) return 0;
+
+    // Subtract elapsed-so-far on any ACTIVE step from the projection so the
+    // ETA shrinks while we watch it.
+    const activeElapsed = list
+      .filter(s => s.status === 'ACTIVE' && s.startedAt)
+      .reduce((sum, s) => sum + (now - s.startedAt!), 0);
+
+    const projectedMs = Math.max(0, avgMs * remaining - activeElapsed);
+    return Math.round(projectedMs / 1000);
+  });
+
+  etaLabel(): string | null {
+    const s = this.etaSeconds();
+    if (s === null) return null;
+    if (s === 0)    return 'almost done';
+    return '~' + formatDuration(s * 1000) + ' remaining';
+  }
+
   private sub: Subscription | null = null;
 
   constructor() {

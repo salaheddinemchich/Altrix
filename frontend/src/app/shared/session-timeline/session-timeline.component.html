@@ -1,3 +1,18 @@
+<!-- #115 — overall progress bar + heuristic ETA -->
+<div class="progress" aria-label="Overall pipeline progress">
+  <div class="progress-meta">
+    <span class="pct">{{ percentComplete() }}%</span>
+    @if (etaLabel(); as eta) {
+      <span class="eta">{{ eta }}</span>
+    }
+  </div>
+  <div class="progress-track" role="progressbar"
+       [attr.aria-valuenow]="percentComplete()"
+       aria-valuemin="0" aria-valuemax="100">
+    <div class="progress-fill" [style.width.%]="percentComplete()"></div>
+  </div>
+</div>
+
 <ol class="timeline" aria-label="Session timeline">
   @for (step of steps(); track step.id; let last = $last) {
     <li class="step" [attr.data-status]="step.status">
