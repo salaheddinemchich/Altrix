@@ -207,6 +207,24 @@ public class WorkflowSession {
         this.migratedFiles = files != null ? List.copyOf(files) : List.of();
     }
 
+    /**
+     * Reviewer override of the AI-proposed plan (#10 follow-up).
+     *
+     * <p>Allowed only at the approval gate so an in-flight migration cannot
+     * have its plan swapped underneath it.  Status is not changed by this
+     * call — the reviewer still needs to Approve / Reject afterwards.  The
+     * existing migrator path then picks up {@link #plan()} verbatim when the
+     * resume kicks off.
+     */
+    public void updatePlan(MigrationPlan editedPlan) {
+        Objects.requireNonNull(editedPlan, "editedPlan must not be null");
+        if (status != SessionStatus.PLAN_READY && status != SessionStatus.AWAITING_APPROVAL) {
+            throw new IllegalStateTransitionException(status, status);
+        }
+        this.plan = editedPlan;
+        this.updatedAt = Instant.now();
+    }
+
     // ── Event drain ───────────────────────────────────────────────────────────
 
     /**

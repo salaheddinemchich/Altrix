@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/services/auth.service';
-import { Session, SessionStatus } from '../../core/models/session.model';
+import { MigrationPlan, Session, SessionStatus } from '../../core/models/session.model';
 import { SessionService } from '../../core/services/session.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { PlanPreviewComponent } from '../../shared/plan-preview/plan-preview.component';
@@ -29,6 +29,8 @@ export class SessionsComponent {
   readonly total        = signal<number>(0);
   readonly loadError    = signal<string | null>(null);
   readonly actionError  = signal<string | null>(null);
+  /** sessionId currently being PATCHed (#10 plan editing) so the Save button can disable. */
+  readonly savingPlan   = signal<string | null>(null);
 
   readonly visible = computed(() => {
     const all = this.sessions() ?? [];
@@ -91,6 +93,19 @@ export class SessionsComponent {
       next: () => this.sessions.update(list =>
         list ? list.filter(s => s.sessionId !== session.sessionId) : list),
       error: err => this.actionError.set(err?.message ?? 'Delete failed'),
+    });
+  }
+
+  /** #10 follow-up — PATCH the AI plan with the reviewer's edits. */
+  savePlan(session: Session, edited: MigrationPlan): void {
+    this.actionError.set(null);
+    this.savingPlan.set(session.sessionId);
+    this.sessApi.editPlan(session.sessionId, edited).subscribe({
+      next:  updated => { this.patchSession(updated); this.savingPlan.set(null); },
+      error: err     => {
+        this.actionError.set(err?.message ?? 'Plan edit failed');
+        this.savingPlan.set(null);
+      },
     });
   }
 

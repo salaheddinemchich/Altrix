@@ -1,42 +1,117 @@
 <div class="plan-card">
-  <header class="plan-header">
-    <strong>AI proposed plan</strong>
-    @if (plan().targetStack) {
-      <span class="meta">→ {{ plan().targetStack }}</span>
-    }
-    @if (plan().riskLevel) {
-      <span class="risk-pill" [class]="riskClass(plan().riskLevel)">
-        risk: {{ plan().riskLevel }}
-      </span>
-    }
-    @if (plan().estimatedEffort) {
-      <span class="meta">effort: {{ plan().estimatedEffort }}</span>
-    }
-  </header>
 
-  @if (plan().summary) {
-    <p class="summary">{{ plan().summary }}</p>
+  @if (mode() === 'view') {
+    <!-- ── Read-only header ──────────────────────────────────────────────── -->
+    <header class="plan-header">
+      <strong>AI proposed plan</strong>
+      @if (plan().targetStack) {
+        <span class="meta">→ {{ plan().targetStack }}</span>
+      }
+      @if (plan().riskLevel) {
+        <span class="risk-pill" [class]="riskClass(plan().riskLevel)">
+          risk: {{ plan().riskLevel }}
+        </span>
+      }
+      @if (plan().estimatedEffort) {
+        <span class="meta">effort: {{ plan().estimatedEffort }}</span>
+      }
+      @if (editable()) {
+        <button class="btn btn-sm" (click)="startEdit()" title="Override the AI plan">
+          Edit plan
+        </button>
+      }
+    </header>
+
+    @if (plan().summary) {
+      <p class="summary">{{ plan().summary }}</p>
+    }
+
+    @if (plan().steps.length > 0) {
+      <details open>
+        <summary>Steps ({{ plan().steps.length }})</summary>
+        <ol class="steps">
+          @for (step of plan().steps; track $index) {
+            <li>{{ step }}</li>
+          }
+        </ol>
+      </details>
+    }
+
+    @if (plan().targetFiles.length > 0) {
+      <details>
+        <summary>Files to migrate ({{ plan().targetFiles.length }})</summary>
+        <ul class="files">
+          @for (path of plan().targetFiles; track path) {
+            <li class="mono">{{ path }}</li>
+          }
+        </ul>
+      </details>
+    }
+
+  } @else {
+    <!-- ── Editor ────────────────────────────────────────────────────────── -->
+    <header class="plan-header">
+      <strong>Edit migration plan</strong>
+      <span class="meta">— overrides the AI proposal, runs on approve</span>
+    </header>
+
+    <div class="edit-grid">
+      <label>
+        <span class="lbl">Target stack</span>
+        <input type="text" [ngModel]="draftStack()"
+               (ngModelChange)="draftStack.set($event)"
+               placeholder="e.g. Spring Boot 3 + Apache Kafka">
+      </label>
+
+      <label>
+        <span class="lbl">Risk level</span>
+        <select [ngModel]="draftRisk()"
+                (ngModelChange)="draftRisk.set($event)">
+          <option value="">—</option>
+          <option value="LOW">LOW</option>
+          <option value="MEDIUM">MEDIUM</option>
+          <option value="HIGH">HIGH</option>
+        </select>
+      </label>
+
+      <label>
+        <span class="lbl">Estimated effort</span>
+        <input type="text" [ngModel]="draftEffort()"
+               (ngModelChange)="draftEffort.set($event)"
+               placeholder="e.g. 3–5 days">
+      </label>
+    </div>
+
+    <label class="full">
+      <span class="lbl">Summary</span>
+      <textarea rows="2" [ngModel]="draftSummary()"
+                (ngModelChange)="draftSummary.set($event)"
+                placeholder="One-paragraph summary of what the migration will do."></textarea>
+    </label>
+
+    <label class="full">
+      <span class="lbl">Steps ({{ draftStepCount() }}) — one per line</span>
+      <textarea rows="6" [ngModel]="draftSteps()"
+                (ngModelChange)="draftSteps.set($event)"
+                placeholder="Add or remove migration steps, one per line."></textarea>
+    </label>
+
+    <label class="full">
+      <span class="lbl">Files to migrate ({{ draftFileCount() }}) — one per line</span>
+      <textarea rows="6" [ngModel]="draftFiles()"
+                (ngModelChange)="draftFiles.set($event)"
+                placeholder="Repository-relative file paths the migrator should rewrite."></textarea>
+    </label>
+
+    <div class="editor-actions">
+      <button class="btn" (click)="cancelEdit()" [disabled]="saving()">
+        Cancel
+      </button>
+      <button class="btn btn-gold" (click)="save()" [disabled]="saving()">
+        <app-icon name="check" [size]="12"/>
+        @if (saving()) { Saving… } @else { Save plan }
+      </button>
+    </div>
   }
 
-  @if (plan().steps.length > 0) {
-    <details open>
-      <summary>Steps ({{ plan().steps.length }})</summary>
-      <ol class="steps">
-        @for (step of plan().steps; track $index) {
-          <li>{{ step }}</li>
-        }
-      </ol>
-    </details>
-  }
-
-  @if (plan().targetFiles.length > 0) {
-    <details>
-      <summary>Files to migrate ({{ plan().targetFiles.length }})</summary>
-      <ul class="files">
-        @for (path of plan().targetFiles; track path) {
-          <li class="mono">{{ path }}</li>
-        }
-      </ul>
-    </details>
-  }
 </div>

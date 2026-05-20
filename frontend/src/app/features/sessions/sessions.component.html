@@ -109,7 +109,11 @@
           @if (s.status === 'AWAITING_APPROVAL' && s.plan) {
             <tr class="plan-row">
               <td [attr.colspan]="auth.isAdmin() ? 6 : 5">
-                <app-plan-preview [plan]="s.plan"/>
+                <app-plan-preview
+                  [plan]="s.plan"
+                  [editable]="auth.isAdmin()"
+                  [saving]="savingPlan() === s.sessionId"
+                  (planSaved)="savePlan(s, $event)"/>
               </td>
             </tr>
           }
