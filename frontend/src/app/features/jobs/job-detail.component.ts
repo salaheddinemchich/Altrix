@@ -1,9 +1,10 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, OnDestroy, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Job, JobStatus } from '../../core/models/job.model';
 import { Session } from '../../core/models/session.model';
 import { JobService } from '../../core/services/job.service';
+import { PipelineService } from '../../core/services/pipeline.service';
 import { SessionService } from '../../core/services/session.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { PipelineGraphComponent } from '../../shared/pipeline-graph/pipeline-graph.component';
@@ -19,9 +20,10 @@ const STAGES: JobStatus[] = ['PENDING', 'ANALYZING', 'MIGRATING', 'DONE'];
   templateUrl: './job-detail.component.html',
   styleUrl: './job-detail.component.scss',
 })
-export class JobDetailComponent implements OnInit {
+export class JobDetailComponent implements OnInit, OnDestroy {
   private readonly jobsApi    = inject(JobService);
   private readonly sessionApi = inject(SessionService);
+  private readonly pipelineApi = inject(PipelineService);
   protected readonly auth     = inject(AuthService);
 
   readonly id = input.required<string>();
@@ -29,6 +31,16 @@ export class JobDetailComponent implements OnInit {
   readonly job       = signal<Job | null>(null);
   readonly loadError = signal<string | null>(null);
   readonly session   = signal<Session | null>(null);
+  /** Hide the polling banner when the user dismisses it (#118). */
+  readonly bannerDismissed = signal<boolean>(false);
+
+  /** Issue #118 — exposed to the template so a banner can react to it. */
+  readonly wsState = this.pipelineApi.connectionState;
+  readonly pollingActive = computed(() =>
+    this.wsState() === 'unavailable' && !this.bannerDismissed());
+
+  /** Active polling handle so we can clear on destroy / terminal state. */
+  private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   readonly stages = STAGES;
 
@@ -42,7 +54,45 @@ export class JobDetailComponent implements OnInit {
     return STAGES.indexOf(s as JobStatus);
   });
 
+  constructor() {
+    // #118 — when the WS gives up, start polling the job every 10s until it
+    // reaches a terminal state.  The effect re-evaluates whenever wsState
+    // flips, so a reconnect (via retryConnection) cleanly stops polling.
+    effect(() => {
+      const state = this.wsState();
+      const status = this.job()?.status;
+      const terminal = status === 'DONE' || status === 'FAILED';
+
+      if (state === 'unavailable' && !terminal && !this.pollHandle) {
+        this.startPolling();
+      } else if ((state === 'connected' || terminal) && this.pollHandle) {
+        this.stopPolling();
+      }
+    });
+  }
+
   ngOnInit(): void { this.load(); }
+
+  ngOnDestroy(): void { this.stopPolling(); }
+
+  dismissBanner(): void { this.bannerDismissed.set(true); }
+
+  retryWebSocket(): void {
+    this.bannerDismissed.set(false);
+    this.pipelineApi.retryConnection();
+  }
+
+  private startPolling(): void {
+    // 10 second cadence per #118 acceptance criteria
+    this.pollHandle = setInterval(() => this.load(), 10_000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollHandle) {
+      clearInterval(this.pollHandle);
+      this.pollHandle = null;
+    }
+  }
 
   load(): void {
     this.loadError.set(null);
