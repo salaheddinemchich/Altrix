@@ -3,6 +3,23 @@
   Back to jobs
 </a>
 
+<!-- #118 — WebSocket fell back to polling -->
+@if (pollingActive()) {
+  <div class="banner banner-warn">
+    <app-icon name="alert" [size]="14"/>
+    <span class="banner-msg">
+      Live updates unavailable — refreshing every 10 s.
+    </span>
+    <button class="btn btn-sm" (click)="retryWebSocket()" title="Retry WebSocket">
+      <app-icon name="refresh" [size]="12"/>
+      Retry live
+    </button>
+    <button class="btn btn-sm" (click)="dismissBanner()" title="Dismiss" aria-label="Dismiss banner">
+      <app-icon name="x" [size]="12"/>
+    </button>
+  </div>
+}
+
 @if (loadError(); as err) {
   <div class="empty" style="margin-top:16px">
     <app-icon name="alert" [size]="28"/>
