@@ -81,9 +81,18 @@ public class OrchestratorService implements RunPipelineUseCase {
             progressNotifierPort.notify(jobId, "RAG Indexer", "DONE", null);
 
             // ── Phase 1–5: typed agent workflow ─────────────────────────────
+            // Bug fix: previously this called session.startMigration() upfront
+            // which left the session stuck in MIGRATING — that broke #10's
+            // halt path because completePlan + requestApproval require
+            // CONTEXT_ANALYSED / PLAN_READY.  Walk the state machine for real
+            // now: PENDING → CONTEXT_ANALYSED → (post-workflow transitions
+            // either to AWAITING_APPROVAL when halting, or MIGRATING → DONE
+            // when running to completion).
             jobStatusUpdatePort.markAnalyzing(jobId);
-            session.startMigration();
-            session = sessionRepository.save(session);
+            if (session.status() == com.altrix.orchestrator.domain.model.session.SessionStatus.PENDING) {
+                session.beginContextAnalysis();
+                session = sessionRepository.save(session);
+            }
 
             MigrationState result = workflowExecution.execute(initial);
 
@@ -94,8 +103,8 @@ public class OrchestratorService implements RunPipelineUseCase {
             // the reviewer can take over via the approval REST endpoints.
             if (isHaltedForApproval(result)) {
                 MigrationPlan plan = result.migrationPlan().orElseThrow();
-                session.completePlan(plan);
-                session.requestApproval();
+                session.completePlan(plan);     // CONTEXT_ANALYSED → PLAN_READY
+                session.requestApproval();      // PLAN_READY → AWAITING_APPROVAL
                 sessionRepository.save(session);
                 progressNotifierPort.notify(jobId, "Pipeline", "AWAITING_APPROVAL",
                         "Plan ready — awaiting human review.");
@@ -115,9 +124,15 @@ public class OrchestratorService implements RunPipelineUseCase {
             String outputKey = migratedFileStoragePort.storeMigratedZip(jobId, files);
             cachePlanBestEffort(initial, files);
 
+            // Walk the state machine for the auto-approval / no-halt path too:
+            // we are at CONTEXT_ANALYSED, need to record the plan + reach DONE.
+            result.migrationPlan().ifPresent(session::completePlan);   // → PLAN_READY
+            if (session.status() == com.altrix.orchestrator.domain.model.session.SessionStatus.PLAN_READY) {
+                session.startMigration();                              // → MIGRATING
+            }
             session.resetAgentErrors();
             session.storeMigratedFiles(files);
-            session.complete();
+            session.complete();                                        // → DONE
             sessionRepository.save(session);
 
             jobStatusUpdatePort.markDone(jobId, outputKey);
