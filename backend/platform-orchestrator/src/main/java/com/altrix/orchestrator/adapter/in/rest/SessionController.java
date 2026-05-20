@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.adapter.in.rest;
 
+import com.altrix.orchestrator.adapter.in.rest.dto.EditPlanRequest;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.PauseRecordResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionPageResponse;
@@ -8,10 +9,12 @@ import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
+import com.altrix.orchestrator.domain.port.in.EditPlanUseCase;
 import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
 import com.altrix.orchestrator.domain.port.out.SessionPauseHistoryPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -46,6 +49,7 @@ public class SessionController {
 
     private final HandleApprovalUseCase handleApproval;
     private final PauseResumeSessionUseCase pauseResume;
+    private final EditPlanUseCase editPlan;
     private final WorkflowSessionRepository sessionRepository;
     private final SessionPauseHistoryPort pauseHistoryPort;
 
@@ -100,6 +104,22 @@ public class SessionController {
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<SessionStatusResponse> approve(@PathVariable String sessionId) {
         WorkflowSession session = handleApproval.approve(toId(sessionId));
+        return ResponseEntity.ok(SessionStatusResponse.from(session));
+    }
+
+    /**
+     * PATCH /api/v1/sessions/{sessionId}/plan — reviewer overrides the AI's
+     * proposed plan before approving (#10 follow-up).  Allowed only at the
+     * approval gate (PLAN_READY / AWAITING_APPROVAL); the next call to
+     * approve runs the migrator against the edited plan automatically.
+     */
+    @PatchMapping("/{sessionId}/plan")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<SessionStatusResponse> editSessionPlan(
+            @PathVariable String sessionId,
+            @Valid @RequestBody EditPlanRequest body
+    ) {
+        WorkflowSession session = editPlan.editPlan(toId(sessionId), body.toEditedPlan());
         return ResponseEntity.ok(SessionStatusResponse.from(session));
     }
 

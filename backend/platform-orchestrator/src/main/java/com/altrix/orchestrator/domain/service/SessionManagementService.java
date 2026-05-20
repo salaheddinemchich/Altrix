@@ -1,9 +1,11 @@
 package com.altrix.orchestrator.domain.service;
 
+import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
+import com.altrix.orchestrator.domain.port.in.EditPlanUseCase;
 import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
 import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
@@ -26,7 +28,7 @@ import java.util.concurrent.Executor;
 @Slf4j
 @RequiredArgsConstructor
 public class SessionManagementService
-        implements HandleApprovalUseCase, PauseResumeSessionUseCase {
+        implements HandleApprovalUseCase, PauseResumeSessionUseCase, EditPlanUseCase {
 
     private final WorkflowSessionRepository sessionRepository;
     /** Triggered after the approve transition succeeds — runs the rest of the pipeline (#10). */
@@ -66,6 +68,35 @@ public class SessionManagementService
         session.fail(reason);
         WorkflowSession saved = sessionRepository.save(session);
         log.info("Plan rejected — session '{}' → FAILED (reason: {})", sessionId, reason);
+        return saved;
+    }
+
+    // ── EditPlanUseCase (#10 follow-up) ───────────────────────────────────────
+
+    @Override
+    public WorkflowSession editPlan(WorkflowSessionId sessionId, MigrationPlan editedPlan) {
+        WorkflowSession session = load(sessionId);
+        if (session.plan() == null) {
+            throw new IllegalStateException(
+                    "Cannot edit plan for session " + sessionId + " — no AI plan stored yet");
+        }
+        // Preserve internal fields the reviewer should never override (storageKey,
+        // projectId) by merging onto the existing plan.  This keeps the
+        // downstream migrator's MinIO reference intact.
+        MigrationPlan merged = new MigrationPlan(
+                session.plan().projectId(),
+                session.plan().storageKey(),
+                editedPlan.targetStack(),
+                editedPlan.steps(),
+                editedPlan.riskLevel(),
+                editedPlan.estimatedEffort(),
+                editedPlan.summary(),
+                editedPlan.targetFiles()
+        );
+        session.updatePlan(merged);
+        WorkflowSession saved = sessionRepository.save(session);
+        log.info("Plan edited by reviewer — session '{}' ({} steps, {} target files)",
+                sessionId, merged.steps().size(), merged.targetFiles().size());
         return saved;
     }
 

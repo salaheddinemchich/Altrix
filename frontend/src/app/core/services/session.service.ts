@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { MigratedFile, PauseRecord, Session, SessionPage, SessionStatus } from '../models/session.model';
+import { MigratedFile, MigrationPlan, PauseRecord, Session, SessionPage, SessionStatus } from '../models/session.model';
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -29,6 +29,11 @@ export class SessionService {
 
   approve(sessionId: string): Observable<Session> {
     return this.http.post<Session>(`${this.base}/${sessionId}/approve`, {});
+  }
+
+  /** Issue #10 follow-up — reviewer overrides the AI plan before approving. */
+  editPlan(sessionId: string, plan: MigrationPlan): Observable<Session> {
+    return this.http.patch<Session>(`${this.base}/${sessionId}/plan`, plan);
   }
 
   reject(sessionId: string, reason = 'Rejected by reviewer'): Observable<Session> {
