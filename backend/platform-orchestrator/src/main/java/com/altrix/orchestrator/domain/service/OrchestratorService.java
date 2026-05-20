@@ -96,6 +96,14 @@ public class OrchestratorService implements RunPipelineUseCase {
 
             MigrationState result = workflowExecution.execute(initial);
 
+            // Re-fetch the session here so we hold the latest @Version before
+            // applying the post-execute transitions.  Without this, anything
+            // that bumped the row during workflow.execute() (event listeners,
+            // schedulers, retries) leaves our in-memory copy stale and the
+            // next save throws StaleObjectStateException — the
+            // pre-existing optimistic-lock collision noted in HANDOFF.md.
+            session = sessionRepository.findById(session.id()).orElse(session);
+
             // #10 — When workflow.require-approval.enabled is true the graph
             // halts at END right after the planner without producing an
             // ApprovedPlan.  Detect that here, persist the plan onto the
@@ -103,8 +111,12 @@ public class OrchestratorService implements RunPipelineUseCase {
             // the reviewer can take over via the approval REST endpoints.
             if (isHaltedForApproval(result)) {
                 MigrationPlan plan = result.migrationPlan().orElseThrow();
-                session.completePlan(plan);     // CONTEXT_ANALYSED → PLAN_READY
-                session.requestApproval();      // PLAN_READY → AWAITING_APPROVAL
+                if (session.status() == com.altrix.orchestrator.domain.model.session.SessionStatus.CONTEXT_ANALYSED) {
+                    session.completePlan(plan);     // CONTEXT_ANALYSED → PLAN_READY
+                }
+                if (session.status() == com.altrix.orchestrator.domain.model.session.SessionStatus.PLAN_READY) {
+                    session.requestApproval();      // PLAN_READY → AWAITING_APPROVAL
+                }
                 sessionRepository.save(session);
                 progressNotifierPort.notify(jobId, "Pipeline", "AWAITING_APPROVAL",
                         "Plan ready — awaiting human review.");
@@ -126,13 +138,23 @@ public class OrchestratorService implements RunPipelineUseCase {
 
             // Walk the state machine for the auto-approval / no-halt path too:
             // we are at CONTEXT_ANALYSED, need to record the plan + reach DONE.
-            result.migrationPlan().ifPresent(session::completePlan);   // → PLAN_READY
-            if (session.status() == com.altrix.orchestrator.domain.model.session.SessionStatus.PLAN_READY) {
-                session.startMigration();                              // → MIGRATING
+            // Each transition is guarded so a retry / re-fetched state that has
+            // already advanced doesn't try to repeat itself.
+            var contextAnalysed = com.altrix.orchestrator.domain.model.session.SessionStatus.CONTEXT_ANALYSED;
+            var planReady       = com.altrix.orchestrator.domain.model.session.SessionStatus.PLAN_READY;
+            var migrating       = com.altrix.orchestrator.domain.model.session.SessionStatus.MIGRATING;
+
+            if (session.status() == contextAnalysed) {
+                result.migrationPlan().ifPresent(session::completePlan);  // → PLAN_READY
+            }
+            if (session.status() == planReady) {
+                session.startMigration();                                 // → MIGRATING
             }
             session.resetAgentErrors();
             session.storeMigratedFiles(files);
-            session.complete();                                        // → DONE
+            if (session.status() == migrating) {
+                session.complete();                                       // → DONE
+            }
             sessionRepository.save(session);
 
             jobStatusUpdatePort.markDone(jobId, outputKey);
