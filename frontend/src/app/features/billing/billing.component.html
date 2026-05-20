@@ -1,12 +1,29 @@
 <div class="page-header">
   <div>
     <h1>Billing & Usage</h1>
-    <p class="muted">AI token consumption and cost breakdown for the current billing period.</p>
+    <p class="muted">AI token consumption and cost breakdown — filter by time period.</p>
   </div>
-  <button class="btn" (click)="load()">
-    <app-icon name="refresh" [size]="15"/>
-    Refresh
-  </button>
+  <div style="display:flex; gap:8px">
+    <button class="btn" (click)="exportCsv()"
+            [disabled]="!usage() || usage()!.length === 0"
+            title="Download usage table as CSV">
+      <app-icon name="download" [size]="15"/>
+      Export CSV
+    </button>
+    <button class="btn" (click)="setPeriod(period())">
+      <app-icon name="refresh" [size]="15"/>
+      Refresh
+    </button>
+  </div>
+</div>
+
+<!-- #153 — period selector chips -->
+<div class="filters" style="margin-bottom:16px">
+  @for (p of periods; track p.key) {
+    <button class="chip" [class.active]="period() === p.key" (click)="setPeriod(p.key)">
+      {{ p.label }}
+    </button>
+  }
 </div>
 
 @if (error(); as err) {
