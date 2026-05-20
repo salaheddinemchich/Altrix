@@ -2,6 +2,7 @@ package com.altrix.orchestrator.infrastructure.config;
 
 import com.altrix.common.domain.model.*;
 import com.altrix.common.domain.port.MigrationAgent;
+import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
 import com.altrix.orchestrator.domain.port.out.*;
 import com.altrix.orchestrator.domain.service.*;
 import com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory;
@@ -16,9 +17,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 
 @Configuration
 @EnableAsync
@@ -37,11 +40,12 @@ public class BeanConfig {
             @Qualifier("reportGeneratorAgent") MigrationAgent<WorkflowOutcome, MigrationReport> reporter,
             ProgressNotifierPort progressNotifier,
             BaseCheckpointSaver checkpointSaver,
-            RetryContextBuilder retryContextBuilder
+            RetryContextBuilder retryContextBuilder,
+            @Value("${workflow.require-approval.enabled:true}") boolean requireApproval
     ) {
         return new MigrationWorkflowGraph(
                 contextAnalyzer, planner, migrator, validator, reporter,
-                progressNotifier, checkpointSaver, retryContextBuilder);
+                progressNotifier, checkpointSaver, retryContextBuilder, requireApproval);
     }
 
     @Bean
@@ -93,9 +97,47 @@ public class BeanConfig {
 
     @Bean
     public SessionManagementService sessionManagementService(
-            WorkflowSessionRepository workflowSessionRepository
+            WorkflowSessionRepository workflowSessionRepository,
+            ResumeMigrationUseCase resumeMigration,
+            @Qualifier("approvalResumeExecutor") Executor resumeExecutor
     ) {
-        return new SessionManagementService(workflowSessionRepository);
+        return new SessionManagementService(workflowSessionRepository, resumeMigration, resumeExecutor);
+    }
+
+    /**
+     * Pool that runs the migrator → validator → reporter continuation after a
+     * reviewer approves the plan (#10).  Sized small intentionally: each task
+     * holds a heavyweight AI call, so we bound concurrency to avoid hammering
+     * provider rate limits.  Bounded queue + caller-runs policy ensures
+     * back-pressure surfaces to the approve REST call rather than silently
+     * dropping work.
+     */
+    @Bean("approvalResumeExecutor")
+    public Executor approvalResumeExecutor() {
+        ThreadPoolTaskExecutor exec = new ThreadPoolTaskExecutor();
+        exec.setCorePoolSize(2);
+        exec.setMaxPoolSize(4);
+        exec.setQueueCapacity(20);
+        exec.setThreadNamePrefix("approval-resume-");
+        exec.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        exec.initialize();
+        return exec;
+    }
+
+    @Bean
+    public ResumeMigrationUseCase resumeMigrationService(
+            WorkflowSessionRepository workflowSessionRepository,
+            @Qualifier("typedCoreMigratorAgent") MigrationAgent<ApprovedPlan, MigrationArtifact> migrator,
+            @Qualifier("sandboxValidatorAgent") MigrationAgent<MigrationArtifact, ValidationReport> validator,
+            @Qualifier("reportGeneratorAgent") MigrationAgent<WorkflowOutcome, MigrationReport> reporter,
+            MigratedFileStoragePort migratedFileStoragePort,
+            JobStatusUpdatePort jobStatusUpdatePort,
+            ProgressNotifierPort progressNotifierPort
+    ) {
+        return new ResumeMigrationService(
+                workflowSessionRepository,
+                migrator, validator, reporter,
+                migratedFileStoragePort, jobStatusUpdatePort, progressNotifierPort);
     }
 
     @Bean

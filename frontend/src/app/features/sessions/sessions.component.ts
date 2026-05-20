@@ -5,6 +5,7 @@ import { AuthService } from '../../core/auth/services/auth.service';
 import { Session, SessionStatus } from '../../core/models/session.model';
 import { SessionService } from '../../core/services/session.service';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { PlanPreviewComponent } from '../../shared/plan-preview/plan-preview.component';
 
 const STATUS_FILTERS: ReadonlyArray<SessionStatus | 'ALL'> = [
   'ALL', 'PENDING', 'CONTEXT_ANALYSED', 'PLAN_READY',
@@ -14,7 +15,7 @@ const STATUS_FILTERS: ReadonlyArray<SessionStatus | 'ALL'> = [
 @Component({
   selector: 'app-sessions',
   standalone: true,
-  imports: [DatePipe, RouterLink, IconComponent],
+  imports: [DatePipe, RouterLink, IconComponent, PlanPreviewComponent],
   templateUrl: './sessions.component.html',
   styleUrl: './sessions.component.scss',
 })

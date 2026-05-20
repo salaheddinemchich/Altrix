@@ -6,12 +6,14 @@ import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
+import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
  * Domain service that handles session lifecycle operations driven by external actors:
@@ -27,6 +29,10 @@ public class SessionManagementService
         implements HandleApprovalUseCase, PauseResumeSessionUseCase {
 
     private final WorkflowSessionRepository sessionRepository;
+    /** Triggered after the approve transition succeeds — runs the rest of the pipeline (#10). */
+    private final ResumeMigrationUseCase resumeMigration;
+    /** Hands off the resume work so the REST call returns quickly. */
+    private final Executor resumeExecutor;
 
     // ── HandleApprovalUseCase ─────────────────────────────────────────────────
 
@@ -36,6 +42,21 @@ public class SessionManagementService
         session.startMigration();
         WorkflowSession saved = sessionRepository.save(session);
         log.info("Plan approved — session '{}' → MIGRATING", sessionId);
+
+        // Kick off migrator → validator → reporter asynchronously so the HTTP
+        // call returns immediately; progress streams over the existing STOMP
+        // topic /topic/jobs/{jobId}.
+        resumeExecutor.execute(() -> {
+            try {
+                resumeMigration.resume(sessionId);
+            } catch (RuntimeException e) {
+                // ResumeMigrationService already marks the session FAILED and
+                // notifies the client on its own; catch here only so the
+                // executor's uncaught-exception handler does not spam the log.
+                log.error("Resume task threw for session '{}': {}", sessionId, e.getMessage(), e);
+            }
+        });
+
         return saved;
     }
 

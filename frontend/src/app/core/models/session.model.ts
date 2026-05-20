@@ -9,6 +9,15 @@ export type SessionStatus =
   | 'FAILED'
   | 'PAUSED';
 
+export interface MigrationPlan {
+  targetStack: string;
+  steps: string[];
+  riskLevel: string;
+  estimatedEffort: string;
+  summary: string;
+  targetFiles: string[];
+}
+
 export interface Session {
   sessionId: string;
   jobId: string;
@@ -17,6 +26,8 @@ export interface Session {
   pausedFrom: SessionStatus | null;
   errorMessage: string | null;
   updatedAt: string;
+  /** Issue #10 — populated from PLAN_READY onwards. Null on early/legacy rows. */
+  plan: MigrationPlan | null;
 }
 
 export interface SessionPage {

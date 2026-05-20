@@ -105,6 +105,14 @@
               </button>
             </td>
           </tr>
+          <!-- #10 — plan preview shown only at the approval gate -->
+          @if (s.status === 'AWAITING_APPROVAL' && s.plan) {
+            <tr class="plan-row">
+              <td [attr.colspan]="auth.isAdmin() ? 6 : 5">
+                <app-plan-preview [plan]="s.plan"/>
+              </td>
+            </tr>
+          }
         }
       </tbody>
     </table>

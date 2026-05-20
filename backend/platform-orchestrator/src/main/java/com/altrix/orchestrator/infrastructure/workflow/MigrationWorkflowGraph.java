@@ -79,6 +79,15 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
     private final ProgressNotifierPort progressNotifier;
     private final BaseCheckpointSaver checkpointSaver;
     private final RetryContextBuilder retryContextBuilder;
+    /**
+     * #10 — when true, the graph halts at END after the planner so a human can
+     * review (and optionally edit) the plan via the AWAITING_APPROVAL gate.
+     * The continuation runs migrator → validator → reporter via
+     * {@code ResumeMigrationUseCase}.  When false, the planner auto-approves
+     * its own plan and the graph runs to completion in one shot (legacy path
+     * preserved for tests / batch mode).
+     */
+    private final boolean requireApproval;
 
     /**
      * Lazily compiled graph — built once on first call and reused thereafter.
@@ -132,7 +141,10 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
                             NODE_CONTEXT_ANALYZER,
                             edgeAction(this::routeAfterAnalysis),
                             Map.of(NODE_MIGRATION_PLANNER, NODE_MIGRATION_PLANNER, END, END))
-                    .addEdge(NODE_MIGRATION_PLANNER, NODE_CORE_MIGRATOR)
+                    .addConditionalEdges(
+                            NODE_MIGRATION_PLANNER,
+                            edgeAction(this::routeAfterPlanning),
+                            Map.of(NODE_CORE_MIGRATOR, NODE_CORE_MIGRATOR, END, END))
                     .addConditionalEdges(
                             NODE_CORE_MIGRATOR,
                             edgeAction(this::routeAfterMigration),
@@ -178,10 +190,26 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
 
         notifyRunning(ctx.jobId(), "Migration Planner");
         MigrationPlan plan = planner.execute(input);
-        ApprovedPlan approved = ApprovedPlan.autoApproved(plan);
         notifyDone(ctx.jobId(), "Migration Planner");
 
-        return Map.of(MIGRATION_PLAN, plan, APPROVED_PLAN, approved);
+        // #10 — when the approval gate is on we deliberately do NOT inject an
+        // APPROVED_PLAN.  routeAfterPlanning sees the missing slot and halts at
+        // END so a human can review (and edit) the plan via the session API.
+        // When off, the planner auto-approves and the graph runs to completion.
+        if (requireApproval) {
+            return Map.of(MIGRATION_PLAN, plan);
+        }
+        return Map.of(MIGRATION_PLAN, plan, APPROVED_PLAN, ApprovedPlan.autoApproved(plan));
+    }
+
+    /**
+     * Conditional edge after the planner: continue to the migrator only when an
+     * {@link ApprovedPlan} is present in the state; otherwise halt at END and
+     * wait for {@code HandleApprovalUseCase.approve(...)} to kick off the
+     * continuation (#10).
+     */
+    private String routeAfterPlanning(MigrationState state) {
+        return state.approvedPlan().isPresent() ? NODE_CORE_MIGRATOR : END;
     }
 
     private Map<String, Object> runCoreMigrator(MigrationState state) {
