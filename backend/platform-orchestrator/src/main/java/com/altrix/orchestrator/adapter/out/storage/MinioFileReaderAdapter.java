@@ -120,6 +120,25 @@ public class MinioFileReaderAdapter implements FileReaderPort {
         return SKIP_PATH_FRAGMENTS.stream().anyMatch(lower::contains);
     }
 
+    @Override
+    public java.util.Set<String> listAllPaths(String storageKey) {
+        java.util.Set<String> paths = new java.util.LinkedHashSet<>();
+        try (InputStream raw = minioClient.getObject(
+                GetObjectArgs.builder().bucket(bucket).object(storageKey).build());
+             ZipInputStream zip = new ZipInputStream(raw)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (!entry.isDirectory()) {
+                    paths.add(entry.getName());
+                }
+                zip.closeEntry();
+            }
+        } catch (Exception e) {
+            log.warn("Could not list paths from '{}': {}", storageKey, e.getMessage());
+        }
+        return paths;
+    }
+
     /**
      * Issue #119 — single-file extraction.  Streams the ZIP entry-by-entry
      * and returns the first match, so memory usage stays O(1) per request

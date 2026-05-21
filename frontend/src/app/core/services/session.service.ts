@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { FileDiff, MigratedFile, MigrationPlan, PauseRecord, Session, SessionPage, SessionStatus } from '../models/session.model';
+import { FileDiff, MigratedFile, MigrationPlan, PauseRecord, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -21,6 +21,11 @@ export class SessionService {
 
   getFiles(sessionId: string): Observable<MigratedFile[]> {
     return this.http.get<MigratedFile[]>(`${this.base}/${sessionId}/files`);
+  }
+
+  /** Full project tree (every file in the source ZIP + any CREATED files). */
+  getFileTree(sessionId: string): Observable<SessionFileNode[]> {
+    return this.http.get<SessionFileNode[]>(`${this.base}/${sessionId}/files/tree`);
   }
 
   /** #119 — fetch both sides of the diff for a single file. */

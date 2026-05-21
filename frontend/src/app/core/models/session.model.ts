@@ -46,6 +46,16 @@ export interface MigratedFile {
   content: string;
 }
 
+/**
+ * One entry of the project-wide file tree returned by
+ * `GET /api/v1/sessions/{id}/files/tree`.  status one of:
+ * MODIFIED | CREATED | DELETED | UNCHANGED | UNTOUCHED.
+ */
+export interface SessionFileNode {
+  path: string;
+  status: 'MODIFIED' | 'CREATED' | 'DELETED' | 'UNCHANGED' | 'UNTOUCHED' | string;
+}
+
 /** #119 — both sides of the diff for a single file. */
 export interface FileDiff {
   originalPath: string;

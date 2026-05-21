@@ -40,8 +40,10 @@ import java.util.Map;
 public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, MigrationArtifact> {
 
     private static final String SYSTEM_PROMPT = """
-            You are a Java migration expert.  Rewrite the following Java source file to
-            migrate from Google Cloud Pub/Sub to Apache Kafka.
+            You are a migration expert.  Rewrite the following file (Java source,
+            Maven pom.xml, Gradle build script, application.yml / application.properties,
+            or Jakarta EE / Spring config XML) to migrate from Google Cloud Pub/Sub
+            to Apache Kafka.
 
             Recognise BOTH styles of GCP Pub/Sub a project may use:
 
@@ -65,6 +67,48 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                   "PubsubClient", "PubSubClient" — replace topic/subscription
                   create / get / publish / pull calls with their Kafka equivalents.
 
+            (C) Maven pom.xml — replace dependency declarations:
+                - <artifactId>google-api-services-pubsub</artifactId>     →  REMOVE
+                - <artifactId>google-cloud-pubsub</artifactId>            →  REMOVE
+                - <artifactId>spring-cloud-gcp-pubsub</artifactId>        →  REMOVE
+                - <artifactId>spring-cloud-gcp-starter-pubsub</artifactId> →  REMOVE
+                For Spring Boot projects ADD:
+                  <dependency>
+                    <groupId>org.springframework.kafka</groupId>
+                    <artifactId>spring-kafka</artifactId>
+                  </dependency>
+                For Jakarta EE / plain Java projects ADD:
+                  <dependency>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka-clients</artifactId>
+                    <version>3.7.1</version>
+                  </dependency>
+                Preserve every unrelated dependency, plugin, property, and the
+                surrounding XML structure exactly as is.
+
+            (D) Gradle build.gradle / build.gradle.kts — same swap as above using
+                the Gradle DSL (implementation 'org.springframework.kafka:spring-kafka'
+                or implementation 'org.apache.kafka:kafka-clients:3.7.1').
+
+            (E) application.yml / application.properties — bootstrap config:
+                - REMOVE: spring.cloud.gcp.pubsub.*, GOOGLE_APPLICATION_CREDENTIALS,
+                          PUBSUB_EMULATOR_HOST, gcp.pubsub.* keys
+                - ADD: spring.kafka.bootstrap-servers (default: localhost:9092)
+                       spring.kafka.consumer.group-id (= the application name)
+                       spring.kafka.consumer.auto-offset-reset = earliest
+                       spring.kafka.producer.key-serializer / value-serializer
+                For a .properties file use dotted keys; for a .yaml file use the
+                nested-map form.  Preserve every unrelated property/setting.
+
+            (F) Java config classes that wire topics, publishers, subscribers (e.g.
+                a "PubsubConfig" class with constants for topic names, or @Bean
+                methods returning PubSubTemplate / Pubsub clients):
+                - Topic-name constants stay (they're still valid Kafka topic names).
+                - @Bean PubSubTemplate / @Bean Pubsub                →  @Bean KafkaTemplate
+                - Topic + subscription creation via Pubsub.Projects.* → @Bean NewTopic
+                  (Spring Kafka auto-creates topics declared as NewTopic beans).
+                - Subscription objects → KafkaListener configuration
+
             Rules:
             - Preserve ALL business logic exactly.
             - Preserve package declarations, class names, and method signatures unless
@@ -77,8 +121,9 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             - If the file genuinely contains NO Pub/Sub references after this analysis,
               return its content exactly as provided.
 
-            Return ONLY the complete rewritten Java file content.  No explanations,
-            no markdown fences.
+            Return ONLY the complete rewritten file content (matching the original
+            file's format: Java, XML, YAML, .properties).  No explanations, no
+            markdown fences, no leading file path.
             """;
 
     private final AiPort aiPort;
@@ -144,8 +189,8 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             String path = entry.getKey();
             String content = entry.getValue();
 
-            if (!path.endsWith(".java")) {
-                result.add(unchanged(path, content, "Not a Java source file"));
+            if (!isMigratableFile(path)) {
+                result.add(unchanged(path, content, "Not a migratable file type"));
                 continue;
             }
             if (!hasPubSubCode(content)) {
@@ -167,6 +212,24 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             }
         }
         return result;
+    }
+
+    /**
+     * Accept Java sources AND the build / config files that wire Pub/Sub
+     * (pom.xml, application.yml, application.properties, *.yaml).  A migration
+     * that only rewrites .java but leaves the dependency declarations and
+     * bootstrap config alone yields a project that won't compile.
+     */
+    private static boolean isMigratableFile(String path) {
+        if (path == null) return false;
+        String p = path.toLowerCase();
+        return p.endsWith(".java")
+            || p.endsWith(".xml")           // pom.xml, ivy.xml, EJB / Jakarta EE descriptors
+            || p.endsWith(".yml")
+            || p.endsWith(".yaml")
+            || p.endsWith(".properties")
+            || p.endsWith(".gradle")
+            || p.endsWith(".gradle.kts");
     }
 
     private static MigratedFile unchanged(String path, String content, String reason) {
@@ -204,7 +267,29 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             || content.contains("PubSubService")
             || content.contains("PubsubClient")
             || content.contains("PubSubClient")
+            || content.contains("PubsubConfig")
+            || content.contains("PubSubConfig")
             || content.contains("getOrCreateTopic")
-            || content.contains("getOrCreateSubscription");
+            || content.contains("getOrCreateSubscription")
+
+            // (D) Build / dependency markers — pom.xml, build.gradle, ivy
+            || content.contains("google-api-services-pubsub")
+            || content.contains("google-cloud-pubsub")
+            || content.contains("spring-cloud-gcp-pubsub")
+            || content.contains("spring-cloud-gcp-starter-pubsub")
+
+            // (E) Bootstrap config markers — application.yml / .properties
+            || content.contains("spring.cloud.gcp.pubsub")
+            || content.contains("gcp.pubsub")
+            || content.contains("GOOGLE_APPLICATION_CREDENTIALS")
+            || content.contains("PUBSUB_EMULATOR_HOST")
+
+            // (F) Catch-all for the bare "Pubsub" / "PubSub" identifier — covers
+            //     user-defined helper classes our specific name list misses
+            //     (PubsubFactory, PubsubProperties, PubsubAdmin, …).  False
+            //     positives only cost an extra AI call.
+            || content.contains("Pubsub")
+            || content.contains("PubSub")
+            || content.contains("pubsub");
     }
 }

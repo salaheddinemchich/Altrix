@@ -36,4 +36,15 @@ public interface FileReaderPort {
      *         not present in the archive
      */
     String readSingleFile(String storageKey, String path);
+
+    /**
+     * Enumerates every entry path in the project ZIP — no content read, no
+     * extension/skip filtering.  Powers the file-tree view in the diff
+     * viewer so the reviewer sees the full project structure (including
+     * tests, build files, resources) and not just the migration targets.
+     *
+     * @param storageKey MinIO object key of the uploaded ZIP
+     * @return ordered set of repository-relative paths
+     */
+    java.util.Set<String> listAllPaths(String storageKey);
 }

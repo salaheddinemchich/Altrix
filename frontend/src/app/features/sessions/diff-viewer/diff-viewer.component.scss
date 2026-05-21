@@ -3,7 +3,7 @@
 .diff-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px); // leaves room for the shell header
+  height: calc(100vh - 64px);
   padding: 12px;
   gap: 12px;
 }
@@ -12,6 +12,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 
   .back {
     display: inline-flex;
@@ -20,7 +21,6 @@
     text-decoration: none;
     color: inherit;
     opacity: 0.7;
-
     &:hover { opacity: 1; }
   }
 
@@ -38,6 +38,25 @@
 
   .spacer { flex: 1; }
 
+  .counts {
+    display: flex;
+    gap: 4px;
+
+    .chip {
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: #e5e5e5;
+      color: #555;
+
+      &.modified  { background: #fef3c7; color: #92400e; }
+      &.created   { background: #dcfce7; color: #166534; }
+      &.deleted   { background: #fee2e2; color: #991b1b; }
+      &.unchanged { background: rgba(0,0,0,0.04); color: var(--muted, #888); }
+    }
+  }
+
   .nav { display: flex; gap: 6px; }
 }
 
@@ -45,7 +64,6 @@
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 13px;
-
   &.alert-danger {
     background: rgba(220, 38, 38, 0.1);
     color: #dc2626;
@@ -55,14 +73,14 @@
 
 .diff-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 320px 1fr;
   gap: 12px;
   flex: 1;
-  min-height: 0; // critical — lets the editor pane actually shrink
+  min-height: 0;
 }
 
-// ── Left panel: file list ───────────────────────────────────────────────
-.file-list {
+// ── Left panel: project tree ────────────────────────────────────────────
+.file-tree {
   background: var(--surface, #fafafa);
   border: 1px solid var(--border, #e5e5e5);
   border-radius: 6px;
@@ -71,13 +89,14 @@
   flex-direction: column;
   min-height: 0;
 
-  .file-list-header {
+  .file-tree-header {
     padding: 10px 12px;
     border-bottom: 1px solid var(--border, #e5e5e5);
     font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    flex: 0 0 auto;
 
     .count {
       font-weight: 400;
@@ -91,42 +110,101 @@
     opacity: 0.6;
   }
 
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    overflow-y: auto;
+  .tree-root {
     flex: 1;
-  }
-
-  li {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    cursor: pointer;
-    border-bottom: 1px solid var(--border, #f0f0f0);
+    overflow-y: auto;
+    padding: 6px 0;
+    font-family: ui-monospace, monospace;
     font-size: 12px;
-
-    &:hover { background: rgba(0, 0, 0, 0.03); }
-
-    &.selected {
-      background: rgba(59, 130, 246, 0.12);
-      border-left: 3px solid #3b82f6;
-      padding-left: 9px;
-    }
-
-    .path {
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-family: ui-monospace, monospace;
-    }
   }
 }
 
-// Change-type badges — colour-coded so users can scan the file list at a glance
+// Folder rows (collapsible)
+details.folder {
+  > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 3px 8px 3px 0;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+
+    &::-webkit-details-marker { display: none; }
+
+    &::before {
+      content: '▸';
+      width: 10px;
+      font-size: 10px;
+      opacity: 0.5;
+      transition: transform 0.1s;
+    }
+
+    &:hover { background: rgba(0,0,0,0.04); }
+
+    // Subtle tint when the folder contains a touched file
+    &.modified { color: #92400e; }
+    &.created  { color: #166534; }
+    &.deleted  { color: #991b1b; }
+  }
+
+  &[open] > summary::before { content: '▾'; }
+}
+
+// File rows (clickable buttons)
+button.file {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 8px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+  border-left: 3px solid transparent;
+
+  &:hover { background: rgba(0,0,0,0.04); }
+
+  &.selected {
+    background: rgba(59, 130, 246, 0.15);
+    border-left-color: #3b82f6;
+  }
+
+  .file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-status {
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.05);
+    color: var(--muted, #888);
+  }
+
+  &.modified  .file-status { background: #fef3c7; color: #92400e; }
+  &.modified  .file-name   { color: #92400e; font-weight: 500; }
+  &.created   .file-status { background: #dcfce7; color: #166534; }
+  &.created   .file-name   { color: #166534; font-weight: 500; }
+  &.deleted   .file-status { background: #fee2e2; color: #991b1b; }
+  &.deleted   .file-name   { color: #991b1b; text-decoration: line-through; }
+  &.unchanged .file-status,
+  &.untouched .file-status { opacity: 0.5; }
+  &.untouched .file-name   { opacity: 0.7; }
+}
+
+// Change-type badges in the editor pane header
 .badge {
   font-size: 10px;
   font-weight: 600;
@@ -137,9 +215,11 @@
   background: #e5e5e5;
   color: #555;
 
-  &.created  { background: #dcfce7; color: #166534; }
-  &.modified { background: #fef3c7; color: #92400e; }
-  &.deleted  { background: #fee2e2; color: #991b1b; }
+  &.modified  { background: #fef3c7; color: #92400e; }
+  &.created   { background: #dcfce7; color: #166534; }
+  &.deleted   { background: #fee2e2; color: #991b1b; }
+  &.unchanged,
+  &.untouched { background: rgba(0,0,0,0.05); color: var(--muted, #888); }
 }
 
 // ── Right panel: Monaco diff editor ─────────────────────────────────────
@@ -165,12 +245,10 @@
     font-family: ui-monospace, monospace;
     font-weight: 500;
   }
-
-  .meta-summary { opacity: 0.6; }
 }
 
 .editor-host {
   flex: 1;
-  min-height: 0; // again, critical for Monaco's automaticLayout to size correctly
+  min-height: 0;
   width: 100%;
 }

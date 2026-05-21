@@ -4,6 +4,7 @@ import com.altrix.orchestrator.adapter.in.rest.dto.EditPlanRequest;
 import com.altrix.orchestrator.adapter.in.rest.dto.FileDiffResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.PauseRecordResponse;
+import com.altrix.orchestrator.adapter.in.rest.dto.SessionFileNode;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionPageResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionStatusResponse;
 import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
@@ -92,6 +93,64 @@ public class SessionController {
                 .map(MigratedFileResponse::from)
                 .toList();
         return ResponseEntity.ok(files);
+    }
+
+    /**
+     * GET /api/v1/sessions/{id}/files/tree — returns every file in the source
+     * ZIP plus any new file created by the migration, each tagged with a
+     * change-type status.  Drives the project-wide file tree on the left
+     * side of the diff viewer so the reviewer sees the architecture (not
+     * just touched files).
+     *
+     * <p>Status values:
+     * <ul>
+     *   <li>{@code MODIFIED}  — migrator changed the file</li>
+     *   <li>{@code CREATED}   — file did not exist in source, added by migration</li>
+     *   <li>{@code DELETED}   — file existed in source but is removed in output</li>
+     *   <li>{@code UNCHANGED} — migrator examined the file and kept it as-is</li>
+     *   <li>{@code UNTOUCHED} — file existed in source; pruner excluded it from migration</li>
+     * </ul>
+     */
+    @GetMapping("/{sessionId}/files/tree")
+    public ResponseEntity<List<SessionFileNode>> getFileTree(@PathVariable String sessionId) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        WorkflowSession session = sessionRepository.findById(id)
+                .orElseThrow(() -> new SessionNotFoundException(id));
+
+        // path -> change type from the migration result
+        Map<String, String> migratedStatus = session.migratedFiles().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        f -> f.originalPath() != null && !f.originalPath().isBlank()
+                                ? f.originalPath() : f.newPath(),
+                        f -> String.valueOf(f.changeType()),
+                        (a, b) -> a));
+
+        // Full set of paths from the original source ZIP
+        java.util.Set<String> sourcePaths = (session.plan() != null
+                && session.plan().storageKey() != null
+                && !session.plan().storageKey().isBlank())
+                ? fileReader.listAllPaths(session.plan().storageKey())
+                : java.util.Set.of();
+
+        List<SessionFileNode> tree = new java.util.ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+
+        for (String path : sourcePaths) {
+            String status = migratedStatus.getOrDefault(path, "UNTOUCHED");
+            tree.add(new SessionFileNode(path, status));
+            seen.add(path);
+        }
+
+        // CREATED files that weren't in source
+        for (var f : session.migratedFiles()) {
+            String key = f.newPath() != null ? f.newPath() : f.originalPath();
+            if (!seen.contains(key) && "CREATED".equalsIgnoreCase(String.valueOf(f.changeType()))) {
+                tree.add(new SessionFileNode(key, "CREATED"));
+            }
+        }
+
+        tree.sort(java.util.Comparator.comparing(SessionFileNode::path));
+        return ResponseEntity.ok(tree);
     }
 
     /**
