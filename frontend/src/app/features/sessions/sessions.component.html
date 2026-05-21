@@ -43,7 +43,7 @@
           <th>Job</th>
           <th>Status</th>
           <th>Updated</th>
-          @if (auth.isAdmin()) { <th>Actions</th> }
+          <th>Actions</th>
           <th></th>
         </tr>
       </thead>
@@ -63,31 +63,31 @@
               }
             </td>
             <td class="muted">{{ s.updatedAt | date:'MMM d, h:mm a' }}</td>
-            @if (auth.isAdmin()) {
-              <td class="actions-cell">
-                @if (s.status === 'AWAITING_APPROVAL') {
-                  <button class="btn btn-gold btn-sm" (click)="approve(s); $event.stopPropagation()">
-                    <app-icon name="check" [size]="12"/>
-                    Approve
-                  </button>
-                  <button class="btn btn-danger btn-sm" (click)="reject(s); $event.stopPropagation()">
-                    <app-icon name="x" [size]="12"/>
-                    Reject
-                  </button>
-                }
-                @if (s.status !== 'PAUSED' && s.status !== 'DONE' && s.status !== 'FAILED') {
-                  <button class="btn btn-sm" (click)="pause(s); $event.stopPropagation()">
-                    <app-icon name="pause" [size]="12"/>
-                  </button>
-                }
-                @if (s.status === 'PAUSED') {
-                  <button class="btn btn-primary btn-sm" (click)="resume(s); $event.stopPropagation()">
-                    <app-icon name="play" [size]="12"/>
-                    Resume
-                  </button>
-                }
-              </td>
-            }
+            <!-- Action buttons now visible to any authenticated user.  Will
+                 be re-gated to session owner once #25 multi-tenancy lands. -->
+            <td class="actions-cell">
+              @if (s.status === 'AWAITING_APPROVAL') {
+                <button class="btn btn-gold btn-sm" (click)="approve(s); $event.stopPropagation()">
+                  <app-icon name="check" [size]="12"/>
+                  Approve
+                </button>
+                <button class="btn btn-danger btn-sm" (click)="reject(s); $event.stopPropagation()">
+                  <app-icon name="x" [size]="12"/>
+                  Reject
+                </button>
+              }
+              @if (s.status !== 'PAUSED' && s.status !== 'DONE' && s.status !== 'FAILED') {
+                <button class="btn btn-sm" (click)="pause(s); $event.stopPropagation()">
+                  <app-icon name="pause" [size]="12"/>
+                </button>
+              }
+              @if (s.status === 'PAUSED') {
+                <button class="btn btn-primary btn-sm" (click)="resume(s); $event.stopPropagation()">
+                  <app-icon name="play" [size]="12"/>
+                  Resume
+                </button>
+              }
+            </td>
             <td class="row-action">
               <a class="btn btn-sm"
                  [routerLink]="['/sessions', s.sessionId, 'files']"
@@ -108,10 +108,12 @@
           <!-- #10 — plan preview shown only at the approval gate -->
           @if (s.status === 'AWAITING_APPROVAL' && s.plan) {
             <tr class="plan-row">
-              <td [attr.colspan]="auth.isAdmin() ? 6 : 5">
+              <td colspan="6">
+                <!-- editable=true so the reviewer can override the plan
+                     before approving.  Backend still requires authentication. -->
                 <app-plan-preview
                   [plan]="s.plan"
-                  [editable]="auth.isAdmin()"
+                  [editable]="true"
                   [saving]="savingPlan() === s.sessionId"
                   (planSaved)="savePlan(s, $event)"/>
               </td>
