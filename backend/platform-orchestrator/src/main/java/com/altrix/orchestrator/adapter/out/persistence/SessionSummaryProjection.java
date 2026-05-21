@@ -1,20 +1,19 @@
 package com.altrix.orchestrator.adapter.out.persistence;
 
+import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 
 import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Lightweight Spring Data projection for paginated session lists.
+ * Spring Data projection for paginated session lists.
  *
- * <p>Excludes the heavy JSONB columns ({@code plan}, {@code migrated_files})
- * which can each be tens of kilobytes per row. At 20 rows per page, loading
- * full entities wastes significant I/O and heap even when the UI only shows
- * status + timestamps in the list view.
- *
- * <p>Spring Data resolves this at query time using a {@code SELECT} that names
- * only the projected fields, so the JSONB columns are never read from disk.
+ * <p>Excludes the heavy {@code migrated_files} JSONB column (each row carries
+ * the full migrated source — tens of KB) but DOES include {@code plan}, which
+ * the sessions UI needs to render the plan-preview row at the AWAITING_APPROVAL
+ * gate (#10).  Plans are typically &lt; 4 KB so leaving them in keeps the list
+ * endpoint cheap enough.
  */
 public interface SessionSummaryProjection {
     UUID getId();
@@ -23,6 +22,7 @@ public interface SessionSummaryProjection {
     SessionStatus getStatus();
     SessionStatus getPausedFrom();
     int getConsecutiveAgentErrors();
+    MigrationPlan getPlan();
     Instant getCreatedAt();
     Instant getUpdatedAt();
 }

@@ -46,6 +46,11 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/sessions")
 @RequiredArgsConstructor
+// All endpoints require an authenticated user. The action endpoints
+// (approve, reject, pause, resume, edit plan) used to require ADMIN /
+// SUPER_ADMIN; relaxed to isAuthenticated() until #25 (multi-tenancy)
+// lands ownership-scoped authorization — the existing single-user
+// dev workflow needs to be able to approve its own sessions.
 @PreAuthorize("isAuthenticated()")
 public class SessionController {
 
@@ -200,7 +205,7 @@ public class SessionController {
     // ── Approval (#64 #65) ────────────────────────────────────────────────────
 
     @PostMapping("/{sessionId}/approve")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SessionStatusResponse> approve(@PathVariable String sessionId) {
         WorkflowSession session = handleApproval.approve(toId(sessionId));
         return ResponseEntity.ok(SessionStatusResponse.from(session));
@@ -213,7 +218,7 @@ public class SessionController {
      * approve runs the migrator against the edited plan automatically.
      */
     @PatchMapping("/{sessionId}/plan")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SessionStatusResponse> editSessionPlan(
             @PathVariable String sessionId,
             @Valid @RequestBody EditPlanRequest body
@@ -223,7 +228,7 @@ public class SessionController {
     }
 
     @PostMapping("/{sessionId}/reject")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SessionStatusResponse> reject(
             @PathVariable String sessionId,
             @RequestBody(required = false) Map<String, String> body) {
@@ -235,14 +240,14 @@ public class SessionController {
     // ── Pause / Resume (#69 #70) ──────────────────────────────────────────────
 
     @PostMapping("/{sessionId}/pause")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SessionStatusResponse> pause(@PathVariable String sessionId) {
         WorkflowSession session = pauseResume.pause(toId(sessionId));
         return ResponseEntity.ok(SessionStatusResponse.from(session));
     }
 
     @PostMapping("/{sessionId}/resume")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SessionStatusResponse> resume(@PathVariable String sessionId) {
         WorkflowSession session = pauseResume.resume(toId(sessionId));
         return ResponseEntity.ok(SessionStatusResponse.from(session));

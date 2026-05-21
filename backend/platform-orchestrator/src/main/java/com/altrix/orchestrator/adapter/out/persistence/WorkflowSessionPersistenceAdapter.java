@@ -144,11 +144,11 @@ public class WorkflowSessionPersistenceAdapter implements WorkflowSessionReposit
                 p.getJobId(),
                 p.getProjectId(),
                 p.getStatus(),
-                null,       // plan excluded from list projection — fetch individually when needed
-                null,       // errorMessage excluded from list projection
+                p.getPlan(),  // included so the sessions UI can render the plan-preview row (#10)
+                null,         // errorMessage excluded from list projection
                 p.getPausedFrom(),
                 p.getConsecutiveAgentErrors(),
-                List.of(),  // migratedFiles excluded from list projection
+                List.of(),    // migratedFiles excluded from list projection
                 p.getCreatedAt(),
                 0L);
     }
