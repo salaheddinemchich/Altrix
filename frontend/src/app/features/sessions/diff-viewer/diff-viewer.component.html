@@ -7,22 +7,31 @@
     <h2>Session diff</h2>
     <span class="session-id">{{ sessionId() }}</span>
     <div class="spacer"></div>
+
+    <!-- Status summary chips -->
+    <div class="counts">
+      <span class="chip modified"  title="Modified files">M {{ counts().modified }}</span>
+      <span class="chip created"   title="Created files">C {{ counts().created }}</span>
+      <span class="chip deleted"   title="Deleted files">D {{ counts().deleted }}</span>
+      <span class="chip unchanged" title="Untouched / unchanged">— {{ counts().unchanged + counts().untouched }}</span>
+    </div>
+
     <div class="nav">
       <button class="btn btn-sm" (click)="previous()"
-              [disabled]="selectedIdx() === 0"
-              title="Previous file (Alt+←)">
+              [disabled]="touchedFiles().length === 0"
+              title="Previous changed file (Alt+←)">
         <app-icon name="arrow-left" [size]="12"/>
       </button>
       <button class="btn btn-sm" (click)="next()"
-              [disabled]="selectedIdx() >= files().length - 1"
-              title="Next file (Alt+→)">
+              [disabled]="touchedFiles().length === 0"
+              title="Next changed file (Alt+→)">
         <app-icon name="arrow-right" [size]="12"/>
       </button>
       <!-- #123 — download all migrated files as a .patch -->
       <a class="btn btn-sm"
          [href]="patchUrl()"
          [download]="patchFilename()"
-         [class.disabled]="files().length === 0"
+         [class.disabled]="counts().modified + counts().created + counts().deleted === 0"
          title="Download as a .patch file for git apply">
         <app-icon name="download" [size]="12"/>
         .patch
@@ -35,43 +44,54 @@
   }
 
   <div class="diff-layout">
-    <!-- ── Left: file list ─────────────────────────────────────────────── -->
-    <aside class="file-list" aria-label="Migrated files">
-      <div class="file-list-header">
-        Files <span class="count">({{ files().length }})</span>
+    <!-- ── Left: project tree ──────────────────────────────────────────── -->
+    <aside class="file-tree" aria-label="Project tree">
+      <div class="file-tree-header">
+        Project <span class="count">({{ counts().total }} files)</span>
       </div>
-      @if (files().length === 0 && !loadError()) {
-        <div class="empty">No migrated files yet.</div>
+      @if (nodes().length === 0 && !loadError()) {
+        <div class="empty">Loading project tree…</div>
+      } @else {
+        <div class="tree-root">
+          <ng-container *ngTemplateOutlet="folderTpl; context: { folder: tree(), depth: 0 }"/>
+        </div>
       }
-      <ul>
-        @for (file of files(); track file.newPath; let i = $index) {
-          <li [class.selected]="i === selectedIdx()"
-              (click)="select(i)">
-            <span class="badge" [class]="changeTypeClass(file.changeType)">
-              {{ file.changeType }}
-            </span>
-            <span class="path" [title]="file.newPath">{{ file.newPath }}</span>
-          </li>
-        }
-      </ul>
     </aside>
 
     <!-- ── Right: Monaco diff editor ───────────────────────────────────── -->
     <section class="editor-pane">
       @if (selected(); as sel) {
         <div class="diff-meta">
-          <span class="badge" [class]="changeTypeClass(sel.changeType)">{{ sel.changeType }}</span>
-          <span class="meta-path">{{ sel.newPath }}</span>
-          @if (sel.diffSummary) {
-            <span class="meta-summary">— {{ sel.diffSummary }}</span>
-          }
+          <span class="badge" [class]="statusClass(sel.status)">{{ sel.status }}</span>
+          <span class="meta-path">{{ sel.path }}</span>
         </div>
       }
-      <!--
-        Monaco mounts inside this host on AfterViewInit; reserved height so
-        the editor's internal layout has something measurable to fill.
-      -->
       <div #editorHost class="editor-host"></div>
     </section>
   </div>
 </div>
+
+<!-- ── Recursive tree templates ────────────────────────────────────────── -->
+<ng-template #folderTpl let-folder="folder" let-depth="depth">
+  @for (sub of folder.folders; track sub.name) {
+    <details class="folder" [open]="depth < 2 || sub.descendantStatuses.has('MODIFIED') || sub.descendantStatuses.has('CREATED')">
+      <summary [style.padding-left.px]="depth * 12"
+               [class]="folderClass(sub)">
+        <app-icon name="folder" [size]="12"/>
+        {{ sub.name }}
+      </summary>
+      <ng-container *ngTemplateOutlet="folderTpl; context: { folder: sub, depth: depth + 1 }"/>
+    </details>
+  }
+  @for (file of folder.children; track file.path) {
+    <button class="file"
+            [class.selected]="selectedPath() === file.path"
+            [class]="statusClass(file.status)"
+            [style.padding-left.px]="(depth * 12) + 18"
+            (click)="select(file.path)"
+            [title]="file.path + ' — ' + file.status">
+      <span class="file-name">{{ file.name }}</span>
+      <span class="file-status">{{ file.status }}</span>
+    </button>
+  }
+</ng-template>

@@ -66,8 +66,20 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
             targetFiles must list the exact relative file paths (as they appear in the ZIP)
             that contain Google Cloud Pub/Sub code — under EITHER style above — and
             therefore require rewriting.  Include user-defined wrapper classes
-            (PubsubService, etc.) plus every class that depends on them.  Omit only
-            files that have no Pub/Sub usage at all.
+            (PubsubService, etc.) plus every class that depends on them.
+
+            Crucially, ALSO include the surrounding build + config files that wire
+            Pub/Sub into the project, otherwise the rewritten Java code will not
+            compile or boot:
+              - pom.xml / build.gradle / build.gradle.kts that declare any
+                google-api-services-pubsub, google-cloud-pubsub, spring-cloud-gcp-pubsub
+                or spring-cloud-gcp-starter-pubsub dependency.
+              - application.yml / application.properties that set spring.cloud.gcp.pubsub.*,
+                gcp.pubsub.*, GOOGLE_APPLICATION_CREDENTIALS, or PUBSUB_EMULATOR_HOST.
+              - Java @Configuration / Jakarta EE config classes that wire Pubsub /
+                PubSubTemplate / topic + subscription beans (e.g. PubsubConfig.java).
+
+            Omit only files that have no Pub/Sub usage at all.
             """;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
