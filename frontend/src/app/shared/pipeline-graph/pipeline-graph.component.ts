@@ -98,20 +98,59 @@ export class PipelineGraphComponent implements OnDestroy {
     }
   }
 
+  /**
+   * Map coarse session/job status to (lastDone, active) for the 5-stage graph.
+   * Keeps PipelineGraph in sync with SessionTimeline's backfill logic so the
+   * page reflects the real pipeline position even when no live WS events have
+   * arrived yet.
+   *
+   *   PENDING                              none
+   *   ANALYZING                            Analyse ACTIVE
+   *   CONTEXT_ANALYSED                     Analyse DONE, Plan ACTIVE
+   *   PLAN_READY / AWAITING_APPROVAL       Analyse + Plan DONE (gated)
+   *   MIGRATING                            +Migrate ACTIVE
+   *   VALIDATING                           +Validate ACTIVE
+   *   DONE / COMPLETED                     all DONE
+   *   FAILED                               first non-DONE → ERROR
+   *   PAUSED                               keep existing state
+   */
   private applyJobStatus(status: string | null | undefined): void {
     if (!status) return;
     const s = status.toUpperCase();
-    if (s === 'COMPLETED' || s === 'DONE' || s === 'SUCCESS') {
-      this.nodes.update(list => list.map(n => ({ ...n, status: 'DONE' as PipelineNodeStatus })));
-    } else if (s === 'FAILED' || s === 'ERROR') {
+
+    if (s === 'PAUSED') return;
+
+    if (s === 'FAILED' || s === 'ERROR') {
       this.nodes.update(list => {
         const next = [...list];
-        const lastDone = [...next].reverse().findIndex(n => n.status === 'DONE');
-        const errIdx = lastDone === -1 ? 0 : next.length - lastDone;
-        if (next[errIdx]) next[errIdx] = { ...next[errIdx], status: 'ERROR' };
+        let errIdx = next.findIndex(n => n.status !== 'DONE');
+        if (errIdx === -1) errIdx = 0;
+        next[errIdx] = { ...next[errIdx], status: 'ERROR' };
         return next;
       });
+      return;
     }
+
+    let lastDone = -1;
+    let active = -1;
+    switch (s) {
+      case 'PENDING':           lastDone = -1; active = -1; break;
+      case 'ANALYZING':         lastDone = -1; active = 0;  break;
+      case 'CONTEXT_ANALYSED':  lastDone = 0;  active = 1;  break;
+      case 'PLAN_READY':
+      case 'AWAITING_APPROVAL': lastDone = 1;  active = -1; break;
+      case 'MIGRATING':         lastDone = 1;  active = 2;  break;
+      case 'VALIDATING':        lastDone = 2;  active = 3;  break;
+      case 'DONE':
+      case 'COMPLETED':         lastDone = 4;  active = -1; break;
+      default: return;
+    }
+
+    this.nodes.update(list => list.map((n, i) => {
+      if (i <= lastDone) return { ...n, status: 'DONE' as PipelineNodeStatus };
+      if (i === active)  return { ...n, status: 'ACTIVE' as PipelineNodeStatus };
+      return n;
+    }));
   }
 
   private resetNodes(): void {

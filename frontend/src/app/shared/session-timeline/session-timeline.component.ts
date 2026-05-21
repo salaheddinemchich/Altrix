@@ -132,46 +132,62 @@ export class SessionTimelineComponent implements OnDestroy {
    * opened JobDetail page doesn't show "0% / all PENDING" for a job that
    * already ran.  Live WebSocket events override this — once they start
    * arriving the per-step messages and elapsed times are accurate.
+   *
+   * Steps: [0] Analyse  [1] Plan  [2] Migrate  [3] Validate  [4] Report
+   *
+   * Mapping (lastDone is the last index that has finished, active is the
+   * currently-running index or -1 when at a gate or terminal):
+   *
+   *   PENDING                              lastDone=-1  active=-1
+   *   ANALYZING                            lastDone=-1  active=0    (Analyse running)
+   *   CONTEXT_ANALYSED                     lastDone=0   active=1    (Plan running)
+   *   PLAN_READY / AWAITING_APPROVAL       lastDone=1   active=-1   (gated at approval)
+   *   MIGRATING                            lastDone=1   active=2    (Migrate running)
+   *   VALIDATING                           lastDone=2   active=3    (Validate running)
+   *   DONE / COMPLETED                     lastDone=4   active=-1   (all done)
+   *   FAILED                               special — first PENDING step → ERROR
+   *   PAUSED                               keep current state (don't override)
    */
   private applyStatusBackfill(status: string | null | undefined): void {
     if (!status) return;
     const s = status.toUpperCase();
     const epoch = Date.now();
 
-    // Map the session/job status to the index of the last DONE step.
-    // -1 means nothing has finished yet (still in analysis).
-    const lastDone = (() => {
-      switch (s) {
-        case 'PENDING':                                return -1;
-        case 'ANALYZING':
-        case 'CONTEXT_ANALYSED':                       return 0;
-        case 'PLAN_READY':
-        case 'AWAITING_APPROVAL':
-        case 'PAUSED':                                 return 1;
-        case 'MIGRATING':                              return 2;
-        case 'VALIDATING':                             return 3;
-        case 'DONE':
-        case 'COMPLETED':                              return 4;
-        default:                                       return -1;
-      }
-    })();
+    if (s === 'PAUSED') return;
 
-    if (lastDone < 0 && s !== 'FAILED') return;
+    if (s === 'FAILED' || s === 'ERROR') {
+      this.steps.update(list => {
+        const next = [...list];
+        let errIdx = next.findIndex(n => n.status !== 'DONE');
+        if (errIdx === -1) errIdx = 0;
+        next[errIdx] = { ...next[errIdx], status: 'ERROR', endedAt: epoch };
+        return next;
+      });
+      return;
+    }
+
+    let lastDone = -1;
+    let active = -1;
+    switch (s) {
+      case 'PENDING':           lastDone = -1; active = -1; break;
+      case 'ANALYZING':         lastDone = -1; active = 0;  break;
+      case 'CONTEXT_ANALYSED':  lastDone = 0;  active = 1;  break;
+      case 'PLAN_READY':
+      case 'AWAITING_APPROVAL': lastDone = 1;  active = -1; break;
+      case 'MIGRATING':         lastDone = 1;  active = 2;  break;
+      case 'VALIDATING':        lastDone = 2;  active = 3;  break;
+      case 'DONE':
+      case 'COMPLETED':         lastDone = 4;  active = -1; break;
+      default: return;
+    }
 
     this.steps.update(list => list.map((step, i) => {
-      if (s === 'FAILED') {
-        // Mark stages before the failure DONE; the rest stay PENDING.  The
-        // exact failure index isn't known here — the user can read the error
-        // from the job detail card.
-        if (i === 0) return { ...step, status: 'ERROR', endedAt: epoch };
-        return step;
-      }
       if (i <= lastDone) {
         return { ...step, status: 'DONE',
                  startedAt: step.startedAt ?? epoch,
                  endedAt:   step.endedAt   ?? epoch };
       }
-      if (i === lastDone + 1 && s !== 'DONE' && s !== 'COMPLETED') {
+      if (i === active) {
         return { ...step, status: 'ACTIVE',
                  startedAt: step.startedAt ?? epoch };
       }

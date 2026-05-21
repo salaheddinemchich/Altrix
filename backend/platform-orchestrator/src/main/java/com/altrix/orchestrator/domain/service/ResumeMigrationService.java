@@ -9,6 +9,7 @@ import com.altrix.common.domain.model.ValidationReport;
 import com.altrix.common.domain.model.WorkflowOutcome;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
+import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
@@ -95,14 +96,15 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
             reporter.execute(outcome);
             progressNotifierPort.notify(jobId, "Report Generator", "DONE", null);
 
-            // ── Persist + mark complete ─────────────────────────────────────
+            // ── Persist artifact first ──────────────────────────────────────
+            // Store the migrated ZIP in MinIO BEFORE touching the session row.
+            // If a concurrent pause/resume incremented the row version while we
+            // were running the AI, the session save below may collide — but the
+            // artifact is already durable so the user doesn't lose any work.
             List<MigratedFile> files = artifact != null ? artifact.files() : List.of();
             String outputKey = migratedFileStoragePort.storeMigratedZip(jobId, files);
 
-            session.resetAgentErrors();
-            session.storeMigratedFiles(files);
-            session.complete();
-            sessionRepository.save(session);
+            persistCompletionBestEffort(sessionId, files, outputKey);
 
             jobStatusUpdatePort.markDone(jobId, outputKey);
             progressNotifierPort.notify(jobId, "Pipeline", "DONE",
@@ -116,6 +118,53 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
             jobStatusUpdatePort.markFailed(jobId, e.getMessage());
             progressNotifierPort.notify(jobId, "Pipeline", "FAILED", e.getMessage());
         }
+    }
+
+    /**
+     * Persists migrated files + walks the session to DONE on a FRESH copy
+     * re-fetched from the repository.  Re-fetching dodges the optimistic-lock
+     * collision that happens when the user paused/resumed during the run:
+     * those REST calls each incremented {@code @Version}, so the in-memory
+     * session we've been holding for minutes is stale.
+     *
+     * <p>Failures here are logged but never re-thrown: the migrated artifact is
+     * already in MinIO, and the job-side status will be marked DONE by the
+     * caller via {@link JobStatusUpdatePort#markDone}.  Failing the entire
+     * pipeline because of a row-version mismatch would lose the user's work.
+     */
+    private void persistCompletionBestEffort(WorkflowSessionId sessionId,
+                                              List<MigratedFile> files,
+                                              String outputKey) {
+        try {
+            WorkflowSession fresh = sessionRepository.findById(sessionId)
+                    .orElseThrow(() -> new SessionNotFoundException(sessionId));
+            fresh.resetAgentErrors();
+            fresh.storeMigratedFiles(files);
+            walkToCompletion(fresh, files.size());
+            sessionRepository.save(fresh);
+        } catch (Exception e) {
+            log.warn("Could not persist session completion for '{}' (non-fatal — " +
+                     "artifact stored at '{}', job will be marked DONE): {}",
+                    sessionId, outputKey, e.getMessage());
+        }
+    }
+
+    /**
+     * Walks the session through whatever intermediate states remain until DONE.
+     * Tolerates being called from MIGRATING / VALIDATING / PAUSED (the user may
+     * have paused mid-run) and is a no-op on a session already DONE/FAILED.
+     */
+    private void walkToCompletion(WorkflowSession s, int fileCount) {
+        if (s.status() == SessionStatus.PAUSED) {
+            s.resume();
+        }
+        if (s.status() == SessionStatus.MIGRATING) {
+            s.startValidation(fileCount);
+        }
+        if (s.status() == SessionStatus.VALIDATING) {
+            s.complete();
+        }
+        // Anything else (DONE / FAILED / unexpected) — leave alone.
     }
 
     private void failSessionBestEffort(WorkflowSession session, String reason) {
