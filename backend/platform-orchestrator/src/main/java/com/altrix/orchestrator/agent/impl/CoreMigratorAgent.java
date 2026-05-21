@@ -111,7 +111,8 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                 - Subscription objects → KafkaListener configuration
 
             Rules:
-            - Preserve ALL business logic exactly.
+            - Preserve ALL business logic exactly.  Preserve every existing Javadoc
+              and inline comment that is NOT Pub/Sub-specific.
             - Preserve package declarations, class names, and method signatures unless
               the migration requires a different argument or return type (e.g.
               ReceivedMessage → ConsumerRecord<String, String>).
@@ -121,6 +122,29 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
               equivalent Kafka consumer call.
             - If the file genuinely contains NO Pub/Sub references after this analysis,
               return its content exactly as provided.
+
+            HARD CONSTRAINTS — violating any of these breaks the build for the user:
+            * REPLACE the implementation INLINE.  Do NOT leave the original Pub/Sub
+              code (or alternative Kafka approaches) as commented-out blocks.  The
+              method body must contain the real, runnable Kafka code, not a sketch
+              with several options in comments.
+            * Do NOT add narrative comments like `// Renamed from PubsubService`,
+              `// Kafka auto-creates topics`, `// RECOMMENDED APPROACH`, or any
+              other meta-commentary about the migration itself.  The output is
+              source code, not a migration report.
+            * Do NOT use markdown formatting inside comments — no **bold**, no
+              _italic_, no `#` headers.  Comments must be valid plain Java / XML /
+              YAML comments.
+            * Do NOT wrap the output in markdown code fences (```java, ```xml,
+              ```yaml, ```).  Return raw file content only.
+            * Return the COMPLETE file.  If the file is large, prioritize finishing
+              the implementation over preserving comments — but NEVER emit a
+              partial file ending in `...`, `// truncated`, or an open XML tag.
+            * For Kafka consumers in Java code, assume the default StringDeserializer
+              for value().  Therefore `record.value()` is a String — do NOT call
+              `.getAttributes()` or other Pub/Sub message methods on it.  If the
+              original code used message attributes, switch to record.headers() or
+              parse the value string accordingly.
 
             Return ONLY the complete rewritten file content (matching the original
             file's format: Java, XML, YAML, .properties).  No explanations, no
@@ -200,7 +224,16 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             }
 
             try {
-                String migrated = aiPort.chat(systemPrompt, "File: " + path + "\n\n" + content);
+                String raw = aiPort.chat(systemPrompt, "File: " + path + "\n\n" + content);
+                String migrated = stripMarkdownFences(raw);
+
+                if (looksTruncated(migrated, content)) {
+                    log.warn("[{}] AI output for '{}' looks truncated ({} chars vs {} original) — keeping original",
+                            getName(), path, migrated.length(), content.length());
+                    result.add(unchanged(path, content, "Migration skipped — AI output truncated"));
+                    continue;
+                }
+
                 FileChangeType changeType = migrated.equals(content)
                         ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
                 result.add(MigratedFile.builder()
@@ -220,5 +253,58 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                 .originalPath(path).newPath(path).content(content)
                 .changeType(FileChangeType.UNCHANGED).diffSummary(reason)
                 .build();
+    }
+
+    /**
+     * Removes leading/trailing markdown code fences ({@code ```java}, {@code ```xml},
+     * {@code ```}) that AI models stubbornly add despite the prompt forbidding them.
+     * Without this strip the fence ends up as the first line of the migrated file,
+     * making the source uncompilable.
+     */
+    static String stripMarkdownFences(String raw) {
+        if (raw == null || raw.isEmpty()) return raw;
+        String s = raw.strip();
+
+        // Leading fence: ``` optionally followed by a language tag and a newline
+        if (s.startsWith("```")) {
+            int firstNewline = s.indexOf('\n');
+            if (firstNewline > 0) {
+                // Drop the ``` and any language tag on the same line
+                s = s.substring(firstNewline + 1);
+            } else {
+                // Pathological case: only the fence, no body
+                return "";
+            }
+        }
+
+        // Trailing fence
+        if (s.endsWith("```")) {
+            s = s.substring(0, s.length() - 3);
+            // Strip whitespace that may sit just before the closing fence
+            int lastNonWs = s.length() - 1;
+            while (lastNonWs >= 0 && Character.isWhitespace(s.charAt(lastNonWs))) lastNonWs--;
+            s = s.substring(0, lastNonWs + 1);
+        }
+
+        return s;
+    }
+
+    /**
+     * Defence-in-depth against silently truncated AI output: if the migrated
+     * content is implausibly short compared to the input AND the input wasn't
+     * trivial to begin with, assume the model hit max_tokens mid-stream and
+     * keep the original file.  A truncated rewrite (e.g. a pom.xml with no
+     * closing tag, a Java file with no closing brace) is strictly worse than
+     * no rewrite — it breaks the build instead of preserving it.
+     */
+    static boolean looksTruncated(String migrated, String original) {
+        if (migrated == null || original == null) return false;
+        int origLen = original.length();
+        int migLen  = migrated.length();
+        // Don't trip the guard on small files — they legitimately shrink a lot
+        // (e.g. a 200-byte pom snippet that loses one dependency block).
+        if (origLen < 500) return false;
+        // Less than 30 % the original size is the red flag.
+        return migLen < origLen * 0.30;
     }
 }
