@@ -19,6 +19,11 @@ export class SessionService {
     return this.http.get<Session>(`${this.base}/${sessionId}`);
   }
 
+  /** Direct lookup of the session driving a given job — avoids the `list(0,1)` race. */
+  getByJobId(jobId: string): Observable<Session> {
+    return this.http.get<Session>(`${this.base}/by-job/${jobId}`);
+  }
+
   getFiles(sessionId: string): Observable<MigratedFile[]> {
     return this.http.get<MigratedFile[]>(`${this.base}/${sessionId}/files`);
   }

@@ -83,6 +83,21 @@ public class SessionController {
         return ResponseEntity.ok(SessionStatusResponse.from(session));
     }
 
+    /**
+     * GET /api/v1/sessions/by-job/{jobId} — direct lookup of the session driving
+     * a given migration job.  Avoids the previous frontend pattern of fetching
+     * page 0 of the sessions list and hoping the wanted session was the most
+     * recent one — that pattern silently returned the wrong session whenever
+     * the user had any newer job/session.
+     */
+    @GetMapping("/by-job/{jobId}")
+    public ResponseEntity<SessionStatusResponse> getSessionByJobId(@PathVariable String jobId) {
+        return sessionRepository.findByJobId(jobId)
+                .map(SessionStatusResponse::from)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     // ── Migrated files (#119 #122) ────────────────────────────────────────────
 
     @GetMapping("/{sessionId}/files")

@@ -99,18 +99,17 @@ export class JobDetailComponent implements OnInit, OnDestroy {
     this.jobsApi.get(this.id()).subscribe({
       next: job => {
         this.job.set(job);
-        this.loadSession(job.projectId);
+        this.loadSession();
       },
       error: err => this.loadError.set(err?.message ?? 'Request failed'),
     });
   }
 
-  private loadSession(projectId: string): void {
-    this.sessionApi.list(0, 1).subscribe({
-      next: page => {
-        const found = page.content.find(s => s.jobId === this.id() || s.projectId === projectId);
-        if (found) this.session.set(found);
-      },
+  private loadSession(): void {
+    // Direct by-job lookup — used to be `list(0,1)` + find-by-jobId, which
+    // returned the WRONG session whenever any newer job existed.
+    this.sessionApi.getByJobId(this.id()).subscribe({
+      next: s => this.session.set(s),
       error: () => {},
     });
   }
