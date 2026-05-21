@@ -34,20 +34,32 @@ public class RagConfig {
     @ConditionalOnProperty(name = "rag.embedding.provider", havingValue = "openai", matchIfMissing = true)
     public EmbeddingModel openAiEmbeddingModel(
             @Value("${rag.embedding.openai.api-key:${OPENAI_API_KEY:}}") String apiKey,
+            @Value("${rag.embedding.openai.base-url:${OPENAI_BASE_URL:}}") String baseUrl,
             @Value("${rag.embedding.openai.model:text-embedding-3-small}") String model
     ) {
         if (apiKey.isBlank()) {
             log.warn("RAG: rag.embedding.openai.api-key is not set — RAG features disabled. "
-                    + "Set OPENAI_API_KEY or rag.embedding.openai.api-key, "
+                    + "Set OPENAI_API_KEY (any OpenAI-compatible provider — OpenAI, OpenRouter, "
+                    + "Together, Groq, etc.) or rag.embedding.openai.api-key, "
                     + "or switch to rag.embedding.provider=ollama for a local model.");
             return new DisabledEmbeddingModel();
         }
-        log.info("RAG embedding model: OpenAI {}", model);
-        return OpenAiEmbeddingModel.builder()
+        var builder = OpenAiEmbeddingModel.builder()
                 .apiKey(apiKey)
                 .modelName(model)
-                .timeout(Duration.ofSeconds(30))
-                .build();
+                .timeout(Duration.ofSeconds(30));
+        // Optional override — lets the user point the embedding client at any
+        // OpenAI-compatible endpoint (OpenRouter, Together, Azure OpenAI, etc.)
+        // so they can reuse an existing key instead of opening an OpenAI account.
+        // Whichever model is chosen MUST produce 1536-dim vectors so it stays
+        // schema-compatible with vector(1536) in V2_create_code_embeddings.sql.
+        if (baseUrl != null && !baseUrl.isBlank()) {
+            builder.baseUrl(baseUrl);
+            log.info("RAG embedding model: OpenAI-compatible {} at {}", model, baseUrl);
+        } else {
+            log.info("RAG embedding model: OpenAI {}", model);
+        }
+        return builder.build();
     }
 
     private static class DisabledEmbeddingModel implements EmbeddingModel {

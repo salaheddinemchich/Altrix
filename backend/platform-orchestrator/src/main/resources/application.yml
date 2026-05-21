@@ -320,6 +320,11 @@ rag:
     provider: ${RAG_EMBEDDING_PROVIDER:openai}   # openai | ollama
     openai:
       api-key: ${OPENAI_API_KEY:}
+      # Optional OpenAI-compatible endpoint override so the same client can
+      # talk to OpenRouter, Together, Azure OpenAI, etc.  Leave empty for
+      # actual OpenAI.  Whichever endpoint is chosen, the model must produce
+      # 1536-dim vectors to match the code_embeddings.vector(1536) column.
+      base-url: ${OPENAI_BASE_URL:}
       model: ${RAG_EMBEDDING_MODEL:text-embedding-3-small}
     ollama:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
