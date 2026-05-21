@@ -40,18 +40,45 @@ import java.util.Map;
 public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, MigrationArtifact> {
 
     private static final String SYSTEM_PROMPT = """
-            You are a Java migration expert. Rewrite the following Java source file to migrate from
-            Google Cloud Pub/Sub to Apache Kafka (Spring Kafka).
+            You are a Java migration expert.  Rewrite the following Java source file to
+            migrate from Google Cloud Pub/Sub to Apache Kafka.
+
+            Recognise BOTH styles of GCP Pub/Sub a project may use:
+
+            (A) Modern Spring Cloud GCP — package org.springframework.cloud.gcp.pubsub.*:
+                - @PubSubListener / @SubscriberHandler  →  @KafkaListener
+                - PubSubTemplate / MessagePublisher     →  KafkaTemplate<String, String>
+                - imports under google.cloud.pubsub.*   →  imports under org.springframework.kafka.*
+
+            (B) Legacy GCP Pub/Sub REST v1 — package com.google.api.services.pubsub.*:
+                - com.google.api.services.pubsub.Pubsub client
+                    →  KafkaProducer<String, String>  +  KafkaConsumer<String, String>
+                - com.google.api.services.pubsub.model.PubsubMessage
+                    →  ProducerRecord<String, String>
+                - com.google.api.services.pubsub.model.ReceivedMessage
+                    →  ConsumerRecord<String, String>
+                - Pubsub.Projects.Topics.publish(...)
+                    →  kafkaTemplate.send(topic, value)  (or producer.send(new ProducerRecord<>(...)))
+                - Pubsub.Projects.Subscriptions.pull(...)
+                    →  consumer.poll(Duration.ofSeconds(N))  (or annotate the method @KafkaListener)
+                - User-defined wrappers named "PubsubService", "PubSubService",
+                  "PubsubClient", "PubSubClient" — replace topic/subscription
+                  create / get / publish / pull calls with their Kafka equivalents.
 
             Rules:
             - Preserve ALL business logic exactly.
-            - Replace @SubscriberHandler / @PubSubListener with @KafkaListener.
-            - Replace PubSubTemplate / MessagePublisher with KafkaTemplate<String, String>.
-            - Update imports: remove google.cloud.pubsub, add org.springframework.kafka.
-            - Preserve package declarations, class names, and method signatures.
-            - If the file contains no Pub/Sub code, return it exactly as provided.
+            - Preserve package declarations, class names, and method signatures unless
+              the migration requires a different argument or return type (e.g.
+              ReceivedMessage → ConsumerRecord<String, String>).
+            - Replace EVERY Pub/Sub import with the corresponding Kafka import.
+            - For Jakarta EE / EJB @Singleton @Startup @Schedule classes, keep the
+              lifecycle annotations and replace the manual pull loop body with the
+              equivalent Kafka consumer call.
+            - If the file genuinely contains NO Pub/Sub references after this analysis,
+              return its content exactly as provided.
 
-            Return ONLY the complete rewritten Java file content. No explanations.
+            Return ONLY the complete rewritten Java file content.  No explanations,
+            no markdown fences.
             """;
 
     private final AiPort aiPort;
@@ -149,11 +176,35 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                 .build();
     }
 
+    /**
+     * Permissive detector — a false positive only costs one extra AI call (the
+     * AI is instructed to pass non-Pub/Sub files through unchanged), but a
+     * false negative silently skips a real migration target.  Covers both the
+     * modern Spring Cloud GCP API and the legacy REST v1 API plus the most
+     * common user-wrapper class names.
+     */
     private static boolean hasPubSubCode(String content) {
-        return content.contains("google.cloud.pubsub")
-                || content.contains("PubSubTemplate")
-                || content.contains("SubscriberHandler")
-                || content.contains("PubSubListener")
-                || content.contains("MessagePublisher");
+        if (content == null || content.isEmpty()) return false;
+        return
+            // (A) Modern Spring Cloud GCP
+               content.contains("google.cloud.pubsub")
+            || content.contains("PubSubTemplate")
+            || content.contains("@PubSubListener")
+            || content.contains("@SubscriberHandler")
+            || content.contains("MessagePublisher")
+
+            // (B) Legacy GCP Pub/Sub REST v1 — com.google.api.services.pubsub.*
+            || content.contains("com.google.api.services.pubsub")
+            || content.contains("google.api.services.pubsub")
+            || content.contains("ReceivedMessage")
+            || content.contains("PubsubMessage")
+
+            // (C) Common user-wrapper class names + their typical operations
+            || content.contains("PubsubService")
+            || content.contains("PubSubService")
+            || content.contains("PubsubClient")
+            || content.contains("PubSubClient")
+            || content.contains("getOrCreateTopic")
+            || content.contains("getOrCreateSubscription");
     }
 }
