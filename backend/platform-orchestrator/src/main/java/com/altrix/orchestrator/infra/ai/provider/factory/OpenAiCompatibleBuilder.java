@@ -36,7 +36,11 @@ final class OpenAiCompatibleBuilder {
                 .apiKey(apiKey)
                 .modelName(modelName)
                 .temperature(cfg.temperature())
-                .timeout(Duration.ofSeconds(cfg.timeoutSeconds()));
+                .timeout(Duration.ofSeconds(cfg.timeoutSeconds()))
+                // Without this most providers default to ~1–4k output tokens,
+                // which silently truncates large file rewrites (pom.xml, big
+                // Java listeners) mid-stream.
+                .maxTokens(cfg.maxTokens());
         if (baseUrl != null && !baseUrl.isBlank()) {
             builder.baseUrl(baseUrl);
         }

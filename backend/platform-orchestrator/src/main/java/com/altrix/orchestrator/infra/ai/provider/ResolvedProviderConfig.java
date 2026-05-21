@@ -12,7 +12,10 @@ public record ResolvedProviderConfig(
         String modelAnalysis,
         String modelMigration,
         double temperature,
-        long timeoutSeconds
+        long timeoutSeconds,
+        // Output cap — provider defaults are often only 1–4k tokens, which
+        // silently truncates large file rewrites mid-stream.  See AiProvidersConfig.
+        int maxTokens
 ) {
     /**
      * True when enabled AND (has an API key OR is a local/key-less provider).

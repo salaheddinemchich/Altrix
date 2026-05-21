@@ -71,6 +71,7 @@ public class AnthropicProviderFactory implements ProviderFactory {
                 .modelName(modelName)
                 .temperature(cfg.temperature())
                 .timeout(Duration.ofSeconds(cfg.timeoutSeconds()))
+                .maxTokens(cfg.maxTokens())
                 .build();
     }
 }

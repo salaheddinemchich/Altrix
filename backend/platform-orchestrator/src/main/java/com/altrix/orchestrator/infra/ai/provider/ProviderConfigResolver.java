@@ -58,7 +58,8 @@ public class ProviderConfigResolver {
         return new ResolvedProviderConfig(
                 enabled, apiKey, baseUrl,
                 modelAnalysis, modelMigration,
-                system.temperature(), system.timeoutSeconds());
+                system.temperature(), system.timeoutSeconds(),
+                system.maxTokens());
     }
 
     public ResolvedProviderConfig resolveAnthropic(AiProvidersConfig.AnthropicConfig system) {
@@ -86,7 +87,8 @@ public class ProviderConfigResolver {
         return new ResolvedProviderConfig(
                 enabled, apiKey, "",
                 modelAnalysis, modelMigration,
-                system.temperature(), system.timeoutSeconds());
+                system.temperature(), system.timeoutSeconds(),
+                system.maxTokens());
     }
 
     public ResolvedProviderConfig resolveOllama(AiProvidersConfig.OllamaConfig system) {
@@ -114,7 +116,8 @@ public class ProviderConfigResolver {
         return new ResolvedProviderConfig(
                 enabled, "", baseUrl,
                 modelAnalysis, modelMigration,
-                0.0, system.timeoutSeconds());
+                0.0, system.timeoutSeconds(),
+                system.maxTokens());
     }
 
     // ── private helpers ───────────────────────────────────────────────────────

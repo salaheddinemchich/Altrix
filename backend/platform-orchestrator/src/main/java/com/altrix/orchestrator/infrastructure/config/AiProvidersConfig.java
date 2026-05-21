@@ -34,7 +34,11 @@ public record AiProvidersConfig(
             @DefaultValue("") String modelAnalysis,
             @DefaultValue("") String modelMigration,
             @DefaultValue("120") long timeoutSeconds,
-            @DefaultValue("0.1") double temperature
+            @DefaultValue("0.1") double temperature,
+            // Output cap for the migration tier — must be generous because a
+            // full pom.xml or large Java file easily exceeds the typical 1–4k
+            // provider default and gets silently truncated mid-stream.
+            @DefaultValue("16000") int maxTokens
     ) {
     }
 
@@ -44,7 +48,8 @@ public record AiProvidersConfig(
             @DefaultValue("") String modelAnalysis,
             @DefaultValue("") String modelMigration,
             @DefaultValue("120") long timeoutSeconds,
-            @DefaultValue("0.1") double temperature
+            @DefaultValue("0.1") double temperature,
+            @DefaultValue("16000") int maxTokens
     ) {
     }
 
@@ -54,7 +59,8 @@ public record AiProvidersConfig(
             @DefaultValue("llama3.2:3b") String modelAnalysis,
             @DefaultValue("llama3.1:8b") String modelMigration,
             @DefaultValue("300") long timeoutSeconds,
-            @DefaultValue("false") boolean warmup
+            @DefaultValue("false") boolean warmup,
+            @DefaultValue("16000") int maxTokens
     ) {
     }
 }
