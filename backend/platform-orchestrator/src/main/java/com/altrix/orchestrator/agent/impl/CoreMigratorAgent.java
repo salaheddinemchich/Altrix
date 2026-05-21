@@ -10,6 +10,7 @@ import com.altrix.orchestrator.domain.model.PrunedContext;
 import com.altrix.orchestrator.domain.port.out.AiPort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.infrastructure.ai.ContextPruner;
+import com.altrix.orchestrator.infrastructure.ai.PubSubDetector;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -189,11 +190,11 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             String path = entry.getKey();
             String content = entry.getValue();
 
-            if (!isMigratableFile(path)) {
+            if (!PubSubDetector.isMigratableFile(path)) {
                 result.add(unchanged(path, content, "Not a migratable file type"));
                 continue;
             }
-            if (!hasPubSubCode(content)) {
+            if (!PubSubDetector.hasPubSubCode(content)) {
                 result.add(unchanged(path, content, "No Pub/Sub code detected"));
                 continue;
             }
@@ -214,82 +215,10 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         return result;
     }
 
-    /**
-     * Accept Java sources AND the build / config files that wire Pub/Sub
-     * (pom.xml, application.yml, application.properties, *.yaml).  A migration
-     * that only rewrites .java but leaves the dependency declarations and
-     * bootstrap config alone yields a project that won't compile.
-     */
-    private static boolean isMigratableFile(String path) {
-        if (path == null) return false;
-        String p = path.toLowerCase();
-        return p.endsWith(".java")
-            || p.endsWith(".xml")           // pom.xml, ivy.xml, EJB / Jakarta EE descriptors
-            || p.endsWith(".yml")
-            || p.endsWith(".yaml")
-            || p.endsWith(".properties")
-            || p.endsWith(".gradle")
-            || p.endsWith(".gradle.kts");
-    }
-
     private static MigratedFile unchanged(String path, String content, String reason) {
         return MigratedFile.builder()
                 .originalPath(path).newPath(path).content(content)
                 .changeType(FileChangeType.UNCHANGED).diffSummary(reason)
                 .build();
-    }
-
-    /**
-     * Permissive detector — a false positive only costs one extra AI call (the
-     * AI is instructed to pass non-Pub/Sub files through unchanged), but a
-     * false negative silently skips a real migration target.  Covers both the
-     * modern Spring Cloud GCP API and the legacy REST v1 API plus the most
-     * common user-wrapper class names.
-     */
-    private static boolean hasPubSubCode(String content) {
-        if (content == null || content.isEmpty()) return false;
-        return
-            // (A) Modern Spring Cloud GCP
-               content.contains("google.cloud.pubsub")
-            || content.contains("PubSubTemplate")
-            || content.contains("@PubSubListener")
-            || content.contains("@SubscriberHandler")
-            || content.contains("MessagePublisher")
-
-            // (B) Legacy GCP Pub/Sub REST v1 — com.google.api.services.pubsub.*
-            || content.contains("com.google.api.services.pubsub")
-            || content.contains("google.api.services.pubsub")
-            || content.contains("ReceivedMessage")
-            || content.contains("PubsubMessage")
-
-            // (C) Common user-wrapper class names + their typical operations
-            || content.contains("PubsubService")
-            || content.contains("PubSubService")
-            || content.contains("PubsubClient")
-            || content.contains("PubSubClient")
-            || content.contains("PubsubConfig")
-            || content.contains("PubSubConfig")
-            || content.contains("getOrCreateTopic")
-            || content.contains("getOrCreateSubscription")
-
-            // (D) Build / dependency markers — pom.xml, build.gradle, ivy
-            || content.contains("google-api-services-pubsub")
-            || content.contains("google-cloud-pubsub")
-            || content.contains("spring-cloud-gcp-pubsub")
-            || content.contains("spring-cloud-gcp-starter-pubsub")
-
-            // (E) Bootstrap config markers — application.yml / .properties
-            || content.contains("spring.cloud.gcp.pubsub")
-            || content.contains("gcp.pubsub")
-            || content.contains("GOOGLE_APPLICATION_CREDENTIALS")
-            || content.contains("PUBSUB_EMULATOR_HOST")
-
-            // (F) Catch-all for the bare "Pubsub" / "PubSub" identifier — covers
-            //     user-defined helper classes our specific name list misses
-            //     (PubsubFactory, PubsubProperties, PubsubAdmin, …).  False
-            //     positives only cost an extra AI call.
-            || content.contains("Pubsub")
-            || content.contains("PubSub")
-            || content.contains("pubsub");
     }
 }

@@ -58,7 +58,9 @@
   <!-- ══ Detailed step timeline (#114) ══════════════════════════════════════ -->
   <div class="card" style="margin-top:16px">
     <h3 style="margin-top:0">Timeline</h3>
-    <app-session-timeline [jobId]="job()!.id"/>
+    <app-session-timeline
+      [jobId]="job()!.id"
+      [currentStatus]="session()?.status ?? job()!.status"/>
   </div>
 
   <!-- ══ Details + Session grid ════════════════════════════════════════════ -->

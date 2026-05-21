@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,11 +23,16 @@ import java.util.stream.Collectors;
  *
  * <p>Pruning strategy (in order):
  * <ol>
- *   <li><b>Plan-guided</b>: if {@link MigrationPlan#targetFiles()} is non-empty, keep
- *       only those paths. This cuts 75–85% of context for typical applications.</li>
- *   <li><b>Pass-through fallback</b>: if the plan carries no target files, return the
- *       full set — the migrator's own {@code hasPubSubCode()} filter handles per-file
- *       decisions.</li>
+ *   <li><b>Plan-guided + static safety net</b>: if {@link MigrationPlan#targetFiles()}
+ *       is non-empty, keep the UNION of (a) those paths and (b) every file whose
+ *       content matches {@link PubSubDetector#hasPubSubCode(String)}.  The planner
+ *       does not see the file inventory, so its list often under-samples large
+ *       projects (e.g. it might name PubsubConfig.java + pom.xml but miss
+ *       PubsubService, PubsubClient, PubsubTopic, ...).  Static detection catches
+ *       those.  False positives are cheap — the migrator's own per-file check
+ *       still skips files without real Pub/Sub usage.</li>
+ *   <li><b>Pass-through fallback</b>: if the plan carries no target files, return
+ *       the full set — the migrator's per-file filter handles individual decisions.</li>
  * </ol>
  *
  * <p>Token budget enforcement: if the retained files exceed {@code ai.max-context-tokens}
@@ -67,13 +73,26 @@ public class ContextPruner {
             log.debug("[ContextPruner] no targetFiles in plan — passing all {} file(s) to migrator", totalFiles);
             retained = allFiles;
         } else {
-            Set<String> targetSet = Set.copyOf(targetFiles);
+            // Plan + static safety net: the planner has no file inventory, so its
+            // targetFiles list often misses real Pub/Sub files.  Union it with
+            // every file that statically looks Pub/Sub-related.
+            Set<String> allowlist = new LinkedHashSet<>(targetFiles);
+            int planNamed = allowlist.size();
+            int staticAdded = 0;
+            for (Map.Entry<String, String> entry : allFiles.entrySet()) {
+                if (allowlist.contains(entry.getKey())) continue;
+                if (PubSubDetector.isMigratableFile(entry.getKey())
+                        && PubSubDetector.hasPubSubCode(entry.getValue())) {
+                    allowlist.add(entry.getKey());
+                    staticAdded++;
+                }
+            }
             retained = allFiles.entrySet().stream()
-                    .filter(e -> targetSet.contains(e.getKey()))
+                    .filter(e -> allowlist.contains(e.getKey()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
                             (a, b) -> a, LinkedHashMap::new));
-            log.debug("[ContextPruner] plan-guided pruning: kept {}/{} file(s), excluded {}",
-                    retained.size(), totalFiles, totalFiles - retained.size());
+            log.debug("[ContextPruner] plan-guided pruning: kept {}/{} file(s) (plan named {}, static-detector added {}, excluded {})",
+                    retained.size(), totalFiles, planNamed, staticAdded, totalFiles - retained.size());
         }
 
         retained = enforceTokenBudget(retained);
