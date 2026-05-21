@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,8 +17,10 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 /**
  * Master Spring Security configuration.
@@ -115,6 +118,20 @@ public class SecurityConfig {
             .oauth2Login(oauth2 -> oauth2
                 .userInfoEndpoint(u -> u.userService(oauth2UserService))
                 .successHandler(successHandler)
+            )
+
+            // ── Auth failure handling ────────────────────────────────────────────
+            // For /api/** return 401 so XHR clients can prompt re-login. Without
+            // this, Spring Security falls back to the OAuth2 login entry point and
+            // 302s to /login — which the browser refuses to follow cross-origin
+            // and Angular surfaces as a useless `status: 0` error. /oauth2/** keeps
+            // the default redirect entry point so the GitHub/GitLab login flow
+            // continues to work for browser navigation.
+            .exceptionHandling(ex -> ex
+                .defaultAuthenticationEntryPointFor(
+                    new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
+                    new AntPathRequestMatcher("/api/**")
+                )
             )
 
             // ── Filter chain order ────────────────────────────────────────────────
