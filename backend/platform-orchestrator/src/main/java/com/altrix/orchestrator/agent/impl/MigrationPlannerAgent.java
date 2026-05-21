@@ -34,12 +34,28 @@ import java.util.Optional;
 public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, MigrationPlan> {
 
     private static final String SYSTEM_PROMPT = """
-            You are an expert migration architect. Based on the analysis of a Java project, create a
-            detailed migration plan from Google Cloud Pub/Sub to Apache Kafka (Spring Kafka).
+            You are an expert migration architect.  Based on the analysis of a Java project,
+            create a detailed migration plan from Google Cloud Pub/Sub to Apache Kafka.
+
+            The target project may use either or both of:
+
+            (A) Modern Spring Cloud GCP — package org.springframework.cloud.gcp.pubsub.*
+                Look for: @PubSubListener, @SubscriberHandler, PubSubTemplate,
+                MessagePublisher, imports under google.cloud.pubsub.*.
+
+            (B) Legacy GCP Pub/Sub REST v1 — package com.google.api.services.pubsub.*
+                Look for: imports starting with com.google.api.services.pubsub,
+                use of the Pubsub client, PubsubMessage / ReceivedMessage types,
+                Pubsub.Projects.Topics.publish, Pubsub.Projects.Subscriptions.pull.
+                User code often wraps these behind a "PubsubService" / "PubSubService" /
+                "PubsubClient" class — include any file that depends on such wrappers.
+
+            Both styles are equally valid migration targets and the plan must address
+            whichever one the project actually uses (or both if mixed).
 
             Return ONLY valid JSON — no markdown fences, no commentary:
             {
-              "targetStack": "Spring Boot 3 + Apache Kafka",
+              "targetStack": "Spring Boot 3 + Apache Kafka",  // or "Jakarta EE + Apache Kafka" if EJB project
               "steps": ["Step 1: ...", "Step 2: ...", "..."],
               "riskLevel": "LOW | MEDIUM | HIGH",
               "estimatedEffort": "e.g. 3–5 days",
@@ -47,8 +63,11 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
               "targetFiles": ["src/main/java/com/example/Listener.java", "..."]
             }
 
-            targetFiles must list the exact relative file paths (as they appear in the ZIP) that contain
-            Google Cloud Pub/Sub code and require rewriting. Omit files that have no Pub/Sub usage.
+            targetFiles must list the exact relative file paths (as they appear in the ZIP)
+            that contain Google Cloud Pub/Sub code — under EITHER style above — and
+            therefore require rewriting.  Include user-defined wrapper classes
+            (PubsubService, etc.) plus every class that depends on them.  Omit only
+            files that have no Pub/Sub usage at all.
             """;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
