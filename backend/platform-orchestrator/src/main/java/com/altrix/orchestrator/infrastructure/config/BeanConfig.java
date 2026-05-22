@@ -135,12 +135,14 @@ public class BeanConfig {
             @Qualifier("reportGeneratorAgent") MigrationAgent<WorkflowOutcome, MigrationReport> reporter,
             MigratedFileStoragePort migratedFileStoragePort,
             JobStatusUpdatePort jobStatusUpdatePort,
-            ProgressNotifierPort progressNotifierPort
+            ProgressNotifierPort progressNotifierPort,
+            com.altrix.orchestrator.domain.port.out.MigrationReportRepository migrationReportRepository
     ) {
         return new ResumeMigrationService(
                 workflowSessionRepository,
                 migrator, validator, reporter,
-                migratedFileStoragePort, jobStatusUpdatePort, progressNotifierPort);
+                migratedFileStoragePort, jobStatusUpdatePort, progressNotifierPort,
+                migrationReportRepository);
     }
 
     @Bean

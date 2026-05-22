@@ -4,6 +4,7 @@ import com.altrix.orchestrator.adapter.in.rest.dto.ApprovalHistoryEntryResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.EditPlanRequest;
 import com.altrix.orchestrator.adapter.in.rest.dto.FileDiffResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
+import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.PauseRecordResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionFileNode;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionPageResponse;
@@ -16,6 +17,7 @@ import com.altrix.orchestrator.domain.port.in.EditPlanUseCase;
 import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
+import com.altrix.orchestrator.domain.port.out.MigrationReportRepository;
 import com.altrix.orchestrator.domain.port.out.SessionPauseHistoryPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import jakarta.validation.Valid;
@@ -63,6 +65,7 @@ public class SessionController {
     private final WorkflowSessionRepository sessionRepository;
     private final SessionPauseHistoryPort pauseHistoryPort;
     private final FileReaderPort fileReader;
+    private final MigrationReportRepository migrationReportRepository;
 
     // ── GET ───────────────────────────────────────────────────────────────────
 
@@ -264,6 +267,23 @@ public class SessionController {
             out.append(prefix).append(line).append('\n');
         }
         out.append('\n');
+    }
+
+    // ── Migration report (#129) ───────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/sessions/{id}/report — returns the persisted markdown
+     * migration report produced by Agent 5 once the session is DONE.
+     * 404 when the report doesn't exist yet (session is mid-pipeline or
+     * predates report persistence).
+     */
+    @GetMapping("/{sessionId}/report")
+    public ResponseEntity<MigrationReportResponse> getMigrationReport(@PathVariable String sessionId) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        return migrationReportRepository.findBySessionId(id)
+                .map(MigrationReportResponse::from)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     // ── Approval history (#126) ───────────────────────────────────────────────
