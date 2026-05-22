@@ -62,6 +62,18 @@ export class PipelineService {
       });
     };
 
+    // Every new subscriber is a fresh intent to receive live updates.
+    // If a previous burst of failures latched the state to 'unavailable',
+    // reset the retry budget so this watcher gets a real attempt.  Without
+    // this, once the connection failed three times early in the session
+    // (e.g. while the backend was restarting), the service stays dead
+    // permanently — even after the user navigates to a new job page.
+    if (this.connectionState() === 'unavailable') {
+      console.info('[PipelineService] resetting after previous unavailable state');
+      this.failedAttempts = 0;
+      this.connectionState.set('idle');
+    }
+
     this.ensureClient();
     if (this.clientReady) subscribe();
     else this.pendingSubs.push(subscribe);
@@ -94,6 +106,7 @@ export class PipelineService {
 
     const url = `${environment.api.orchestrator}/ws`;
     const token = this.auth.accessToken();
+    console.info('[PipelineService] connecting to', url, token ? '(with JWT)' : '(no JWT)');
     this.client = new Client({
       webSocketFactory: () => new SockJS(url) as WebSocket,
       connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
@@ -104,17 +117,27 @@ export class PipelineService {
         this.clientReady = true;
         this.failedAttempts = 0;
         this.connectionState.set('connected');
+        console.info('[PipelineService] STOMP connected — flushing', this.pendingSubs.length, 'pending subscription(s)');
         while (this.pendingSubs.length) this.pendingSubs.shift()!();
       },
       // Both errors flow through stompjs as separate callbacks — count either
       // toward the same retry budget so a flapping socket is treated the same
       // as one that never connects.
-      onWebSocketError: () => this.recordFailure(),
-      onStompError:     () => this.recordFailure(),
-      onWebSocketClose: () => {
+      onWebSocketError: (e) => {
+        console.warn('[PipelineService] WebSocket error', e);
+        this.recordFailure();
+      },
+      onStompError: (frame) => {
+        console.warn('[PipelineService] STOMP error', frame?.headers, frame?.body);
+        this.recordFailure();
+      },
+      onWebSocketClose: (e) => {
         // Only count a close as a failure if we never confirmed CONNECT —
         // otherwise stompjs' built-in reconnectDelay handles transient drops.
-        if (!this.clientReady) this.recordFailure();
+        if (!this.clientReady) {
+          console.warn('[PipelineService] WebSocket closed before CONNECT — code', e?.code, 'reason', e?.reason);
+          this.recordFailure();
+        }
       },
     });
     this.client.activate();
@@ -122,8 +145,10 @@ export class PipelineService {
 
   private recordFailure(): void {
     this.failedAttempts++;
+    console.warn('[PipelineService] failure', this.failedAttempts, '/', PipelineService.MAX_ATTEMPTS);
     if (this.failedAttempts >= PipelineService.MAX_ATTEMPTS) {
       this.connectionState.set('unavailable');
+      console.warn('[PipelineService] giving up after', PipelineService.MAX_ATTEMPTS, 'attempts — falling back to REST polling');
       // Stop stompjs from continuing to reconnect — consumer is now polling.
       this.client?.deactivate();
       this.client = null;
