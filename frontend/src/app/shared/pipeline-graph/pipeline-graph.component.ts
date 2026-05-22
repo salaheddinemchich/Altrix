@@ -131,18 +131,21 @@ export class PipelineGraphComponent implements OnDestroy {
       return;
     }
 
+    // Indices match DEFAULT_PIPELINE: [0] Index [1] Analyse [2] Plan [3] Migrate
+    // [4] Validate [5] Report.  See backfillSteps() in session-timeline for the
+    // full mapping rationale.
     let lastDone = -1;
     let active = -1;
     switch (s) {
       case 'PENDING':           lastDone = -1; active = -1; break;
-      case 'ANALYZING':         lastDone = -1; active = 0;  break;
-      case 'CONTEXT_ANALYSED':  lastDone = 0;  active = 1;  break;
+      case 'ANALYZING':         lastDone = 0;  active = 1;  break;
+      case 'CONTEXT_ANALYSED':  lastDone = 1;  active = 2;  break;
       case 'PLAN_READY':
-      case 'AWAITING_APPROVAL': lastDone = 1;  active = -1; break;
-      case 'MIGRATING':         lastDone = 1;  active = 2;  break;
-      case 'VALIDATING':        lastDone = 2;  active = 3;  break;
+      case 'AWAITING_APPROVAL': lastDone = 2;  active = -1; break;
+      case 'MIGRATING':         lastDone = 2;  active = 3;  break;
+      case 'VALIDATING':        lastDone = 3;  active = 4;  break;
       case 'DONE':
-      case 'COMPLETED':         lastDone = 4;  active = -1; break;
+      case 'COMPLETED':         lastDone = 5;  active = -1; break;
       default: return;
     }
 
