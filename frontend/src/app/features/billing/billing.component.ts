@@ -41,10 +41,12 @@ export class BillingComponent {
   constructor() {
     // #153 — reload the usage table whenever the period chip changes.  The
     // token-summary endpoint has no time filter so it loads once.
+    // allowSignalWrites: loadUsageForPeriod() seeds error+usage signals from
+    // the period input — Angular 18 forbids that inside effect() by default.
     effect(() => {
       const p = this.period();
       this.loadUsageForPeriod(p);
-    });
+    }, { allowSignalWrites: true });
     this.loadTokenSummaryOnce();
   }
 
