@@ -72,6 +72,72 @@
 
 </div>
 
+<!-- ══ Migration insights (#130) ══════════════════════════════════════════════ -->
+<section class="section">
+  <div class="section-header">
+    <h2>Migration insights</h2>
+    <a class="btn btn-ghost btn-sm" routerLink="/sessions">View sessions</a>
+  </div>
+
+  @if (orgSummary(); as s) {
+    <div class="insights-grid">
+
+      <!-- Success-rate gauge -->
+      <div class="insight-card">
+        <div class="insight-label">Success rate</div>
+        <div class="insight-value">
+          @if (s.totalSessions === 0) { — }
+          @else { {{ s.successRate | percent:'1.0-0' }} }
+        </div>
+        <div class="insight-sub muted">
+          {{ s.countsByStatus['DONE'] || 0 }} of {{ s.totalSessions }} sessions DONE
+        </div>
+      </div>
+
+      <!-- Total sessions -->
+      <div class="insight-card">
+        <div class="insight-label">Total sessions</div>
+        <div class="insight-value">{{ s.totalSessions | number }}</div>
+        <div class="insight-sub muted">across all projects</div>
+      </div>
+
+      <!-- Average duration -->
+      <div class="insight-card">
+        <div class="insight-label">Average duration</div>
+        <div class="insight-value">{{ averageDurationLabel() }}</div>
+        <div class="insight-sub muted">DONE sessions only</div>
+      </div>
+
+      <!-- Per-status horizontal bar chart -->
+      <div class="insight-card chart-card">
+        <div class="insight-label">By status</div>
+        @if (statusBars().length === 0) {
+          <div class="muted" style="margin-top:8px">No sessions yet.</div>
+        } @else {
+          <ul class="status-bars" aria-label="Session counts by status">
+            @for (b of statusBars(); track b.status) {
+              <li>
+                <span class="status-name">{{ b.status }}</span>
+                <span class="status-track">
+                  <span class="status-fill" [class]="statusBarClass(b.status)"
+                        [style.width.%]="b.percent"></span>
+                </span>
+                <span class="status-count mono">{{ b.count }}</span>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+
+    </div>
+  } @else {
+    <div class="empty">
+      <app-icon name="clock" [size]="20"/>
+      Loading metrics…
+    </div>
+  }
+</section>
+
 <!-- ══ Recent jobs ═══════════════════════════════════════════════════════════ -->
 <section class="section">
   <div class="section-header">
