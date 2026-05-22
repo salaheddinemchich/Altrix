@@ -1,0 +1,8 @@
+{
+  "userId": "test-user-id",
+  "login": "cypress-test-user",
+  "email": "cypress@altrix.local",
+  "role": "ROLE_ADMIN",
+  "provider": "GITHUB",
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LXVzZXItaWQiLCJpYXQiOjE3MTU5NjAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fixture-signature-not-verified-in-tests"
+}
