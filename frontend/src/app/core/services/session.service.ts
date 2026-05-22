@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { FileDiff, MigratedFile, MigrationPlan, PauseRecord, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
+import { ApprovalHistoryEntry, FileDiff, MigratedFile, MigrationPlan, PauseRecord, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -46,6 +46,11 @@ export class SessionService {
 
   getPauses(sessionId: string): Observable<PauseRecord[]> {
     return this.http.get<PauseRecord[]>(`${this.base}/${sessionId}/pauses`);
+  }
+
+  /** #126 — approval / rejection decisions on this session, newest-first. */
+  getApprovalHistory(sessionId: string): Observable<ApprovalHistoryEntry[]> {
+    return this.http.get<ApprovalHistoryEntry[]>(`${this.base}/${sessionId}/approval/history`);
   }
 
   approve(sessionId: string): Observable<Session> {

@@ -70,4 +70,17 @@ public class WorkflowSessionJpaEntity {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    // ── Approval audit (#125 / #126) ─────────────────────────────────────────
+    // Who approved/rejected, when, and which kind of decision.  All nullable
+    // — populated only once an approval gate has been answered.
+
+    @Column(name = "decided_by", length = 255)
+    private String decidedBy;
+
+    @Column(name = "decided_at")
+    private Instant decidedAt;
+
+    @Column(name = "decision_kind", length = 16)
+    private String decisionKind;
 }

@@ -12,6 +12,10 @@ import java.time.Instant;
  * only the fields needed by the Angular client.  Includes the AI's proposed
  * {@link MigrationPlanResponse} from the AWAITING_APPROVAL gate onwards (#10)
  * so reviewers can see (and later edit) what they are about to approve.
+ *
+ * <p>{@code decidedBy} / {@code decidedAt} / {@code decisionKind} surface the
+ * approval-audit fields added in #125 — populated only once the reviewer has
+ * answered the AWAITING_APPROVAL gate.
  */
 public record SessionStatusResponse(
         String sessionId,
@@ -21,7 +25,10 @@ public record SessionStatusResponse(
         SessionStatus pausedFrom,
         String errorMessage,
         Instant updatedAt,
-        MigrationPlanResponse plan
+        MigrationPlanResponse plan,
+        String decidedBy,
+        Instant decidedAt,
+        String decisionKind
 ) {
     public static SessionStatusResponse from(WorkflowSession s) {
         return new SessionStatusResponse(
@@ -32,6 +39,9 @@ public record SessionStatusResponse(
                 s.pausedFrom(),
                 s.errorMessage(),
                 s.updatedAt(),
-                MigrationPlanResponse.from(s.plan()));
+                MigrationPlanResponse.from(s.plan()),
+                s.decidedBy(),
+                s.decidedAt(),
+                s.decisionKind() != null ? s.decisionKind().name() : null);
     }
 }

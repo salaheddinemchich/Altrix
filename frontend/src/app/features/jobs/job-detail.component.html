@@ -112,6 +112,16 @@
             <dt>Last updated</dt>
             <dd class="muted">{{ s.updatedAt | date:'MMM d, h:mm a' }}</dd>
           </div>
+          <!-- #125 / #126 — approval audit row. Shown once the gate has been answered. -->
+          @if (s.decidedAt && s.decisionKind) {
+            <div class="dl-row">
+              <dt>{{ s.decisionKind === 'APPROVED' ? 'Approved by' : 'Rejected by' }}</dt>
+              <dd class="muted">
+                <span class="mono">{{ s.decidedBy ?? '—' }}</span>
+                <span class="faint"> · {{ s.decidedAt | date:'MMM d, h:mm a' }}</span>
+              </dd>
+            </div>
+          }
           @if (s.errorMessage) {
             <div class="dl-row">
               <dt>Error</dt>

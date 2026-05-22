@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.adapter.in.rest;
 
+import com.altrix.orchestrator.adapter.in.rest.dto.ApprovalHistoryEntryResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.EditPlanRequest;
 import com.altrix.orchestrator.adapter.in.rest.dto.FileDiffResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
@@ -21,6 +22,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -264,6 +266,30 @@ public class SessionController {
         out.append('\n');
     }
 
+    // ── Approval history (#126) ───────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/sessions/{id}/approval/history — returns the timeline of
+     * approve/reject decisions on this session.  Currently zero or one entry
+     * because the workflow doesn't yet support re-approval after a plan edit;
+     * the response is a list so the contract stays stable when it does.
+     */
+    @GetMapping("/{sessionId}/approval/history")
+    public ResponseEntity<List<ApprovalHistoryEntryResponse>> getApprovalHistory(@PathVariable String sessionId) {
+        WorkflowSession session = sessionRepository.findById(WorkflowSessionId.of(UUID.fromString(sessionId)))
+                .orElseThrow(() -> new SessionNotFoundException(WorkflowSessionId.of(UUID.fromString(sessionId))));
+        if (session.decisionKind() == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        String reason = session.decisionKind().name().equals("REJECTED") ? session.errorMessage() : null;
+        return ResponseEntity.ok(List.of(new ApprovalHistoryEntryResponse(
+                session.decidedBy(),
+                session.decidedAt(),
+                session.decisionKind().name(),
+                reason
+        )));
+    }
+
     // ── Pause history (#72) ───────────────────────────────────────────────────
 
     @GetMapping("/{sessionId}/pauses")
@@ -280,8 +306,14 @@ public class SessionController {
 
     @PostMapping("/{sessionId}/approve")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SessionStatusResponse> approve(@PathVariable String sessionId) {
-        WorkflowSession session = handleApproval.approve(toId(sessionId));
+    public ResponseEntity<SessionStatusResponse> approve(
+            @PathVariable String sessionId,
+            @AuthenticationPrincipal String userId) {
+        // userId is the JWT sub claim (the user's stable id).  Falls back to
+        // "anonymous" only when called from a non-auth context (which the
+        // @PreAuthorize above rules out, but the null-check is cheap).
+        String decidedBy = userId != null && !userId.isBlank() ? userId : "anonymous";
+        WorkflowSession session = handleApproval.approve(toId(sessionId), decidedBy);
         return ResponseEntity.ok(SessionStatusResponse.from(session));
     }
 
@@ -305,9 +337,11 @@ public class SessionController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SessionStatusResponse> reject(
             @PathVariable String sessionId,
-            @RequestBody(required = false) Map<String, String> body) {
+            @RequestBody(required = false) Map<String, String> body,
+            @AuthenticationPrincipal String userId) {
         String reason = body != null ? body.getOrDefault("reason", "Rejected by reviewer") : "Rejected by reviewer";
-        WorkflowSession session = handleApproval.reject(toId(sessionId), reason);
+        String decidedBy = userId != null && !userId.isBlank() ? userId : "anonymous";
+        WorkflowSession session = handleApproval.reject(toId(sessionId), reason, decidedBy);
         return ResponseEntity.ok(SessionStatusResponse.from(session));
     }
 

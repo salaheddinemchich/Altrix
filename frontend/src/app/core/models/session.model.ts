@@ -28,6 +28,21 @@ export interface Session {
   updatedAt: string;
   /** Issue #10 — populated from PLAN_READY onwards. Null on early/legacy rows. */
   plan: MigrationPlan | null;
+  /** #125 — JWT sub of the reviewer who answered the approval gate. */
+  decidedBy: string | null;
+  /** #125 — when the approval / rejection decision was recorded. */
+  decidedAt: string | null;
+  /** #125 — 'APPROVED' | 'REJECTED' — null until decided. */
+  decisionKind: 'APPROVED' | 'REJECTED' | null;
+}
+
+/** #126 — one entry of the approval-history timeline for a session. */
+export interface ApprovalHistoryEntry {
+  decidedBy: string;
+  decidedAt: string;
+  decisionKind: 'APPROVED' | 'REJECTED';
+  /** Rejection reason — null for APPROVED entries. */
+  reason: string | null;
 }
 
 export interface SessionPage {
