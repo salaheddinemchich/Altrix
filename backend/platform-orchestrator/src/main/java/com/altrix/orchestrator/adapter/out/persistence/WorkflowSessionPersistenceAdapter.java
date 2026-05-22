@@ -1,6 +1,7 @@
 package com.altrix.orchestrator.adapter.out.persistence;
 
 import com.altrix.orchestrator.domain.model.session.DecisionKind;
+import com.altrix.orchestrator.domain.model.session.SessionAggregate;
 import com.altrix.orchestrator.domain.model.session.SessionPage;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
@@ -16,7 +17,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -103,6 +106,20 @@ public class WorkflowSessionPersistenceAdapter implements WorkflowSessionReposit
     @Transactional
     public void deleteById(WorkflowSessionId id) {
         repository.deleteById(id.value());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SessionAggregate aggregate() {
+        Map<SessionStatus, Long> byStatus = new EnumMap<>(SessionStatus.class);
+        for (SessionStatus s : SessionStatus.values()) byStatus.put(s, 0L);
+        for (Object[] row : repository.countByStatus()) {
+            byStatus.put((SessionStatus) row[0], ((Number) row[1]).longValue());
+        }
+        long total = byStatus.values().stream().mapToLong(Long::longValue).sum();
+        long done = byStatus.getOrDefault(SessionStatus.DONE, 0L);
+        Double avgRaw = repository.averageDoneDurationSeconds();
+        return new SessionAggregate(total, done, avgRaw != null ? avgRaw : 0.0, byStatus);
     }
 
     // ── Mapping ───────────────────────────────────────────────────────────────
