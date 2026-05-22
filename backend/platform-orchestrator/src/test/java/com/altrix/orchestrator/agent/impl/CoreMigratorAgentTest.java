@@ -7,6 +7,7 @@ import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.model.PrunedContext;
 import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.domain.port.out.FileMigrationCachePort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.infrastructure.ai.ContextPruner;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,8 @@ class CoreMigratorAgentTest {
     FileReaderPort fileReader;
     @Mock
     ContextPruner contextPruner;
+    @Mock
+    FileMigrationCachePort migrationCache;
     @InjectMocks
     CoreMigratorAgent agent;
 

@@ -24,14 +24,19 @@ import java.time.Duration;
 public record CacheConfig(Ttl ttl, Health health) {
 
     public CacheConfig {
-        if (ttl == null) ttl = new Ttl(Duration.ofHours(1), Duration.ofHours(24));
+        if (ttl == null) ttl = new Ttl(Duration.ofHours(1), Duration.ofHours(24), Duration.ofMinutes(30));
         if (health == null) health = new Health(300_000L, 0.20, 10, false, "");
     }
 
-    public record Ttl(Duration contextAnalysis, Duration migrationPlan) {
+    public record Ttl(Duration contextAnalysis, Duration migrationPlan, Duration fileMigration) {
         public Ttl {
             if (contextAnalysis == null) contextAnalysis = Duration.ofHours(1);
             if (migrationPlan == null) migrationPlan = Duration.ofHours(24);
+            // Per #28 — 30 min default for Agent 3 file-level migration outputs.
+            // Per-file LLM calls dominate run cost during iterative dev; caching
+            // them by sha256(prompt + content) makes re-runs on unchanged code
+            // free.  Short TTL because prompts (and therefore outputs) evolve.
+            if (fileMigration == null) fileMigration = Duration.ofMinutes(30);
         }
     }
 
