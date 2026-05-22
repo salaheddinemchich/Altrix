@@ -38,11 +38,28 @@ export class PipelineService {
 
   private readonly auth = inject(AuthService);
 
+  /** Grace period before tearing down the WS when activeSubs hits 0 (ms). */
+  private static readonly CLOSE_GRACE_MS = 5_000;
+
   private client: Client | null = null;
   private clientReady = false;
   private readonly pendingSubs: (() => void)[] = [];
   private activeSubs = 0;
   private failedAttempts = 0;
+  /**
+   * Timer that lazily closes the WS some grace period after activeSubs hits 0.
+   * Without it, every effect re-run in JobDetail cycles the connection:
+   * unsubscribe → activeSubs=0 → close → new watch() → re-open.  Each cycle
+   * loses any events sent in the gap and floods the console with false
+   * "closed before CONNECT" warnings.
+   */
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Set to true while close() is in flight so the resulting onWebSocketClose
+   * doesn't get counted as a transport failure.  An intentional close is not
+   * a retryable error — it's a teardown.
+   */
+  private intentionalClose = false;
 
   /** Live connection state — UI components read this to decide on polling. */
   readonly connectionState = signal<WsConnectionState>('idle');
@@ -61,6 +78,13 @@ export class PipelineService {
         }
       });
     };
+
+    // A new subscriber arrived — cancel any pending lazy close so we reuse
+    // the existing connection instead of cycling it.
+    if (this.closeTimer) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
 
     // Every new subscriber is a fresh intent to receive live updates.
     // If a previous burst of failures latched the state to 'unavailable',
@@ -85,7 +109,17 @@ export class PipelineService {
         sub.unsubscribe();
         stompSub?.unsubscribe();
         this.activeSubs--;
-        if (this.activeSubs <= 0) this.close();
+        // Lazy close: don't tear down the WS the instant activeSubs hits 0
+        // — effects in JobDetail re-run constantly (currentStatus changes
+        // every 2 s poll), and each re-run unsubscribes + resubscribes.
+        // Waiting a grace period lets the next watcher reuse the open
+        // connection instead of cycling it.
+        if (this.activeSubs <= 0 && !this.closeTimer) {
+          this.closeTimer = setTimeout(() => {
+            this.closeTimer = null;
+            if (this.activeSubs <= 0) this.close();
+          }, PipelineService.CLOSE_GRACE_MS);
+        }
       };
     });
   }
@@ -132,6 +166,11 @@ export class PipelineService {
         this.recordFailure();
       },
       onWebSocketClose: (e) => {
+        // An intentional close (we called close() ourselves, e.g. activeSubs
+        // hit 0 after the grace period) is not a transport failure — it's a
+        // teardown.  Counting it as a failure caused spurious "WebSocket
+        // closed before CONNECT" warnings and chipped at the retry budget.
+        if (this.intentionalClose) return;
         // Only count a close as a failure if we never confirmed CONNECT —
         // otherwise stompjs' built-in reconnectDelay handles transient drops.
         if (!this.clientReady) {
@@ -159,10 +198,16 @@ export class PipelineService {
   }
 
   private close(): void {
+    // Flag the close so the resulting onWebSocketClose doesn't get counted
+    // as a transport failure or logged as "closed before CONNECT".
+    this.intentionalClose = true;
     this.client?.deactivate();
     this.client = null;
     this.clientReady = false;
     this.pendingSubs.length = 0;
+    // Clear the flag on next tick — by then the deactivate() callback has
+    // run and any future close events are real disconnects.
+    setTimeout(() => { this.intentionalClose = false; }, 0);
     this.connectionState.set('idle');
   }
 }
