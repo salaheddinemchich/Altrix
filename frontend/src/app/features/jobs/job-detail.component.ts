@@ -39,8 +39,17 @@ export class JobDetailComponent implements OnInit, OnDestroy {
   readonly pollingActive = computed(() =>
     this.wsState() === 'unavailable' && !this.bannerDismissed());
 
-  /** Active polling handle so we can clear on destroy / terminal state. */
+  /** WS-fallback polling (10 s) when the socket is unavailable. */
   private pollHandle: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Always-on lightweight polling (2 s) — re-fetches job + session while the
+   * job is non-terminal so the timeline visibly "rolls" stage-to-stage even
+   * when the WebSocket connects but emits no live events (which happens when
+   * the pipeline started running before the user opened this page).  Stops as
+   * soon as the job hits DONE/FAILED so we don't hammer the API forever.
+   */
+  private livePollHandle: ReturnType<typeof setInterval> | null = null;
 
   readonly stages = STAGES;
 
@@ -55,9 +64,7 @@ export class JobDetailComponent implements OnInit, OnDestroy {
   });
 
   constructor() {
-    // #118 — when the WS gives up, start polling the job every 10s until it
-    // reaches a terminal state.  The effect re-evaluates whenever wsState
-    // flips, so a reconnect (via retryConnection) cleanly stops polling.
+    // #118 — when the WS gives up, fall back to a 10 s poll until terminal.
     effect(() => {
       const state = this.wsState();
       const status = this.job()?.status;
@@ -69,11 +76,28 @@ export class JobDetailComponent implements OnInit, OnDestroy {
         this.stopPolling();
       }
     });
+
+    // Always-on live polling — runs alongside the WebSocket so the timeline
+    // visibly progresses even when no live events arrive (e.g. the pipeline
+    // started before the page was opened, or the WS connected after the
+    // events fired).  Stops at terminal state to avoid wasted API calls.
+    effect(() => {
+      const status = this.job()?.status;
+      const terminal = status === 'DONE' || status === 'FAILED';
+      if (!terminal && !this.livePollHandle) {
+        this.startLivePolling();
+      } else if (terminal && this.livePollHandle) {
+        this.stopLivePolling();
+      }
+    });
   }
 
   ngOnInit(): void { this.load(); }
 
-  ngOnDestroy(): void { this.stopPolling(); }
+  ngOnDestroy(): void {
+    this.stopPolling();
+    this.stopLivePolling();
+  }
 
   dismissBanner(): void { this.bannerDismissed.set(true); }
 
@@ -91,6 +115,33 @@ export class JobDetailComponent implements OnInit, OnDestroy {
     if (this.pollHandle) {
       clearInterval(this.pollHandle);
       this.pollHandle = null;
+    }
+  }
+
+  /**
+   * Lightweight live polling — refreshes job + session every 2 seconds so the
+   * timeline visibly rolls between stages even without WebSocket traffic.
+   * Stops at terminal state.
+   */
+  private startLivePolling(): void {
+    this.livePollHandle = setInterval(() => {
+      // Refresh both job and session; session.status is the granular signal
+      // the timeline backfill keys off.
+      this.jobsApi.get(this.id()).subscribe({
+        next: job => this.job.set(job),
+        error: () => {},
+      });
+      this.sessionApi.getByJobId(this.id()).subscribe({
+        next: s => this.session.set(s),
+        error: () => {},
+      });
+    }, 2_000);
+  }
+
+  private stopLivePolling(): void {
+    if (this.livePollHandle) {
+      clearInterval(this.livePollHandle);
+      this.livePollHandle = null;
     }
   }
 

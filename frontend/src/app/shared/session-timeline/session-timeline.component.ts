@@ -119,81 +119,16 @@ export class SessionTimelineComponent implements OnDestroy {
 
     effect(() => {
       const id = this.jobId();
+      const status = this.currentStatus();
       this.sub?.unsubscribe();
-      this.steps.set(initialSteps());
-      this.applyStatusBackfill(this.currentStatus());
+      // Reset + backfill atomically so an in-flight WebSocket apply() can't
+      // race the reset and leave the timeline in an inconsistent state.
+      this.steps.set(backfillSteps(initialSteps(), status));
       if (!id) return;
       this.sub = this.pipelineApi.watch(id).subscribe(evt => this.apply(evt));
     });
   }
 
-  /**
-   * Backfills the timeline from a coarse session/job status so a freshly
-   * opened JobDetail page doesn't show "0% / all PENDING" for a job that
-   * already ran.  Live WebSocket events override this — once they start
-   * arriving the per-step messages and elapsed times are accurate.
-   *
-   * Steps: [0] Analyse  [1] Plan  [2] Migrate  [3] Validate  [4] Report
-   *
-   * Mapping (lastDone is the last index that has finished, active is the
-   * currently-running index or -1 when at a gate or terminal):
-   *
-   *   PENDING                              lastDone=-1  active=-1
-   *   ANALYZING                            lastDone=-1  active=0    (Analyse running)
-   *   CONTEXT_ANALYSED                     lastDone=0   active=1    (Plan running)
-   *   PLAN_READY / AWAITING_APPROVAL       lastDone=1   active=-1   (gated at approval)
-   *   MIGRATING                            lastDone=1   active=2    (Migrate running)
-   *   VALIDATING                           lastDone=2   active=3    (Validate running)
-   *   DONE / COMPLETED                     lastDone=4   active=-1   (all done)
-   *   FAILED                               special — first PENDING step → ERROR
-   *   PAUSED                               keep current state (don't override)
-   */
-  private applyStatusBackfill(status: string | null | undefined): void {
-    if (!status) return;
-    const s = status.toUpperCase();
-    const epoch = Date.now();
-
-    if (s === 'PAUSED') return;
-
-    if (s === 'FAILED' || s === 'ERROR') {
-      this.steps.update(list => {
-        const next = [...list];
-        let errIdx = next.findIndex(n => n.status !== 'DONE');
-        if (errIdx === -1) errIdx = 0;
-        next[errIdx] = { ...next[errIdx], status: 'ERROR', endedAt: epoch };
-        return next;
-      });
-      return;
-    }
-
-    let lastDone = -1;
-    let active = -1;
-    switch (s) {
-      case 'PENDING':           lastDone = -1; active = -1; break;
-      case 'ANALYZING':         lastDone = -1; active = 0;  break;
-      case 'CONTEXT_ANALYSED':  lastDone = 0;  active = 1;  break;
-      case 'PLAN_READY':
-      case 'AWAITING_APPROVAL': lastDone = 1;  active = -1; break;
-      case 'MIGRATING':         lastDone = 1;  active = 2;  break;
-      case 'VALIDATING':        lastDone = 2;  active = 3;  break;
-      case 'DONE':
-      case 'COMPLETED':         lastDone = 4;  active = -1; break;
-      default: return;
-    }
-
-    this.steps.update(list => list.map((step, i) => {
-      if (i <= lastDone) {
-        return { ...step, status: 'DONE',
-                 startedAt: step.startedAt ?? epoch,
-                 endedAt:   step.endedAt   ?? epoch };
-      }
-      if (i === active) {
-        return { ...step, status: 'ACTIVE',
-                 startedAt: step.startedAt ?? epoch };
-      }
-      return step;
-    }));
-  }
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
@@ -268,6 +203,68 @@ function initialSteps(): TimelineStep[] {
     startedAt: null,
     endedAt:   null,
   }));
+}
+
+/**
+ * Pure backfill: given a fresh step list and a coarse session/job status,
+ * returns the step list with stages marked DONE / ACTIVE / ERROR so the
+ * timeline reflects the current pipeline position even before any live
+ * WebSocket event arrives.
+ *
+ * Steps: [0] Analyse  [1] Plan  [2] Migrate  [3] Validate  [4] Report
+ *
+ *   PENDING                              none
+ *   ANALYZING                            Analyse ACTIVE
+ *   CONTEXT_ANALYSED                     Analyse DONE, Plan ACTIVE
+ *   PLAN_READY / AWAITING_APPROVAL       Analyse + Plan DONE (gated)
+ *   MIGRATING                            +Migrate ACTIVE
+ *   VALIDATING                           +Validate ACTIVE
+ *   DONE / COMPLETED                     all DONE
+ *   FAILED                               first non-DONE → ERROR
+ *   PAUSED                               keep existing state
+ */
+function backfillSteps(base: TimelineStep[], status: string | null | undefined): TimelineStep[] {
+  if (!status) return base;
+  const s = status.toUpperCase();
+  const epoch = Date.now();
+
+  if (s === 'PAUSED') return base;
+
+  if (s === 'FAILED' || s === 'ERROR') {
+    const next = [...base];
+    let errIdx = next.findIndex(n => n.status !== 'DONE');
+    if (errIdx === -1) errIdx = 0;
+    next[errIdx] = { ...next[errIdx], status: 'ERROR', endedAt: epoch };
+    return next;
+  }
+
+  let lastDone = -1;
+  let active = -1;
+  switch (s) {
+    case 'PENDING':           lastDone = -1; active = -1; break;
+    case 'ANALYZING':         lastDone = -1; active = 0;  break;
+    case 'CONTEXT_ANALYSED':  lastDone = 0;  active = 1;  break;
+    case 'PLAN_READY':
+    case 'AWAITING_APPROVAL': lastDone = 1;  active = -1; break;
+    case 'MIGRATING':         lastDone = 1;  active = 2;  break;
+    case 'VALIDATING':        lastDone = 2;  active = 3;  break;
+    case 'DONE':
+    case 'COMPLETED':         lastDone = 4;  active = -1; break;
+    default: return base;
+  }
+
+  return base.map((step, i) => {
+    if (i <= lastDone) {
+      return { ...step, status: 'DONE' as PipelineNodeStatus,
+               startedAt: step.startedAt ?? epoch,
+               endedAt:   step.endedAt   ?? epoch };
+    }
+    if (i === active) {
+      return { ...step, status: 'ACTIVE' as PipelineNodeStatus,
+               startedAt: step.startedAt ?? epoch };
+    }
+    return step;
+  });
 }
 
 function mapStatus(s: string): PipelineNodeStatus {
