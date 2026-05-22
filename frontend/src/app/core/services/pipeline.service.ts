@@ -2,7 +2,6 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { Observable, Subject } from 'rxjs';
-import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/services/auth.service';
 import { ProgressEvent } from '../models/pipeline.model';
 
@@ -54,12 +53,6 @@ export class PipelineService {
    * "closed before CONNECT" warnings.
    */
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
-  /**
-   * Set to true while close() is in flight so the resulting onWebSocketClose
-   * doesn't get counted as a transport failure.  An intentional close is not
-   * a retryable error — it's a teardown.
-   */
-  private intentionalClose = false;
 
   /** Live connection state — UI components read this to decide on polling. */
   readonly connectionState = signal<WsConnectionState>('idle');
@@ -138,48 +131,60 @@ export class PipelineService {
 
     this.connectionState.set('connecting');
 
-    const url = `${environment.api.orchestrator}/ws`;
+    // Same-origin '/ws' via the dev-server proxy (see proxy.conf.js).
+    // SockJS xhr-streaming across origins (was 'http://localhost:8084/ws')
+    // was being silently closed by Chrome right after the STOMP handshake
+    // — surfacing as a "Normal closure" / "WebSocket closed before CONNECT"
+    // loop.  Going same-origin sidesteps CORS quirks entirely.  In
+    // production a gateway terminates /ws on the same host as the SPA, so
+    // this works there too.
+    const url = '/ws';
     const token = this.auth.accessToken();
+    // Capture the client we're about to build in a local — onWebSocketClose
+    // checks this.client === myClient to tell "this is the client we just
+    // tore down" from "a real transport failure".  Avoids the setTimeout
+    // race the previous intentionalClose flag had.
+    let myClient: Client;
+    let myClientReady = false;
     console.info('[PipelineService] connecting to', url, token ? '(with JWT)' : '(no JWT)');
-    this.client = new Client({
+    myClient = new Client({
       webSocketFactory: () => new SockJS(url) as WebSocket,
       connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
       reconnectDelay: 4000,
       heartbeatIncoming: 10_000,
       heartbeatOutgoing: 10_000,
       onConnect: () => {
+        myClientReady = true;
         this.clientReady = true;
         this.failedAttempts = 0;
         this.connectionState.set('connected');
         console.info('[PipelineService] STOMP connected — flushing', this.pendingSubs.length, 'pending subscription(s)');
         while (this.pendingSubs.length) this.pendingSubs.shift()!();
       },
-      // Both errors flow through stompjs as separate callbacks — count either
-      // toward the same retry budget so a flapping socket is treated the same
-      // as one that never connects.
       onWebSocketError: (e) => {
+        if (this.client !== myClient) return; // stale handler from a torn-down client
         console.warn('[PipelineService] WebSocket error', e);
         this.recordFailure();
       },
       onStompError: (frame) => {
+        if (this.client !== myClient) return;
         console.warn('[PipelineService] STOMP error', frame?.headers, frame?.body);
         this.recordFailure();
       },
       onWebSocketClose: (e) => {
-        // An intentional close (we called close() ourselves, e.g. activeSubs
-        // hit 0 after the grace period) is not a transport failure — it's a
-        // teardown.  Counting it as a failure caused spurious "WebSocket
-        // closed before CONNECT" warnings and chipped at the retry budget.
-        if (this.intentionalClose) return;
-        // Only count a close as a failure if we never confirmed CONNECT —
-        // otherwise stompjs' built-in reconnectDelay handles transient drops.
-        if (!this.clientReady) {
+        // If we've already swapped to a new client (or closed intentionally),
+        // this is a stale event from a torn-down connection — ignore it.
+        if (this.client !== myClient) return;
+        if (!myClientReady) {
           console.warn('[PipelineService] WebSocket closed before CONNECT — code', e?.code, 'reason', e?.reason);
           this.recordFailure();
         }
+        // After CONNECT, transient closures are handled by stompjs's own
+        // reconnectDelay — nothing for us to do here.
       },
     });
-    this.client.activate();
+    this.client = myClient;
+    myClient.activate();
   }
 
   private recordFailure(): void {
@@ -198,16 +203,15 @@ export class PipelineService {
   }
 
   private close(): void {
-    // Flag the close so the resulting onWebSocketClose doesn't get counted
-    // as a transport failure or logged as "closed before CONNECT".
-    this.intentionalClose = true;
-    this.client?.deactivate();
+    // Setting this.client = null BEFORE deactivate() means the stale-handler
+    // guard in onWebSocketClose (this.client !== myClient) trips for any
+    // close event from this client — so the resulting "Normal closure" no
+    // longer gets counted as a transport failure.  No flag/timeout race.
+    const old = this.client;
     this.client = null;
     this.clientReady = false;
     this.pendingSubs.length = 0;
-    // Clear the flag on next tick — by then the deactivate() callback has
-    // run and any future close events are real disconnects.
-    setTimeout(() => { this.intentionalClose = false; }, 0);
+    old?.deactivate();
     this.connectionState.set('idle');
   }
 }
