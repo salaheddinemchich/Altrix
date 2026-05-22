@@ -65,8 +65,11 @@
   --space-6: var(--sp-6);
   --space-8: var(--sp-8);
 
-  /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Typography
+     --font-sans drives html/body and every component that doesn't opt into
+     monospace.  Aligned with --font-display so the whole app uses the
+     Bricolage Grotesque face seen on the auth screens. */
+  --font-sans: 'Bricolage Grotesque', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Bricolage Grotesque', 'Inter', sans-serif;
   --font-mono: 'SFMono-Regular', Menlo, Consolas, monospace;
 }
