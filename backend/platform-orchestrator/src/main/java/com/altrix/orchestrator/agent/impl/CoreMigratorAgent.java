@@ -8,6 +8,7 @@ import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.model.PrunedContext;
 import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.domain.port.out.FileMigrationCachePort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.infrastructure.ai.ContextPruner;
 import com.altrix.orchestrator.infrastructure.ai.PubSubDetector;
@@ -15,9 +16,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Agent 3 — Core Migrator (typed pipeline variant).
@@ -154,6 +159,7 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
     private final AiPort aiPort;
     private final FileReaderPort fileReader;
     private final ContextPruner contextPruner;
+    private final FileMigrationCachePort migrationCache;
 
     @Override
     public String getName() {
@@ -223,6 +229,22 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                 continue;
             }
 
+            // #28 — content-addressed cache.  Key includes the system prompt so
+            // a prompt tweak forces a fresh AI call.  Cuts iterative-dev cost to
+            // zero when nothing in the source changed.
+            String cacheKey = computeCacheKey(systemPrompt, path, content);
+            Optional<String> cached = migrationCache.get(cacheKey);
+            if (cached.isPresent()) {
+                String migrated = cached.get();
+                FileChangeType changeType = migrated.equals(content)
+                        ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
+                result.add(MigratedFile.builder()
+                        .originalPath(path).newPath(path).content(migrated)
+                        .changeType(changeType).diffSummary("Migrated Pub/Sub → Kafka (cache hit)")
+                        .build());
+                continue;
+            }
+
             try {
                 String raw = aiPort.chat(systemPrompt, "File: " + path + "\n\n" + content);
                 String migrated = stripMarkdownFences(raw);
@@ -236,6 +258,11 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
 
                 FileChangeType changeType = migrated.equals(content)
                         ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
+                // Only cache successful migrations — never cache an unchanged
+                // pass-through (saves no AI call) nor a truncation fallback.
+                if (changeType == FileChangeType.MODIFIED) {
+                    migrationCache.put(cacheKey, migrated);
+                }
                 result.add(MigratedFile.builder()
                         .originalPath(path).newPath(path).content(migrated)
                         .changeType(changeType).diffSummary("Migrated Pub/Sub → Kafka")
@@ -246,6 +273,30 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             }
         }
         return result;
+    }
+
+    /**
+     * Content-addressed cache key — {@code SHA-256(systemPrompt + "|" + path
+     * + "|" + content)}.  Including the prompt means tweaking it
+     * automatically invalidates every cached entry; including the path keeps
+     * two unrelated files with identical content from sharing a cache entry.
+     */
+    static String computeCacheKey(String systemPrompt, String path, String content) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(systemPrompt.getBytes(StandardCharsets.UTF_8));
+            digest.update((byte) '|');
+            digest.update(path.getBytes(StandardCharsets.UTF_8));
+            digest.update((byte) '|');
+            digest.update(content.getBytes(StandardCharsets.UTF_8));
+            byte[] hash = digest.digest();
+            StringBuilder hex = new StringBuilder(64);
+            for (byte b : hash) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 is mandatory in every JRE — falling back here is fine.
+            return Integer.toHexString((systemPrompt + path + content).hashCode());
+        }
     }
 
     private static MigratedFile unchanged(String path, String content, String reason) {
