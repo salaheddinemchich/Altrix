@@ -5,6 +5,7 @@ import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
 import com.altrix.orchestrator.domain.port.out.EmbeddingStorePort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
+import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -39,19 +40,31 @@ public class CodeIndexingAgent implements CodeIndexingPort {
 
     private final FileReaderPort fileReader;
     private final EmbeddingStorePort embeddingStore;
+    private final ProgressNotifierPort progressNotifier;
 
     /**
      * Index the project — called by OrchestratorService before the agent pipeline.
+     *
+     * <p>Emits granular progress events so the JobDetail timeline can show
+     * the user "what is being indexed" instead of just a binary RUNNING/DONE.
      */
     public void index(ProjectContext context) {
-        log.info("Job '{}' — indexing source files for RAG", context.jobId());
+        String jobId = context.jobId();
+        log.info("Job '{}' — indexing source files for RAG", jobId);
+
+        progressNotifier.notify(jobId, "RAG Indexer", "RUNNING", "Reading project files…");
         Map<String, String> files = fileReader.readAllFiles(context.storageKey());
 
+        progressNotifier.notify(jobId, "RAG Indexer", "RUNNING",
+                "Chunking " + files.size() + " file(s) for embedding…");
+
         List<DocumentChunk> chunks = new ArrayList<>();
+        int indexableCount = 0;
         for (Map.Entry<String, String> entry : files.entrySet()) {
             String path = entry.getKey();
             String content = entry.getValue();
             if (!isIndexable(path) || content.isBlank()) continue;
+            indexableCount++;
 
             List<String> textChunks = splitIntoChunks(content);
             for (int i = 0; i < textChunks.size(); i++) {
@@ -62,14 +75,20 @@ public class CodeIndexingAgent implements CodeIndexingPort {
         }
 
         log.info("Job '{}' — {} chunks from {} files, upserting to vector store",
-                context.jobId(), chunks.size(), files.size());
+                jobId, chunks.size(), files.size());
+        progressNotifier.notify(jobId, "RAG Indexer", "RUNNING",
+                "Embedding " + chunks.size() + " chunk(s) from " + indexableCount + " file(s)…");
         try {
             embeddingStore.upsert(chunks);
+            progressNotifier.notify(jobId, "RAG Indexer", "DONE",
+                    "Indexed " + chunks.size() + " chunk(s) from " + indexableCount + " file(s)");
         } catch (IllegalStateException e) {
             // RAG embedding model is disabled (no OpenAI/Ollama key). Continue
             // without semantic search — agents still receive full file content
             // through their normal context payload, so migration still works.
-            log.warn("Job '{}' — RAG indexing skipped: {}", context.jobId(), e.getMessage());
+            log.warn("Job '{}' — RAG indexing skipped: {}", jobId, e.getMessage());
+            progressNotifier.notify(jobId, "RAG Indexer", "DONE",
+                    "Skipped — embedding model not configured");
         }
     }
 

@@ -19,14 +19,16 @@ export interface PipelineNode {
 }
 
 export const DEFAULT_PIPELINE: PipelineNode[] = [
+  { id: 'index',    label: 'Index',    description: 'RAG: chunking + embedding source files',
+    status: 'PENDING', agents: ['RAG Indexer', 'codeIndexingAgent'] },
   { id: 'analyze',  label: 'Analyse',  description: 'Scanning project & detecting services',
-    status: 'PENDING', agents: ['contextAnalyzerAgent', 'ArchitectureAnalyzerAgent'] },
+    status: 'PENDING', agents: ['contextAnalyzerAgent', 'ArchitectureAnalyzerAgent', 'Context Analyzer'] },
   { id: 'plan',     label: 'Plan',     description: 'Generating migration plan',
-    status: 'PENDING', agents: ['migrationPlannerAgent', 'MigrationPlannerAgent'] },
+    status: 'PENDING', agents: ['migrationPlannerAgent', 'MigrationPlannerAgent', 'Migration Planner'] },
   { id: 'migrate',  label: 'Migrate',  description: 'Rewriting Pub/Sub → Kafka',
-    status: 'PENDING', agents: ['typedCoreMigratorAgent', 'CoreMigratorAgent'] },
+    status: 'PENDING', agents: ['typedCoreMigratorAgent', 'CoreMigratorAgent', 'Core Migrator'] },
   { id: 'validate', label: 'Validate', description: 'Sandbox build & test',
-    status: 'PENDING', agents: ['sandboxValidatorAgent'] },
+    status: 'PENDING', agents: ['sandboxValidatorAgent', 'Sandbox Validator'] },
   { id: 'report',   label: 'Report',   description: 'Final migration report',
-    status: 'PENDING', agents: ['reportGeneratorAgent'] },
+    status: 'PENDING', agents: ['reportGeneratorAgent', 'Report Generator'] },
 ];

@@ -76,9 +76,10 @@ public class OrchestratorService implements RunPipelineUseCase {
 
         try {
             // ── Phase 0: RAG indexing ────────────────────────────────────────
-            progressNotifierPort.notify(jobId, "RAG Indexer", "RUNNING", null);
+            // CodeIndexingAgent now emits its own granular progress events
+            // (reading → chunking → embedding → done) with file/chunk counts
+            // so the timeline shows what's actually being indexed.
             codeIndexingPort.index(initial);
-            progressNotifierPort.notify(jobId, "RAG Indexer", "DONE", null);
 
             // ── Phase 1–5: typed agent workflow ─────────────────────────────
             // Bug fix: previously this called session.startMigration() upfront

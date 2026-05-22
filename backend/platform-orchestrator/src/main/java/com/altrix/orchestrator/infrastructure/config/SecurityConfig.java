@@ -108,7 +108,15 @@ public class SecurityConfig {
                     "/login/**",
                     "/api/v1/auth/refresh",
                     "/actuator/health",
-                    "/actuator/info"
+                    "/actuator/info",
+                    // SockJS handshake at /ws/info has no JWT (the token lives
+                    // on the STOMP CONNECT frame, not the HTTP handshake).  If
+                    // we don't permit this path the SockJS negotiation gets
+                    // 401'd before STOMP can even start, the WebSocket stays
+                    // dead, and the JobDetail timeline never receives live
+                    // progress events.  Authorization on subscriptions can be
+                    // added later via a StompChannelInterceptor.
+                    "/ws/**"
                 ).permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()

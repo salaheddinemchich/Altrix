@@ -9,6 +9,8 @@ import com.altrix.orchestrator.domain.port.in.EditPlanUseCase;
 import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
 import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
+import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
+import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,10 @@ public class SessionManagementService
     private final ResumeMigrationUseCase resumeMigration;
     /** Hands off the resume work so the REST call returns quickly. */
     private final Executor resumeExecutor;
+    /** Flips the job-side cache to MIGRATING immediately on approval. */
+    private final JobStatusUpdatePort jobStatusUpdatePort;
+    /** Emits a synthetic progress event so the timeline reacts the moment approval lands. */
+    private final ProgressNotifierPort progressNotifier;
 
     // ── HandleApprovalUseCase ─────────────────────────────────────────────────
 
@@ -44,6 +50,14 @@ public class SessionManagementService
         session.startMigration();
         WorkflowSession saved = sessionRepository.save(session);
         log.info("Plan approved — session '{}' → MIGRATING", sessionId);
+
+        // Align the job-side cache + push a synthetic progress event so the
+        // JobDetail timeline flips from PLAN_READY to MIGRATING the moment
+        // the user clicks Approve, without waiting for the migrator to start
+        // emitting its own events (which can be 30+ s on a slow provider).
+        jobStatusUpdatePort.markMigrating(saved.jobId());
+        progressNotifier.notify(saved.jobId(), "Core Migrator", "RUNNING",
+                "Migration approved — starting rewrite…");
 
         // Kick off migrator → validator → reporter asynchronously so the HTTP
         // call returns immediately; progress streams over the existing STOMP

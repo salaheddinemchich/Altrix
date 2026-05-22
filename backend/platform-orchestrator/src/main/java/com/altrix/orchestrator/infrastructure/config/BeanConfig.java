@@ -99,9 +99,12 @@ public class BeanConfig {
     public SessionManagementService sessionManagementService(
             WorkflowSessionRepository workflowSessionRepository,
             ResumeMigrationUseCase resumeMigration,
-            @Qualifier("approvalResumeExecutor") Executor resumeExecutor
+            @Qualifier("approvalResumeExecutor") Executor resumeExecutor,
+            com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort jobStatusUpdatePort,
+            com.altrix.orchestrator.domain.port.out.ProgressNotifierPort progressNotifier
     ) {
-        return new SessionManagementService(workflowSessionRepository, resumeMigration, resumeExecutor);
+        return new SessionManagementService(workflowSessionRepository, resumeMigration,
+                resumeExecutor, jobStatusUpdatePort, progressNotifier);
     }
 
     /**

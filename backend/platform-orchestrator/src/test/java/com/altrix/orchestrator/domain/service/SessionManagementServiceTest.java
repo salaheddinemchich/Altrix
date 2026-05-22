@@ -6,6 +6,8 @@ import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
+import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
+import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +34,12 @@ class SessionManagementServiceTest {
     @Mock
     ResumeMigrationUseCase resumeMigration;
 
+    @Mock
+    JobStatusUpdatePort jobStatusUpdatePort;
+
+    @Mock
+    ProgressNotifierPort progressNotifier;
+
     /** Runs tasks synchronously so the test asserts the resume hook actually fires. */
     final Executor resumeExecutor = Runnable::run;
 
@@ -39,7 +47,8 @@ class SessionManagementServiceTest {
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        service = new SessionManagementService(sessionRepository, resumeMigration, resumeExecutor);
+        service = new SessionManagementService(sessionRepository, resumeMigration,
+                resumeExecutor, jobStatusUpdatePort, progressNotifier);
     }
 
     // ── approve ───────────────────────────────────────────────────────────────
