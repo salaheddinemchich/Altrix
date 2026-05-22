@@ -117,6 +117,10 @@ export class SessionTimelineComponent implements OnDestroy {
       if (this.hasActive()) this.now.set(Date.now());
     }, 1000);
 
+    // Angular 18 forbids writing to signals from an effect by default
+    // (NG0600).  We intentionally seed `steps` here from jobId + currentStatus
+    // before live WS events arrive — without allowSignalWrites the effect
+    // throws and the backfill silently doesn't run.
     effect(() => {
       const id = this.jobId();
       const status = this.currentStatus();
@@ -126,7 +130,7 @@ export class SessionTimelineComponent implements OnDestroy {
       this.steps.set(backfillSteps(initialSteps(), status));
       if (!id) return;
       this.sub = this.pipelineApi.watch(id).subscribe(evt => this.apply(evt));
-    });
+    }, { allowSignalWrites: true });
   }
 
 

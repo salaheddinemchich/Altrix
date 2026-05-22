@@ -36,6 +36,11 @@ export class PipelineGraphComponent implements OnDestroy {
   private sub: Subscription | null = null;
 
   constructor() {
+    // Angular 18 forbids writing to signals from an effect by default
+    // (NG0600).  We intentionally write `nodes` here to seed the graph from
+    // jobId + currentStatus before live WS events arrive — without
+    // allowSignalWrites the effect throws and the backfill silently doesn't
+    // run, which is what kept the JobDetail page stuck on all-PENDING.
     effect(() => {
       const id = this.jobId();
       this.sub?.unsubscribe();
@@ -44,7 +49,7 @@ export class PipelineGraphComponent implements OnDestroy {
 
       if (!id) return;
       this.sub = this.pipelineApi.watch(id).subscribe(evt => this.apply(evt));
-    });
+    }, { allowSignalWrites: true });
   }
 
   ngOnDestroy(): void { this.sub?.unsubscribe(); }
