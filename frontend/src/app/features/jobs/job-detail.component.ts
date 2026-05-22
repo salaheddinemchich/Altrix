@@ -168,6 +168,11 @@ export class JobDetailComponent implements OnInit, OnDestroy {
   approve(): void {
     const s = this.session();
     if (!s) return;
+    // #125 — identity confirmation step.  Surfaces the @login the decision
+    // will be recorded against so a reviewer can't be tricked into approving
+    // from a session that has silently swapped users underneath them.
+    const login = this.auth.user()?.login ?? this.auth.userId() ?? 'this account';
+    if (!confirm(`Approving as @${login} — proceed?`)) return;
     this.sessionApi.approve(s.sessionId).subscribe({
       next: updated => this.session.set(updated),
       error: () => {},
@@ -177,6 +182,8 @@ export class JobDetailComponent implements OnInit, OnDestroy {
   reject(): void {
     const s = this.session();
     if (!s) return;
+    const login = this.auth.user()?.login ?? this.auth.userId() ?? 'this account';
+    if (!confirm(`Rejecting as @${login} — proceed?`)) return;
     this.sessionApi.reject(s.sessionId).subscribe({
       next: updated => this.session.set(updated),
       error: () => {},

@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.adapter.out.persistence;
 
+import com.altrix.orchestrator.domain.model.session.DecisionKind;
 import com.altrix.orchestrator.domain.model.session.SessionPage;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
@@ -120,6 +121,9 @@ public class WorkflowSessionPersistenceAdapter implements WorkflowSessionReposit
                 .migratedFiles(s.migratedFiles().isEmpty() ? null : s.migratedFiles())
                 .createdAt(s.createdAt())
                 .updatedAt(s.updatedAt())
+                .decidedBy(s.decidedBy())
+                .decidedAt(s.decidedAt())
+                .decisionKind(s.decisionKind() != null ? s.decisionKind().name() : null)
                 .build();
     }
 
@@ -135,7 +139,10 @@ public class WorkflowSessionPersistenceAdapter implements WorkflowSessionReposit
                 e.getConsecutiveAgentErrors(),
                 e.getMigratedFiles(),
                 e.getCreatedAt(),
-                e.getVersion() != null ? e.getVersion() : 0L);
+                e.getVersion() != null ? e.getVersion() : 0L,
+                e.getDecidedBy(),
+                e.getDecidedAt(),
+                e.getDecisionKind() != null ? DecisionKind.valueOf(e.getDecisionKind()) : null);
     }
 
     private WorkflowSession projectionToDomain(SessionSummaryProjection p) {

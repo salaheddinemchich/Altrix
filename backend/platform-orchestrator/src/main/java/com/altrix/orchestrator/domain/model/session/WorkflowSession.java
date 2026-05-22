@@ -36,6 +36,12 @@ public class WorkflowSession {
     /** Optimistic lock version — 0 for new sessions; threaded through from the JPA entity. */
     private final long version;
 
+    /** Approval audit — who answered the AWAITING_APPROVAL gate, when, and how. #125 / #126 */
+    private String decidedBy;
+    private Instant decidedAt;
+    /** APPROVED / REJECTED — null until the gate is answered. */
+    private DecisionKind decisionKind;
+
     /**
      * Domain events collected during this unit of work; drained by the repository.
      */
@@ -51,17 +57,35 @@ public class WorkflowSession {
                 SessionStatus.PENDING,
                 null, null, null,
                 0, List.of(),
-                Instant.now(), 0L);
+                Instant.now(), 0L,
+                null, null, null);
     }
 
     /**
-     * Reconstitution constructor used by the persistence adapter.
+     * Reconstitution constructor — back-compat overload without approval audit
+     * fields.  Used by the few call-sites that don't (yet) carry them; the
+     * persistence adapter uses the full one below.
      */
     public WorkflowSession(WorkflowSessionId id, String jobId, String projectId,
                            SessionStatus status, MigrationPlan plan,
                            String errorMessage, SessionStatus pausedFrom,
                            int consecutiveAgentErrors, List<MigratedFile> migratedFiles,
                            Instant createdAt, long version) {
+        this(id, jobId, projectId, status, plan, errorMessage, pausedFrom,
+                consecutiveAgentErrors, migratedFiles, createdAt, version,
+                null, null, null);
+    }
+
+    /**
+     * Reconstitution constructor used by the persistence adapter, including
+     * the approval audit fields (#125 / #126).
+     */
+    public WorkflowSession(WorkflowSessionId id, String jobId, String projectId,
+                           SessionStatus status, MigrationPlan plan,
+                           String errorMessage, SessionStatus pausedFrom,
+                           int consecutiveAgentErrors, List<MigratedFile> migratedFiles,
+                           Instant createdAt, long version,
+                           String decidedBy, Instant decidedAt, DecisionKind decisionKind) {
         this.id = Objects.requireNonNull(id);
         this.jobId = Objects.requireNonNull(jobId);
         this.projectId = Objects.requireNonNull(projectId);
@@ -74,6 +98,20 @@ public class WorkflowSession {
         this.createdAt = Objects.requireNonNull(createdAt);
         this.updatedAt = createdAt;
         this.version = version;
+        this.decidedBy = decidedBy;
+        this.decidedAt = decidedAt;
+        this.decisionKind = decisionKind;
+    }
+
+    /**
+     * Records who answered the approval gate, when, and how.  Called from
+     * {@code SessionManagementService.approve/reject} right after the state
+     * transition so the audit row commits in the same transaction.
+     */
+    public void recordDecision(String decidedBy, DecisionKind kind) {
+        this.decidedBy = decidedBy;
+        this.decidedAt = Instant.now();
+        this.decisionKind = Objects.requireNonNull(kind);
     }
 
     // ── State machine ─────────────────────────────────────────────────────────
@@ -285,6 +323,18 @@ public class WorkflowSession {
 
     public long version() {
         return version;
+    }
+
+    public String decidedBy() {
+        return decidedBy;
+    }
+
+    public Instant decidedAt() {
+        return decidedAt;
+    }
+
+    public DecisionKind decisionKind() {
+        return decisionKind;
     }
 
     // ── Guard ─────────────────────────────────────────────────────────────────

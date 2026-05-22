@@ -2,6 +2,7 @@ package com.altrix.orchestrator.domain.service;
 
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
+import com.altrix.orchestrator.domain.model.session.DecisionKind;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
@@ -45,11 +46,12 @@ public class SessionManagementService
     // ── HandleApprovalUseCase ─────────────────────────────────────────────────
 
     @Override
-    public WorkflowSession approve(WorkflowSessionId sessionId) {
+    public WorkflowSession approve(WorkflowSessionId sessionId, String decidedBy) {
         WorkflowSession session = load(sessionId);
         session.startMigration();
+        session.recordDecision(decidedBy, DecisionKind.APPROVED);
         WorkflowSession saved = sessionRepository.save(session);
-        log.info("Plan approved — session '{}' → MIGRATING", sessionId);
+        log.info("Plan approved by '{}' — session '{}' → MIGRATING", decidedBy, sessionId);
 
         // Align the job-side cache + push a synthetic progress event so the
         // JobDetail timeline flips from PLAN_READY to MIGRATING the moment
@@ -77,11 +79,12 @@ public class SessionManagementService
     }
 
     @Override
-    public WorkflowSession reject(WorkflowSessionId sessionId, String reason) {
+    public WorkflowSession reject(WorkflowSessionId sessionId, String reason, String decidedBy) {
         WorkflowSession session = load(sessionId);
         session.fail(reason);
+        session.recordDecision(decidedBy, DecisionKind.REJECTED);
         WorkflowSession saved = sessionRepository.save(session);
-        log.info("Plan rejected — session '{}' → FAILED (reason: {})", sessionId, reason);
+        log.info("Plan rejected by '{}' — session '{}' → FAILED (reason: {})", decidedBy, sessionId, reason);
         return saved;
     }
 
@@ -151,6 +154,7 @@ public class SessionManagementService
         for (WorkflowSession session : stale) {
             try {
                 session.fail("Approval timeout — no response within the configured window");
+                session.recordDecision("system:approval-timeout", DecisionKind.REJECTED);
                 sessionRepository.save(session);
                 count++;
                 log.warn("Auto-rejected stale approval — session '{}'", session.id());

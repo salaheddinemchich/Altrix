@@ -61,7 +61,7 @@ class SessionManagementServiceTest {
         when(sessionRepository.findById(id)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        WorkflowSession result = service.approve(id);
+        WorkflowSession result = service.approve(id, "test-user");
 
         assertThat(result.status()).isEqualTo(SessionStatus.MIGRATING);
         verify(sessionRepository).save(session);
@@ -74,7 +74,7 @@ class SessionManagementServiceTest {
         when(sessionRepository.findById(id)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.approve(id);
+        service.approve(id, "test-user");
 
         verify(resumeMigration).resume(id);
     }
@@ -89,7 +89,7 @@ class SessionManagementServiceTest {
 
         // Should NOT propagate the resume failure — the REST 200 has already been
         // promised to the client; downstream failure is surfaced via WebSocket.
-        WorkflowSession result = service.approve(id);
+        WorkflowSession result = service.approve(id, "test-user");
 
         assertThat(result.status()).isEqualTo(SessionStatus.MIGRATING);
     }
@@ -99,7 +99,7 @@ class SessionManagementServiceTest {
         WorkflowSessionId id = WorkflowSessionId.generate();
         when(sessionRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.approve(id))
+        assertThatThrownBy(() -> service.approve(id, "test-user"))
                 .isInstanceOf(SessionNotFoundException.class);
 
         verify(sessionRepository, never()).save(any());
@@ -112,7 +112,7 @@ class SessionManagementServiceTest {
 
         when(sessionRepository.findById(id)).thenReturn(Optional.of(done));
 
-        assertThatThrownBy(() -> service.approve(id))
+        assertThatThrownBy(() -> service.approve(id, "test-user"))
                 .isInstanceOf(IllegalStateTransitionException.class);
 
         verify(sessionRepository, never()).save(any());
@@ -128,7 +128,7 @@ class SessionManagementServiceTest {
         when(sessionRepository.findById(id)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        WorkflowSession result = service.reject(id, "Not acceptable");
+        WorkflowSession result = service.reject(id, "Not acceptable", "test-user");
 
         assertThat(result.status()).isEqualTo(SessionStatus.FAILED);
         assertThat(result.errorMessage()).isEqualTo("Not acceptable");
