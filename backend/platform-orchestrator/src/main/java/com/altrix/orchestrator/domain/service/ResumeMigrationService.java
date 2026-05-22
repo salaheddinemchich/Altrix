@@ -15,6 +15,7 @@ import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
 import com.altrix.orchestrator.domain.port.out.JobStatusUpdatePort;
 import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
+import com.altrix.orchestrator.domain.port.out.MigrationReportRepository;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +51,8 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
     private final MigratedFileStoragePort migratedFileStoragePort;
     private final JobStatusUpdatePort jobStatusUpdatePort;
     private final ProgressNotifierPort progressNotifierPort;
+    /** #129 — persists the markdown report Agent 5 produces. */
+    private final MigrationReportRepository migrationReportRepository;
 
     @Override
     public void resume(WorkflowSessionId sessionId) {
@@ -93,8 +96,18 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
                     session.projectId(), null, plan, artifact, validation);
 
             progressNotifierPort.notify(jobId, "Report Generator", "RUNNING", null);
-            reporter.execute(outcome);
+            MigrationReport report = reporter.execute(outcome);
             progressNotifierPort.notify(jobId, "Report Generator", "DONE", null);
+
+            // #129 — persist the narrative report so it can be retrieved long
+            // after the pipeline ends.  Best-effort: a DB hiccup here doesn't
+            // un-do the migration (the ZIP is already in MinIO).
+            try {
+                if (report != null) migrationReportRepository.save(sessionId, report);
+            } catch (Exception persistErr) {
+                log.warn("Could not persist migration report for session '{}' (non-fatal): {}",
+                        sessionId, persistErr.getMessage());
+            }
 
             // ── Persist artifact first ──────────────────────────────────────
             // Store the migrated ZIP in MinIO BEFORE touching the session row.
