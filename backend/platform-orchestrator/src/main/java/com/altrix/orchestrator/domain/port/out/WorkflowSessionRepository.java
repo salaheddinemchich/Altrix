@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.domain.port.out;
 
+import com.altrix.orchestrator.domain.model.session.SessionAggregate;
 import com.altrix.orchestrator.domain.model.session.SessionPage;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
@@ -43,4 +44,11 @@ public interface WorkflowSessionRepository {
 
     /** Removes a session row. Idempotent — missing IDs are silently ignored. */
     void deleteById(WorkflowSessionId id);
+
+    /**
+     * Cross-session aggregate read for the org-summary dashboard (#131).
+     * Single round-trip — implementations should use database aggregates
+     * (COUNT, AVG), never load full entities.
+     */
+    SessionAggregate aggregate();
 }
