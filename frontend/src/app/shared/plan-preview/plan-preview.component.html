@@ -22,6 +22,19 @@
       }
     </header>
 
+    <!-- #124 — impact-at-a-glance row.  Counts come straight from the plan
+         arrays so they update live when the reviewer edits and saves. -->
+    <div class="impact-row">
+      <span class="impact-chip" title="Number of files the migrator will rewrite">
+        <app-icon name="file" [size]="12"/>
+        <strong>{{ plan().targetFiles.length }}</strong> file{{ plan().targetFiles.length === 1 ? '' : 's' }} to migrate
+      </span>
+      <span class="impact-chip" title="Migration steps the planner identified">
+        <app-icon name="check" [size]="12"/>
+        <strong>{{ plan().steps.length }}</strong> step{{ plan().steps.length === 1 ? '' : 's' }}
+      </span>
+    </div>
+
     @if (plan().summary) {
       <p class="summary">{{ plan().summary }}</p>
     }

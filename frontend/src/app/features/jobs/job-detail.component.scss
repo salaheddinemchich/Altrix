@@ -215,6 +215,32 @@ dd {
   gap: 8px;
   margin-top: 16px;
   flex-wrap: wrap;
+
+  // #128 — on phones the approval / pause / reject buttons stack and go
+  // full-width so they're tap-target-sized and impossible to mis-hit.
+  // Above the breakpoint they sit side-by-side as before.
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: stretch;
+
+    .btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+}
+
+// #128 — job header actions (Refresh, Download ZIP, status pill) wrap +
+// space out evenly on phones so nothing overlaps the title.
+@media (max-width: 600px) {
+  .job-header {
+    flex-direction: column;
+    align-items: stretch;
+
+    .job-header-actions {
+      justify-content: space-between;
+    }
+  }
 }
 
 // ── Empty ─────────────────────────────────────────────────────────────────────
