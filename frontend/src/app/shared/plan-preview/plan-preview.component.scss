@@ -35,6 +35,33 @@
   &.risk-high   { background: #fee2e2; color: #991b1b; }
 }
 
+// #124 — impact-at-a-glance row beneath the header.  Surfaces the same
+// counts the steps / files <details> blocks show, but always visible so a
+// reviewer can size up the change before expanding anything.
+.impact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 6px;
+
+  .impact-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--border, #e5e5e5);
+    color: var(--muted, #555);
+
+    strong {
+      color: var(--color-text, #111);
+      font-weight: 700;
+    }
+  }
+}
+
 .summary {
   margin: 4px 0 8px;
   color: var(--muted, #444);
