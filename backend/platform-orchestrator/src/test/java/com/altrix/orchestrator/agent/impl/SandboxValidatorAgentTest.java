@@ -5,6 +5,7 @@ import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.model.ValidationReport;
 import com.altrix.common.exception.AgentFailureException;
+import com.altrix.orchestrator.adapter.out.sandbox.StaticSandboxRunner;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,7 +15,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SandboxValidatorAgentTest {
 
-    private final SandboxValidatorAgent agent = new SandboxValidatorAgent();
+    // Compose with the real static runner so existing behaviour assertions
+    // (the bulk of this suite is "static checks still catch X") continue to
+    // hold.  When more runners land they'll get their own dedicated suite.
+    private final SandboxValidatorAgent agent =
+            new SandboxValidatorAgent(List.of(new StaticSandboxRunner()));
 
     @Test
     void exposesNameAndOrder4() {
