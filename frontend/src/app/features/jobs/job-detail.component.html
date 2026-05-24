@@ -60,7 +60,8 @@
     <h3 style="margin-top:0">Timeline</h3>
     <app-session-timeline
       [jobId]="job()!.id"
-      [currentStatus]="session()?.status ?? job()!.status"/>
+      [currentStatus]="session()?.status ?? job()!.status"
+      [sessionId]="session()?.sessionId ?? null"/>
   </div>
 
   <!-- ══ Details + Session grid ════════════════════════════════════════════ -->

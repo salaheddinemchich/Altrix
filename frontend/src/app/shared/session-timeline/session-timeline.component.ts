@@ -17,7 +17,10 @@ import {
   ProgressEvent,
 } from '../../core/models/pipeline.model';
 import { PipelineService } from '../../core/services/pipeline.service';
+import { SessionService } from '../../core/services/session.service';
+import { RagIndexManifest } from '../../core/models/session.model';
 import { IconComponent } from '../icon/icon.component';
+import { catchError, of } from 'rxjs';
 
 /**
  * Issue #114 — vertical session timeline.
@@ -38,6 +41,7 @@ import { IconComponent } from '../icon/icon.component';
 })
 export class SessionTimelineComponent implements OnDestroy {
   private readonly pipelineApi = inject(PipelineService);
+  private readonly sessionApi  = inject(SessionService);
 
   readonly jobId = input.required<string>();
 
@@ -48,6 +52,23 @@ export class SessionTimelineComponent implements OnDestroy {
    * look frozen forever.
    */
   readonly currentStatus = input<string | null>(null);
+
+  /**
+   * Session id — when present, the Index step renders a "view indexed
+   * files" toggle that lazy-loads the RAG manifest via SessionService.
+   * Without it, the toggle is hidden.  Optional so the timeline stays
+   * reusable in places where the session id isn't readily available.
+   */
+  readonly sessionId = input<string | null>(null);
+
+  // ── RAG manifest lazy-load state ─────────────────────────────────────────
+  /** True once the user expands the panel; triggers the HTTP fetch. */
+  readonly ragManifestExpanded = signal<boolean>(false);
+  readonly ragManifest = signal<RagIndexManifest | null>(null);
+  readonly ragManifestLoading = signal<boolean>(false);
+  /** True when the manifest endpoint returned 404 / empty.  Differentiates
+   *  "still loading" from "nothing to show". */
+  readonly ragManifestMissing = signal<boolean>(false);
 
   readonly steps = signal<TimelineStep[]>(initialSteps());
   readonly now   = signal<number>(Date.now());
@@ -154,6 +175,30 @@ export class SessionTimelineComponent implements OnDestroy {
     const end = step.endedAt ?? this.now();
     const ms  = Math.max(0, end - step.startedAt);
     return formatDuration(ms);
+  }
+
+  /**
+   * Toggles the "view indexed files" panel on the Index step.  Fetches
+   * the manifest the first time it's opened; subsequent toggles only
+   * flip the visibility flag — no redundant HTTP calls.
+   */
+  toggleRagManifest(): void {
+    const wasOpen = this.ragManifestExpanded();
+    this.ragManifestExpanded.set(!wasOpen);
+    if (wasOpen) return; // closing — nothing to do
+
+    if (this.ragManifest() !== null || this.ragManifestMissing()) return; // already loaded
+    const id = this.sessionId();
+    if (!id) return;
+
+    this.ragManifestLoading.set(true);
+    this.sessionApi.getRagIndexManifest(id)
+      .pipe(catchError(() => of(null)))
+      .subscribe(m => {
+        this.ragManifestLoading.set(false);
+        if (m) this.ragManifest.set(m);
+        else   this.ragManifestMissing.set(true);
+      });
   }
 
   // ── Event application ────────────────────────────────────────────────────

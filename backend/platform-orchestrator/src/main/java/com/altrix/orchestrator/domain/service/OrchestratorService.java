@@ -39,6 +39,7 @@ public class OrchestratorService implements RunPipelineUseCase {
     private final CodeIndexingPort codeIndexingPort;
     private final MigrationPlanCachePort planCachePort;
     private final WorkflowSessionRepository sessionRepository;
+    private final RagIndexManifestRepository ragIndexManifestRepository;
     private final int autoPauseThreshold;
 
     public OrchestratorService(
@@ -49,6 +50,7 @@ public class OrchestratorService implements RunPipelineUseCase {
             CodeIndexingPort codeIndexingPort,
             MigrationPlanCachePort planCachePort,
             WorkflowSessionRepository sessionRepository,
+            RagIndexManifestRepository ragIndexManifestRepository,
             int autoPauseThreshold
     ) {
         this.workflowExecution = workflowExecution;
@@ -58,6 +60,7 @@ public class OrchestratorService implements RunPipelineUseCase {
         this.codeIndexingPort = codeIndexingPort;
         this.planCachePort = planCachePort;
         this.sessionRepository = sessionRepository;
+        this.ragIndexManifestRepository = ragIndexManifestRepository;
         this.autoPauseThreshold = autoPauseThreshold;
         log.info("OrchestratorService initialised — typed LangGraph4j workflow (auto-pause threshold={})",
                 autoPauseThreshold);
@@ -76,10 +79,19 @@ public class OrchestratorService implements RunPipelineUseCase {
 
         try {
             // ── Phase 0: RAG indexing ────────────────────────────────────────
-            // CodeIndexingAgent now emits its own granular progress events
-            // (reading → chunking → embedding → done) with file/chunk counts
-            // so the timeline shows what's actually being indexed.
-            codeIndexingPort.index(initial);
+            // CodeIndexingAgent emits granular progress events
+            // (reading → chunking → embedding → done) AND returns a manifest
+            // listing exactly which files made it into the vector store.
+            // Persist the manifest so the JobDetail UI can show the reviewer
+            // which resources were considered.  Best-effort: a DB hiccup here
+            // doesn't roll back the embedding work.
+            var manifest = codeIndexingPort.index(initial);
+            try {
+                ragIndexManifestRepository.save(session.id(), manifest);
+            } catch (Exception persistErr) {
+                log.warn("Could not persist RAG manifest for session '{}' (non-fatal): {}",
+                        session.id(), persistErr.getMessage());
+            }
 
             // ── Phase 1–5: typed agent workflow ─────────────────────────────
             // Bug fix: previously this called session.startMigration() upfront

@@ -40,6 +40,51 @@
             updated {{ step.lastUpdate | date:'mediumTime' }}
           </div>
         }
+
+        <!-- RAG manifest expansion — visible only on the Index step,
+             once a sessionId is available, and the step has progressed
+             past PENDING (no point exposing the toggle when there's
+             nothing indexed yet). -->
+        @if (step.id === 'index' && sessionId() && step.status !== 'PENDING') {
+          <button type="button" class="rag-toggle" (click)="toggleRagManifest()"
+                  [attr.aria-expanded]="ragManifestExpanded()">
+            <app-icon [name]="ragManifestExpanded() ? 'chevron-down' : 'chevron-right'" [size]="11"/>
+            {{ ragManifestExpanded() ? 'Hide' : 'View' }} indexed files
+            @if (ragManifest(); as m) {
+              <span class="rag-toggle-count">({{ m.fileCount }})</span>
+            }
+          </button>
+
+          @if (ragManifestExpanded()) {
+            <div class="rag-manifest">
+              @if (ragManifestLoading()) {
+                <div class="rag-manifest-state">Loading manifest…</div>
+              } @else if (ragManifestMissing()) {
+                <div class="rag-manifest-state muted">
+                  No indexed-file manifest persisted for this session.
+                </div>
+              } @else {
+                @if (ragManifest(); as m) {
+                  <div class="rag-manifest-summary">
+                    <strong>{{ m.fileCount }}</strong> file(s) ·
+                    <strong>{{ m.chunkCount }}</strong> chunk(s) ·
+                    indexed {{ m.indexedAt | date:'MMM d, h:mm a' }}
+                    @if (m.chunkCount === 0) {
+                      <span class="rag-skipped"> · embedding skipped (model not configured)</span>
+                    }
+                  </div>
+                  @if (m.filePaths.length > 0) {
+                    <ul class="rag-manifest-files">
+                      @for (path of m.filePaths; track path) {
+                        <li class="mono">{{ path }}</li>
+                      }
+                    </ul>
+                  }
+                }
+              }
+            </div>
+          }
+        }
       </div>
     </li>
   }

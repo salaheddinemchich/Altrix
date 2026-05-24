@@ -2,6 +2,7 @@ package com.altrix.orchestrator.adapter.out.rag;
 
 import com.altrix.common.domain.model.DocumentChunk;
 import com.altrix.common.domain.model.ProjectContext;
+import com.altrix.orchestrator.domain.model.rag.RagIndexManifest;
 import com.altrix.orchestrator.domain.port.out.CodeIndexingPort;
 import com.altrix.orchestrator.domain.port.out.EmbeddingStorePort;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.util.*;
 
 /**
@@ -23,6 +25,10 @@ import java.util.*;
  *
  * <p>Deduplication: files whose content hash already exists in the store are
  * skipped — repeated runs on the same project are cheap.
+ *
+ * <p>Returns a {@link RagIndexManifest} so the caller (OrchestratorService)
+ * can persist the indexed-file list for later display in the JobDetail
+ * timeline.
  */
 @Slf4j
 @Component
@@ -48,7 +54,8 @@ public class CodeIndexingAgent implements CodeIndexingPort {
      * <p>Emits granular progress events so the JobDetail timeline can show
      * the user "what is being indexed" instead of just a binary RUNNING/DONE.
      */
-    public void index(ProjectContext context) {
+    @Override
+    public RagIndexManifest index(ProjectContext context) {
         String jobId = context.jobId();
         log.info("Job '{}' — indexing source files for RAG", jobId);
 
@@ -59,12 +66,14 @@ public class CodeIndexingAgent implements CodeIndexingPort {
                 "Chunking " + files.size() + " file(s) for embedding…");
 
         List<DocumentChunk> chunks = new ArrayList<>();
-        int indexableCount = 0;
+        // Sorted set so the manifest is stable across runs and renders
+        // alphabetically in the UI.
+        SortedSet<String> indexedPaths = new TreeSet<>();
         for (Map.Entry<String, String> entry : files.entrySet()) {
             String path = entry.getKey();
             String content = entry.getValue();
             if (!isIndexable(path) || content.isBlank()) continue;
-            indexableCount++;
+            indexedPaths.add(path);
 
             List<String> textChunks = splitIntoChunks(content);
             for (int i = 0; i < textChunks.size(); i++) {
@@ -77,11 +86,11 @@ public class CodeIndexingAgent implements CodeIndexingPort {
         log.info("Job '{}' — {} chunks from {} files, upserting to vector store",
                 jobId, chunks.size(), files.size());
         progressNotifier.notify(jobId, "RAG Indexer", "RUNNING",
-                "Embedding " + chunks.size() + " chunk(s) from " + indexableCount + " file(s)…");
+                "Embedding " + chunks.size() + " chunk(s) from " + indexedPaths.size() + " file(s)…");
         try {
             embeddingStore.upsert(chunks);
             progressNotifier.notify(jobId, "RAG Indexer", "DONE",
-                    "Indexed " + chunks.size() + " chunk(s) from " + indexableCount + " file(s)");
+                    "Indexed " + chunks.size() + " chunk(s) from " + indexedPaths.size() + " file(s)");
         } catch (IllegalStateException e) {
             // RAG embedding model is disabled (no OpenAI/Ollama key). Continue
             // without semantic search — agents still receive full file content
@@ -89,7 +98,19 @@ public class CodeIndexingAgent implements CodeIndexingPort {
             log.warn("Job '{}' — RAG indexing skipped: {}", jobId, e.getMessage());
             progressNotifier.notify(jobId, "RAG Indexer", "DONE",
                     "Skipped — embedding model not configured");
+            // Even when embedding was skipped, return the set of files we
+            // WOULD have indexed so the UI can still show what got
+            // considered.  chunkCount=0 signals "embedding disabled".
+            return new RagIndexManifest(context.projectId(),
+                    new ArrayList<>(indexedPaths), indexedPaths.size(), 0, Instant.now());
         }
+
+        return new RagIndexManifest(
+                context.projectId(),
+                new ArrayList<>(indexedPaths),
+                indexedPaths.size(),
+                chunks.size(),
+                Instant.now());
     }
 
     /**
