@@ -116,7 +116,11 @@ public class SecurityConfig {
                     // dead, and the JobDetail timeline never receives live
                     // progress events.  Authorization on subscriptions can be
                     // added later via a StompChannelInterceptor.
-                    "/ws/**"
+                    "/ws/**",
+                    // #133 — public shareable report links.  Auth is carried
+                    // INSIDE the URL itself as a signed JWT (type=share).
+                    // Endpoint handler verifies the token before returning.
+                    "/api/v1/public/**"
                 ).permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()

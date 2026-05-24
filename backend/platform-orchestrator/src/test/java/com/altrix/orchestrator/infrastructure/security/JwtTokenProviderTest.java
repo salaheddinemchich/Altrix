@@ -101,4 +101,49 @@ class JwtTokenProviderTest {
         // Our provider should reject a token signed by a different key
         assertThat(provider.isValid(foreignToken)).isFalse();
     }
+
+    // ── Share token (#133) ────────────────────────────────────────────────────
+
+    @Test
+    void share_token_carries_sessionId_version_and_typeShare() {
+        String sessionId = java.util.UUID.randomUUID().toString();
+        String token = provider.issueShareToken(sessionId, 3, 60);
+
+        Claims claims = provider.parseShareToken(token);
+        assertThat(claims.get("sessionId", String.class)).isEqualTo(sessionId);
+        assertThat(claims.get("version", Integer.class)).isEqualTo(3);
+        assertThat(claims.get("type", String.class)).isEqualTo("share");
+        assertThat(claims.getSubject()).isEqualTo("session-report-share");
+    }
+
+    @Test
+    void parseShareToken_rejects_access_token() {
+        String access = provider.issueAccessToken("gh-1", "alice", "a@a.com", "ROLE_USER", "GITHUB");
+        // Signature is valid (same key) but type != share — must reject.
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.parseShareToken(access))
+                .isInstanceOf(io.jsonwebtoken.JwtException.class);
+    }
+
+    @Test
+    void share_token_ttl_clamped_to_min_when_too_low() {
+        String sessionId = java.util.UUID.randomUUID().toString();
+        String token = provider.issueShareToken(sessionId, 1, /*requested*/ 1);
+        Claims claims = provider.parseShareToken(token);
+        // 1 minute requested, clamped to MIN_SHARE_TTL_MINUTES (5 min).
+        long remaining = provider.remainingTtlMs(claims);
+        assertThat(remaining).isBetween(4L * 60_000L, 5L * 60_000L + 1000L);
+    }
+
+    @Test
+    void share_token_ttl_clamped_to_max_when_too_high() {
+        String sessionId = java.util.UUID.randomUUID().toString();
+        // Request 100 days — should clamp to 30 days.
+        String token = provider.issueShareToken(sessionId, 1, 100L * 24 * 60);
+        Claims claims = provider.parseShareToken(token);
+        long remaining = provider.remainingTtlMs(claims);
+        long maxMs = JwtTokenProvider.MAX_SHARE_TTL_MINUTES * 60_000L;
+        // Allow a small tolerance below the ceiling for the time between
+        // token creation and the assertion below.
+        assertThat(remaining).isBetween(maxMs - 60_000L, maxMs + 1000L);
+    }
 }

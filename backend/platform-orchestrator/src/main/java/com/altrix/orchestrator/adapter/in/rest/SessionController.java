@@ -6,6 +6,9 @@ import com.altrix.orchestrator.adapter.in.rest.dto.FileDiffResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportVersionResponse;
+import com.altrix.orchestrator.adapter.in.rest.dto.ShareTokenResponse;
+import com.altrix.orchestrator.infrastructure.security.JwtTokenProvider;
+import org.springframework.beans.factory.annotation.Value;
 import com.altrix.orchestrator.adapter.in.rest.dto.PauseRecordResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionFileNode;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionPageResponse;
@@ -67,6 +70,15 @@ public class SessionController {
     private final SessionPauseHistoryPort pauseHistoryPort;
     private final FileReaderPort fileReader;
     private final MigrationReportRepository migrationReportRepository;
+    private final JwtTokenProvider jwtTokenProvider;
+
+    /**
+     * Base URL the share endpoint embeds in the response so the recipient
+     * can open the link directly.  Defaults to the orchestrator's own
+     * port — production should override to the gateway-fronted hostname.
+     */
+    @Value("${app.public-base-url:http://localhost:8084}")
+    private String publicBaseUrl;
 
     // ── GET ───────────────────────────────────────────────────────────────────
 
@@ -316,6 +328,41 @@ public class SessionController {
                 .map(MigrationReportVersionResponse::from)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * POST /api/v1/sessions/{id}/reports/{version}/share — generates a
+     * stateless, time-limited public link to the given report version
+     * (#133).  The token is a JWT signed with the same RS256 key used
+     * for access tokens; the public endpoint verifies signature + expiry
+     * + that the {@code type} claim is {@code "share"}.  Tokens can't be
+     * revoked individually — the TTL caps the blast radius of a leak.
+     *
+     * @param ttlMinutes desired lifetime in minutes; clamped server-side
+     *                   to {@code [5, 30*24*60]} (5 min – 30 days).
+     *                   Default 24 h.
+     */
+    @PostMapping("/{sessionId}/reports/{version}/share")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ShareTokenResponse> shareReportVersion(
+            @PathVariable String sessionId,
+            @PathVariable int version,
+            @RequestParam(defaultValue = "1440") long ttlMinutes
+    ) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        // 404 if the version doesn't exist — don't issue tokens to nothing.
+        if (migrationReportRepository.findBySessionIdAndVersion(id, version).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        String token = jwtTokenProvider.issueShareToken(sessionId, version, ttlMinutes);
+        long clampedMinutes = Math.max(
+                JwtTokenProvider.MIN_SHARE_TTL_MINUTES,
+                Math.min(ttlMinutes, JwtTokenProvider.MAX_SHARE_TTL_MINUTES));
+        return ResponseEntity.ok(new ShareTokenResponse(
+                token,
+                publicBaseUrl + "/api/v1/public/reports/" + token,
+                java.time.Instant.now().plusSeconds(clampedMinutes * 60)
+        ));
     }
 
     // ── Approval history (#126) ───────────────────────────────────────────────
