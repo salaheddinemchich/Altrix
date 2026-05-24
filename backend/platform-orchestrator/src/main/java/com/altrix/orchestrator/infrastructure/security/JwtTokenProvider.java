@@ -102,4 +102,59 @@ public class JwtTokenProvider {
     public int accessTokenExpiryMinutes() {
         return config.accessTokenExpiryMinutes();
     }
+
+    // ── #133 — public shareable links to report versions ─────────────────────
+
+    /** Minimum TTL when issuing a share token: 5 minutes (UX sanity bound). */
+    public static final long MIN_SHARE_TTL_MINUTES = 5;
+    /** Maximum TTL: 30 days.  Tokens cannot be revoked individually so the
+     *  ceiling caps the blast radius of a leaked link. */
+    public static final long MAX_SHARE_TTL_MINUTES = 30L * 24 * 60;
+
+    /**
+     * Issues a stateless share token for a specific report version (#133).
+     *
+     * <p>The token is a JWT signed with the same RS256 key as access
+     * tokens, so verification re-uses the existing public-key path.  A
+     * distinct {@code type} claim ({@code "share"}) prevents a leaked
+     * access token from being replayed against the public-share endpoint
+     * and vice versa.
+     *
+     * @param sessionId    session whose report is being shared.
+     * @param version      report version number (#162).
+     * @param ttlMinutes   desired lifetime; clamped to [MIN_SHARE_TTL_MINUTES,
+     *                     MAX_SHARE_TTL_MINUTES].
+     * @return the compact JWT — pass to {@link #parseShareToken}.
+     */
+    public String issueShareToken(String sessionId, int version, long ttlMinutes) {
+        long clamped = Math.max(MIN_SHARE_TTL_MINUTES, Math.min(ttlMinutes, MAX_SHARE_TTL_MINUTES));
+        Date now    = new Date();
+        Date expiry = new Date(now.getTime() + clamped * 60_000L);
+        return Jwts.builder()
+                .id(UUID.randomUUID().toString())
+                .subject("session-report-share")
+                .claims(Map.of(
+                        "sessionId", sessionId,
+                        "version",   version,
+                        "type",      "share"
+                ))
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(rsaKeys.privateKey())
+                .compact();
+    }
+
+    /**
+     * Parses + validates a share token.  Returns the claims when the
+     * signature is valid, the token hasn't expired, and the {@code type}
+     * claim is {@code "share"} (so an access token can't sneak in).
+     * Throws {@link JwtException} for any other case.
+     */
+    public Claims parseShareToken(String token) {
+        Claims claims = parse(token);
+        if (!"share".equals(claims.get("type"))) {
+            throw new JwtException("token type is not 'share'");
+        }
+        return claims;
+    }
 }
