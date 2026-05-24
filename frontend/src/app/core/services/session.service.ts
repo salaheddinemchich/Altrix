@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ApprovalHistoryEntry, FileDiff, MigratedFile, MigrationPlan, PauseRecord, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
+import { ApprovalHistoryEntry, FileDiff, MigratedFile, MigrationPlan, PauseRecord, RagIndexManifest, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -51,6 +51,16 @@ export class SessionService {
   /** #126 — approval / rejection decisions on this session, newest-first. */
   getApprovalHistory(sessionId: string): Observable<ApprovalHistoryEntry[]> {
     return this.http.get<ApprovalHistoryEntry[]>(`${this.base}/${sessionId}/approval/history`);
+  }
+
+  /**
+   * Which source files were indexed for RAG retrieval during the session.
+   * Drives the "view indexed files" expansion on the Index step of the
+   * JobDetail timeline.  404 → empty list (older sessions predate the
+   * manifest persistence).
+   */
+  getRagIndexManifest(sessionId: string): Observable<RagIndexManifest> {
+    return this.http.get<RagIndexManifest>(`${this.base}/${sessionId}/rag-index`);
   }
 
   approve(sessionId: string): Observable<Session> {

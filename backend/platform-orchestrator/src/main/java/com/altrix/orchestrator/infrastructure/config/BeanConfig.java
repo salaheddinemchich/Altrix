@@ -57,6 +57,7 @@ public class BeanConfig {
             CodeIndexingPort codeIndexingPort,
             MigrationPlanCachePort migrationPlanCachePort,
             WorkflowSessionRepository workflowSessionRepository,
+            com.altrix.orchestrator.domain.port.out.RagIndexManifestRepository ragIndexManifestRepository,
             AutoPauseConfig autoPauseConfig
     ) {
         return new OrchestratorService(
@@ -67,6 +68,7 @@ public class BeanConfig {
                 codeIndexingPort,
                 migrationPlanCachePort,
                 workflowSessionRepository,
+                ragIndexManifestRepository,
                 autoPauseConfig.threshold()
         );
     }

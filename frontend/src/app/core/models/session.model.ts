@@ -36,6 +36,20 @@ export interface Session {
   decisionKind: 'APPROVED' | 'REJECTED' | null;
 }
 
+/**
+ * RAG index manifest — which source files were indexed for retrieval
+ * during a session.  Returned by GET /api/v1/sessions/{id}/rag-index.
+ * chunkCount = 0 means the embedding model was disabled at index time
+ * (filePaths still populated with what WOULD have been indexed).
+ */
+export interface RagIndexManifest {
+  projectId: string;
+  filePaths: string[];
+  fileCount: number;
+  chunkCount: number;
+  indexedAt: string;
+}
+
 /** #126 — one entry of the approval-history timeline for a session. */
 export interface ApprovalHistoryEntry {
   decidedBy: string;

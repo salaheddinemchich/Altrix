@@ -6,6 +6,7 @@ import com.altrix.orchestrator.adapter.in.rest.dto.FileDiffResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportVersionResponse;
+import com.altrix.orchestrator.adapter.in.rest.dto.RagIndexManifestResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.ShareTokenResponse;
 import com.altrix.orchestrator.infrastructure.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +23,7 @@ import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.domain.port.out.MigrationReportRepository;
+import com.altrix.orchestrator.domain.port.out.RagIndexManifestRepository;
 import com.altrix.orchestrator.domain.port.out.SessionPauseHistoryPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import jakarta.validation.Valid;
@@ -70,6 +72,7 @@ public class SessionController {
     private final SessionPauseHistoryPort pauseHistoryPort;
     private final FileReaderPort fileReader;
     private final MigrationReportRepository migrationReportRepository;
+    private final RagIndexManifestRepository ragIndexManifestRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
     /**
@@ -363,6 +366,26 @@ public class SessionController {
                 publicBaseUrl + "/api/v1/public/reports/" + token,
                 java.time.Instant.now().plusSeconds(clampedMinutes * 60)
         ));
+    }
+
+    // ── RAG index manifest ────────────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/sessions/{id}/rag-index — returns the manifest of source
+     * files that were indexed for RAG retrieval during this session.
+     *
+     * <p>404 when no manifest has been persisted yet (session predates the
+     * feature, or indexing crashed before the persist call).  The Index
+     * step on the JobDetail timeline uses this to render the
+     * "view indexed files" expansion.
+     */
+    @GetMapping("/{sessionId}/rag-index")
+    public ResponseEntity<RagIndexManifestResponse> getRagIndexManifest(@PathVariable String sessionId) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        return ragIndexManifestRepository.findBySessionId(id)
+                .map(RagIndexManifestResponse::from)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     // ── Approval history (#126) ───────────────────────────────────────────────
