@@ -7,8 +7,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * JPA mapping for the {@code migration_reports} table (#129).  Keyed by the
- * session UUID, with an ON DELETE CASCADE FK to {@code workflow_sessions}.
+ * JPA mapping for the {@code migration_reports} table.
+ *
+ * <p>Append-only history — re-running the migration for a session inserts
+ * a new row with {@code version = max(version) + 1} (#162).  PK is the
+ * synthetic {@code report_id}; {@code (session_id, version)} is uniquely
+ * indexed to prevent duplicates within a session.
  */
 @Entity
 @Table(name = "migration_reports")
@@ -20,8 +24,15 @@ import java.util.UUID;
 public class MigrationReportJpaEntity {
 
     @Id
+    @Column(name = "report_id", nullable = false, updatable = false)
+    private UUID reportId;
+
     @Column(name = "session_id", nullable = false, updatable = false)
     private UUID sessionId;
+
+    /** Monotonic per-session version — 1 for the first row, increments on re-runs. */
+    @Column(nullable = false, updatable = false)
+    private Integer version;
 
     @Column(name = "project_id", nullable = false, length = 36)
     private String projectId;

@@ -5,6 +5,7 @@ import com.altrix.orchestrator.adapter.in.rest.dto.EditPlanRequest;
 import com.altrix.orchestrator.adapter.in.rest.dto.FileDiffResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportResponse;
+import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportVersionResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.PauseRecordResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionFileNode;
 import com.altrix.orchestrator.adapter.in.rest.dto.SessionPageResponse;
@@ -282,6 +283,37 @@ public class SessionController {
         WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
         return migrationReportRepository.findBySessionId(id)
                 .map(MigrationReportResponse::from)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * GET /api/v1/sessions/{id}/reports — full append-only history of
+     * report versions, newest first (#162).  Empty list when nothing has
+     * been generated yet.
+     */
+    @GetMapping("/{sessionId}/reports")
+    public ResponseEntity<List<MigrationReportVersionResponse>> listMigrationReports(@PathVariable String sessionId) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        List<MigrationReportVersionResponse> history = migrationReportRepository.findAllBySessionId(id)
+                .stream()
+                .map(MigrationReportVersionResponse::from)
+                .toList();
+        return ResponseEntity.ok(history);
+    }
+
+    /**
+     * GET /api/v1/sessions/{id}/reports/{version} — fetch a specific
+     * version (#162).  404 when the version doesn't exist.
+     */
+    @GetMapping("/{sessionId}/reports/{version}")
+    public ResponseEntity<MigrationReportVersionResponse> getMigrationReportVersion(
+            @PathVariable String sessionId,
+            @PathVariable int version
+    ) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        return migrationReportRepository.findBySessionIdAndVersion(id, version)
+                .map(MigrationReportVersionResponse::from)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
