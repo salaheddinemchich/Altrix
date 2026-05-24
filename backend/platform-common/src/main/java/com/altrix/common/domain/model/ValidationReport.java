@@ -1,7 +1,6 @@
 package com.altrix.common.domain.model;
 
 import java.io.Serializable;
-
 import java.util.List;
 
 /**
@@ -9,6 +8,12 @@ import java.util.List;
  *
  * <p>Verdict on whether the migrated artifact compiles and passes its tests
  * in a sandboxed environment. Real implementation lands in issues #16/#17.
+ *
+ * <p>{@link #findings} (added in #94) carries structured per-issue data
+ * (runner id, severity, file, line, message).  {@link #failures} is kept
+ * as the flat-string view for back-compat with the retry-context builder
+ * and the markdown reporter that consume it today.  New consumers should
+ * prefer {@code findings}.
  */
 public record ValidationReport(
 
@@ -17,18 +22,56 @@ public record ValidationReport(
         /** {@code true} if the sandbox build + tests passed. */
         boolean passed,
 
-        /** Compilation errors, test failures, or other validation findings. */
+        /** Flat string view of ERROR-severity findings — kept for back-compat. */
         List<String> failures,
 
-        String summary
+        String summary,
+
+        /** Structured findings — empty list when no runners produced any. */
+        List<Finding> findings
 
 ) implements Serializable {
+
     public ValidationReport {
         failures = failures != null ? List.copyOf(failures) : List.of();
+        findings = findings != null ? List.copyOf(findings) : List.of();
         summary  = summary  != null ? summary : "";
     }
 
+    /** Back-compat constructor — pre-#94 call-sites that don't carry structured findings. */
+    public ValidationReport(String projectId, boolean passed, List<String> failures, String summary) {
+        this(projectId, passed, failures, summary, List.of());
+    }
+
     public static ValidationReport pending(String projectId) {
-        return new ValidationReport(projectId, true, List.of(), "validation skipped (stub)");
+        return new ValidationReport(projectId, true, List.of(), "validation skipped (stub)", List.of());
+    }
+
+    /**
+     * One structured validation issue.  Mirrors the orchestrator-side
+     * {@code SandboxFinding} but lives in {@code platform-common} so it can
+     * cross service boundaries (frontend payload, future platform-report
+     * consumer, etc.).
+     *
+     * @param runnerId stable id of the runner that emitted this finding
+     *                 (e.g. {@code "static"}, {@code "docker"}, {@code "checkstyle"}).
+     * @param severity {@code ERROR}, {@code WARNING}, or {@code INFO}.  Stored
+     *                 as String so common stays free of orchestrator enums.
+     * @param filePath repository-relative path; nullable for project-wide findings.
+     * @param line     1-based line number; -1 when not known.
+     * @param message  human-readable description.
+     */
+    public record Finding(
+            String runnerId,
+            String severity,
+            String filePath,
+            int line,
+            String message
+    ) implements Serializable {
+        public Finding {
+            runnerId = runnerId != null ? runnerId : "";
+            severity = severity != null ? severity : "ERROR";
+            message  = message  != null ? message : "";
+        }
     }
 }
