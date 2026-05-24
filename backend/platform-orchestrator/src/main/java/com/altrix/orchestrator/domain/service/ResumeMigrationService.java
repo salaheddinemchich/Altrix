@@ -9,6 +9,7 @@ import com.altrix.common.domain.model.ValidationReport;
 import com.altrix.common.domain.model.WorkflowOutcome;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
+import com.altrix.orchestrator.domain.model.sandbox.SandboxContext;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
@@ -109,7 +110,9 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
             // The loop always returns the LAST attempt's pair.  Intermediate
             // failed artefacts are discarded — the user only sees the final
             // result (either the first PASS or the last attempt's output).
-            MigrateValidateResult mv = migrateWithRetries(jobId, approvedPlan);
+            // sessionId is threaded through SandboxContext so Docker runners
+            // can persist their captured logs (#105).
+            MigrateValidateResult mv = migrateWithRetries(jobId, approvedPlan, sessionId.value().toString());
             MigrationArtifact artifact = mv.artifact();
             ValidationReport validation = mv.validation();
 
@@ -173,6 +176,16 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
      * during a long re-run.
      */
     private MigrateValidateResult migrateWithRetries(String jobId, ApprovedPlan basePlan) {
+        return migrateWithRetries(jobId, basePlan, null);
+    }
+
+    /**
+     * Same as the no-arg version but threads a sessionId through
+     * {@link SandboxContext} so Docker runners can persist their captured
+     * logs (#105).  The two-arg form is used by {@link #resume}; the no-arg
+     * overload exists for tests that don't care about log persistence.
+     */
+    private MigrateValidateResult migrateWithRetries(String jobId, ApprovedPlan basePlan, String sessionIdForContext) {
         // markMigrating once — subsequent retries stay in the same job status.
         jobStatusUpdatePort.markMigrating(jobId);
 
@@ -193,7 +206,15 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
 
             // ── Validator ───────────────────────────────────────────────
             progressNotifierPort.notify(jobId, "Sandbox Validator", "RUNNING", attemptLabel);
-            validation = validator.execute(artifact);
+            // #105 — make sessionId visible to Docker runners so they can
+            // persist captured logs.  Cleared in finally below so a stray
+            // value doesn't leak into another caller on the same thread.
+            if (sessionIdForContext != null) SandboxContext.setSessionId(sessionIdForContext);
+            try {
+                validation = validator.execute(artifact);
+            } finally {
+                if (sessionIdForContext != null) SandboxContext.clear();
+            }
             progressNotifierPort.notify(jobId, "Sandbox Validator", "DONE",
                     validation.passed() ? attemptLabel : (attemptLabel != null
                             ? attemptLabel + " — " + validation.failures().size() + " issue(s)"

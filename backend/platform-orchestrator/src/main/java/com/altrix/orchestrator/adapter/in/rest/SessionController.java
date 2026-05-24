@@ -7,6 +7,7 @@ import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportVersionResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.RagIndexManifestResponse;
+import com.altrix.orchestrator.adapter.in.rest.dto.SandboxLogResponse;
 import com.altrix.orchestrator.adapter.in.rest.dto.ShareTokenResponse;
 import com.altrix.orchestrator.infrastructure.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +25,7 @@ import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.domain.port.out.MigrationReportRepository;
 import com.altrix.orchestrator.domain.port.out.RagIndexManifestRepository;
+import com.altrix.orchestrator.domain.port.out.SandboxLogRepository;
 import com.altrix.orchestrator.domain.port.out.SessionPauseHistoryPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
 import jakarta.validation.Valid;
@@ -73,6 +75,7 @@ public class SessionController {
     private final FileReaderPort fileReader;
     private final MigrationReportRepository migrationReportRepository;
     private final RagIndexManifestRepository ragIndexManifestRepository;
+    private final SandboxLogRepository sandboxLogRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
     /**
@@ -366,6 +369,39 @@ public class SessionController {
                 publicBaseUrl + "/api/v1/public/reports/" + token,
                 java.time.Instant.now().plusSeconds(clampedMinutes * 60)
         ));
+    }
+
+    // ── Sandbox logs (#105) ───────────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/sessions/{id}/sandbox-logs — every persisted runner log
+     * for the session, ordered by runnerId.  Empty list when nothing has
+     * been persisted (no Docker runners enabled, or session predates the
+     * feature).
+     */
+    @GetMapping("/{sessionId}/sandbox-logs")
+    public ResponseEntity<List<SandboxLogResponse>> listSandboxLogs(@PathVariable String sessionId) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        List<SandboxLogResponse> logs = sandboxLogRepository.findBySessionId(id)
+                .stream().map(SandboxLogResponse::from).toList();
+        return ResponseEntity.ok(logs);
+    }
+
+    /**
+     * GET /api/v1/sessions/{id}/sandbox-logs/{runnerId} — single runner's
+     * full log.  404 when not persisted.  Used by the log-viewer expansion
+     * once the user picks a runner.
+     */
+    @GetMapping("/{sessionId}/sandbox-logs/{runnerId}")
+    public ResponseEntity<SandboxLogResponse> getSandboxLog(
+            @PathVariable String sessionId,
+            @PathVariable String runnerId
+    ) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        return sandboxLogRepository.findBySessionIdAndRunnerId(id, runnerId)
+                .map(SandboxLogResponse::from)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     // ── RAG index manifest ────────────────────────────────────────────────────

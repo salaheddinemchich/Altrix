@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ApprovalHistoryEntry, FileDiff, MigratedFile, MigrationPlan, PauseRecord, RagIndexManifest, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
+import { ApprovalHistoryEntry, FileDiff, MigratedFile, MigrationPlan, PauseRecord, RagIndexManifest, SandboxLog, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -61,6 +61,11 @@ export class SessionService {
    */
   getRagIndexManifest(sessionId: string): Observable<RagIndexManifest> {
     return this.http.get<RagIndexManifest>(`${this.base}/${sessionId}/rag-index`);
+  }
+
+  /** #105 — every persisted sandbox-runner log for the session. */
+  getSandboxLogs(sessionId: string): Observable<SandboxLog[]> {
+    return this.http.get<SandboxLog[]>(`${this.base}/${sessionId}/sandbox-logs`);
   }
 
   approve(sessionId: string): Observable<Session> {

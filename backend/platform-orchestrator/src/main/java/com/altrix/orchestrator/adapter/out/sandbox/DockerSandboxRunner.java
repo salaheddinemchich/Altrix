@@ -2,8 +2,11 @@ package com.altrix.orchestrator.adapter.out.sandbox;
 
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
+import com.altrix.orchestrator.domain.model.sandbox.SandboxContext;
 import com.altrix.orchestrator.domain.model.sandbox.SandboxFinding;
 import com.altrix.orchestrator.domain.model.sandbox.SandboxFinding.Severity;
+import com.altrix.orchestrator.domain.model.sandbox.SandboxLog;
+import com.altrix.orchestrator.domain.port.out.SandboxLogRepository;
 import com.altrix.orchestrator.domain.port.out.SandboxRunnerPort;
 import com.altrix.orchestrator.infrastructure.config.SandboxDockerConfig;
 import com.github.dockerjava.api.DockerClient;
@@ -34,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.time.Instant;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -80,11 +84,13 @@ public class DockerSandboxRunner implements SandboxRunnerPort {
     static final String LABEL_VALUE = "true";
 
     private final SandboxDockerConfig config;
+    private final SandboxLogRepository sandboxLogRepository;
     private volatile DockerClient client;
     private volatile boolean daemonReachable;
 
-    public DockerSandboxRunner(SandboxDockerConfig config) {
+    public DockerSandboxRunner(SandboxDockerConfig config, SandboxLogRepository sandboxLogRepository) {
         this.config = config;
+        this.sandboxLogRepository = sandboxLogRepository;
     }
 
     @PostConstruct
@@ -145,6 +151,11 @@ public class DockerSandboxRunner implements SandboxRunnerPort {
             containerId = createContainer(workspace);
             String logs = runAndCollect(containerId);
             int exitCode = waitForExit(containerId);
+            // #105 — persist the captured output so reviewers can read it
+            // from the JobDetail log viewer after the run.  Best-effort —
+            // the SandboxLogRepository swallows persistence errors so the
+            // findings still flow downstream.
+            persistLog(logs, exitCode);
             return interpret(exitCode, logs);
         } catch (Exception e) {
             log.error("[DockerSandboxRunner] sandbox run failed: {}", e.getMessage());
@@ -154,6 +165,19 @@ public class DockerSandboxRunner implements SandboxRunnerPort {
             cleanupContainer(containerId);
             cleanupWorkspace(workspace);
         }
+    }
+
+    /**
+     * Best-effort persistence of the captured stdout/stderr blob.  Skips
+     * silently when the SandboxContext isn't populated (e.g. unit tests
+     * that call run() directly, or future callers outside the validator
+     * pipeline).
+     */
+    private void persistLog(String logs, int exitCode) {
+        String sessionId = SandboxContext.currentSessionId();
+        if (sessionId == null || sandboxLogRepository == null) return;
+        sandboxLogRepository.save(new SandboxLog(
+                sessionId, ID, logs, exitCode, Instant.now()));
     }
 
     // ── workspace ────────────────────────────────────────────────────────────

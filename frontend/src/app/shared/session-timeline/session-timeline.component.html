@@ -41,6 +41,55 @@
           </div>
         }
 
+        <!-- Sandbox-log expansion (#106) — visible on the Validate step
+             once a sessionId is available and the step has progressed
+             past PENDING.  Only the Docker runners persist logs; if none
+             are enabled the panel reports "no logs persisted". -->
+        @if (step.id === 'validate' && sessionId() && step.status !== 'PENDING') {
+          <button type="button" class="rag-toggle" (click)="toggleSandboxLogs()"
+                  [attr.aria-expanded]="sandboxLogsExpanded()">
+            <app-icon [name]="sandboxLogsExpanded() ? 'chevron-down' : 'chevron-right'" [size]="11"/>
+            {{ sandboxLogsExpanded() ? 'Hide' : 'View' }} sandbox logs
+            @if (sandboxLogs().length > 0) {
+              <span class="rag-toggle-count">({{ sandboxLogs().length }})</span>
+            }
+          </button>
+
+          @if (sandboxLogsExpanded()) {
+            <div class="rag-manifest">
+              @if (sandboxLogsLoading()) {
+                <div class="rag-manifest-state">Loading logs…</div>
+              } @else if (sandboxLogsMissing()) {
+                <div class="rag-manifest-state muted">
+                  No sandbox logs persisted — Docker runners must be enabled
+                  (sandbox.docker.enabled=true) for logs to be captured.
+                </div>
+              } @else {
+                <div class="sandbox-log-tabs">
+                  @for (l of sandboxLogs(); track l.runnerId) {
+                    <button type="button"
+                            class="sandbox-log-tab"
+                            [class.active]="selectedRunnerId() === l.runnerId"
+                            (click)="selectRunner(l.runnerId)">
+                      {{ l.runnerId }}
+                      @if (l.exitCode !== null) {
+                        <span class="sandbox-log-exit"
+                              [class.success]="l.exitCode === 0"
+                              [class.fail]="l.exitCode !== 0">
+                          exit {{ l.exitCode }}
+                        </span>
+                      }
+                    </button>
+                  }
+                </div>
+                @if (selectedSandboxLog(); as log) {
+                  <pre class="sandbox-log-viewer">{{ log.content }}</pre>
+                }
+              }
+            </div>
+          }
+        }
+
         <!-- RAG manifest expansion — visible only on the Index step,
              once a sessionId is available, and the step has progressed
              past PENDING (no point exposing the toggle when there's

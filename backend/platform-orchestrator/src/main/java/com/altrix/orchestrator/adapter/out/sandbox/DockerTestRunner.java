@@ -2,8 +2,11 @@ package com.altrix.orchestrator.adapter.out.sandbox;
 
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
+import com.altrix.orchestrator.domain.model.sandbox.SandboxContext;
 import com.altrix.orchestrator.domain.model.sandbox.SandboxFinding;
 import com.altrix.orchestrator.domain.model.sandbox.SandboxFinding.Severity;
+import com.altrix.orchestrator.domain.model.sandbox.SandboxLog;
+import com.altrix.orchestrator.domain.port.out.SandboxLogRepository;
 import com.altrix.orchestrator.domain.port.out.SandboxRunnerPort;
 import com.altrix.orchestrator.infrastructure.config.SandboxDockerConfig;
 import com.github.dockerjava.api.DockerClient;
@@ -29,6 +32,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -80,11 +84,13 @@ public class DockerTestRunner implements SandboxRunnerPort {
             "^\\s*([\\w.$]+(?:Test|IT))\\.(\\w+):\\s*(.+)$", Pattern.MULTILINE);
 
     private final SandboxDockerConfig config;
+    private final SandboxLogRepository sandboxLogRepository;
     private volatile DockerClient client;
     private volatile boolean daemonReachable;
 
-    public DockerTestRunner(SandboxDockerConfig config) {
+    public DockerTestRunner(SandboxDockerConfig config, SandboxLogRepository sandboxLogRepository) {
         this.config = config;
+        this.sandboxLogRepository = sandboxLogRepository;
     }
 
     @PostConstruct
@@ -138,6 +144,11 @@ public class DockerTestRunner implements SandboxRunnerPort {
             containerId = createContainer(workspace);
             String logs = runAndCollect(containerId);
             int exitCode = waitForExit(containerId);
+            // #105 — persist captured output for post-run review.
+            String sessionId = SandboxContext.currentSessionId();
+            if (sessionId != null && sandboxLogRepository != null) {
+                sandboxLogRepository.save(new SandboxLog(sessionId, ID, logs, exitCode, Instant.now()));
+            }
             return interpret(exitCode, logs);
         } catch (Exception e) {
             log.error("[DockerTestRunner] test run failed: {}", e.getMessage());

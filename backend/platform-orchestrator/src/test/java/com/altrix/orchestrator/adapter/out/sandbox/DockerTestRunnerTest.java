@@ -19,7 +19,7 @@ class DockerTestRunnerTest {
 
     @Test
     void idAndOrder_areStable() {
-        DockerTestRunner r = new DockerTestRunner(cfg());
+        DockerTestRunner r = new DockerTestRunner(cfg(), null);
         assertThat(r.id()).isEqualTo("docker-test");
         // After compile (10); a broken compile poisons the test signal.
         assertThat(r.order()).isEqualTo(11);
@@ -27,7 +27,7 @@ class DockerTestRunnerTest {
 
     @Test
     void allTestsPassed_emitsInfoFindingWithCounts() {
-        DockerTestRunner r = new DockerTestRunner(cfg());
+        DockerTestRunner r = new DockerTestRunner(cfg(), null);
         String logs = """
                 [INFO] -------------------------------------------------------
                 [INFO]  T E S T S
@@ -46,7 +46,7 @@ class DockerTestRunnerTest {
 
     @Test
     void noTests_emitsInfoMessage() {
-        DockerTestRunner r = new DockerTestRunner(cfg());
+        DockerTestRunner r = new DockerTestRunner(cfg(), null);
         String logs = "[INFO] No tests to run.\nTests run: 0, Failures: 0, Errors: 0, Skipped: 0\n";
         List<SandboxFinding> findings = r.interpret(0, logs);
         assertThat(findings).hasSize(1);
@@ -55,7 +55,7 @@ class DockerTestRunnerTest {
 
     @Test
     void failuresReported_emitsPerTestFindings() {
-        DockerTestRunner r = new DockerTestRunner(cfg());
+        DockerTestRunner r = new DockerTestRunner(cfg(), null);
         String logs = """
                 [INFO] -------------------------------------------------------
                 [INFO]  T E S T S
@@ -78,7 +78,7 @@ class DockerTestRunnerTest {
 
     @Test
     void countsButNoParseableFailures_emitsSummaryError() {
-        DockerTestRunner r = new DockerTestRunner(cfg());
+        DockerTestRunner r = new DockerTestRunner(cfg(), null);
         // Counts say failures present but no per-test block parses — fall
         // back to a summary finding.
         String logs = "Tests run: 10, Failures: 3, Errors: 1, Skipped: 0\n[ERROR] BUILD FAILURE\n";
@@ -93,7 +93,7 @@ class DockerTestRunnerTest {
 
     @Test
     void unknownFailure_emitsLogTail() {
-        DockerTestRunner r = new DockerTestRunner(cfg());
+        DockerTestRunner r = new DockerTestRunner(cfg(), null);
         String logs = "[ERROR] surefire plugin not configured\n[ERROR] BUILD FAILURE\n";
         List<SandboxFinding> findings = r.interpret(1, logs);
         assertThat(findings).hasSize(1);
