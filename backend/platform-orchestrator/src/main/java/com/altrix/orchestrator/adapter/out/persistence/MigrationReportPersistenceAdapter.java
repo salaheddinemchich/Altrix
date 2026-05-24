@@ -2,10 +2,14 @@ package com.altrix.orchestrator.adapter.out.persistence;
 
 import com.altrix.common.domain.model.MigrationReport;
 import com.altrix.orchestrator.domain.model.report.MigrationReportEntry;
+import com.altrix.orchestrator.domain.model.report.ReportSearchHit;
+import com.altrix.orchestrator.domain.model.report.ReportSearchPage;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.out.MigrationReportRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,6 +74,34 @@ public class MigrationReportPersistenceAdapter implements MigrationReportReposit
     public Optional<MigrationReportEntry> findBySessionIdAndVersion(WorkflowSessionId sessionId, int version) {
         return repository.findBySessionIdAndVersion(sessionId.value(), version)
                 .map(this::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReportSearchPage search(String query, int page, int size) {
+        // Empty / blank query short-circuits to an empty page — Postgres
+        // would return everything on '' which is rarely useful and burns
+        // index reads.
+        if (query == null || query.isBlank()) {
+            return new ReportSearchPage(List.of(), page, size, 0L, 0);
+        }
+        int safeSize = Math.max(1, Math.min(size, 100));
+        int safePage = Math.max(0, page);
+        Page<MigrationReportSearchHit> result =
+                repository.searchByQuery(query, PageRequest.of(safePage, safeSize));
+
+        List<ReportSearchHit> hits = result.getContent().stream()
+                .map(h -> new ReportSearchHit(
+                        h.getReportId(), h.getSessionId(),
+                        h.getVersion() != null ? h.getVersion() : 0,
+                        h.getProjectId(),
+                        h.getGeneratedAt(),
+                        h.getSnippet() != null ? h.getSnippet() : "",
+                        h.getRank() != null ? h.getRank() : 0f))
+                .toList();
+        return new ReportSearchPage(
+                hits, result.getNumber(), result.getSize(),
+                result.getTotalElements(), result.getTotalPages());
     }
 
     // ── mapping ─────────────────────────────────────────────────────────────

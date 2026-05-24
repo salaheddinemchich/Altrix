@@ -2,6 +2,7 @@ package com.altrix.orchestrator.domain.port.out;
 
 import com.altrix.common.domain.model.MigrationReport;
 import com.altrix.orchestrator.domain.model.report.MigrationReportEntry;
+import com.altrix.orchestrator.domain.model.report.ReportSearchPage;
 import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 
 import java.util.List;
@@ -35,4 +36,13 @@ public interface MigrationReportRepository {
 
     /** Specific version of the report for the session. */
     Optional<MigrationReportEntry> findBySessionIdAndVersion(WorkflowSessionId sessionId, int version);
+
+    /**
+     * Full-text search across persisted report content (#163).
+     *
+     * @param query plain text — adapter passes it through Postgres'
+     *              {@code plainto_tsquery} so user input is safely
+     *              tokenized (terms AND'd, special chars escaped).
+     */
+    ReportSearchPage search(String query, int page, int size);
 }
