@@ -82,13 +82,19 @@ public class SandboxValidatorAgent implements MigrationAgent<MigrationArtifact, 
             }
         }
 
-        // Map findings to the legacy ValidationReport.failures string list so
-        // downstream consumers (frontend, report agent, retry context #98)
-        // don't have to change yet.  Only ERRORs gate; warnings + info are
-        // surfaced inline but don't fail the report.
+        // Flat string view of ERROR-severity findings — kept for back-compat
+        // with the retry-context builder + the markdown reporter.  New
+        // consumers should prefer ValidationReport.findings (added in #94).
         List<String> failures = findings.stream()
                 .filter(f -> f.severity() == SandboxFinding.Severity.ERROR)
                 .map(SandboxFinding::toFailureLine)
+                .toList();
+
+        // Structured cross-service view — every finding regardless of severity.
+        List<ValidationReport.Finding> structured = findings.stream()
+                .map(f -> new ValidationReport.Finding(
+                        f.runnerId(), f.severity().name(),
+                        f.filePath(), f.line(), f.message()))
                 .toList();
 
         boolean passed = failures.isEmpty();
@@ -105,6 +111,6 @@ public class SandboxValidatorAgent implements MigrationAgent<MigrationArtifact, 
         }
 
         log.info("[{}] validation {}: {}", getName(), passed ? "PASSED" : "FAILED", summary);
-        return new ValidationReport(input.projectId(), passed, failures, summary);
+        return new ValidationReport(input.projectId(), passed, failures, summary, structured);
     }
 }

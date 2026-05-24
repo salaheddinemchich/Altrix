@@ -88,4 +88,27 @@ class SandboxValidatorAgentTest {
         assertThatThrownBy(() -> agent.execute(null))
                 .isInstanceOf(AgentFailureException.class);
     }
+
+    // #94 — structured findings exposed alongside the legacy failures list.
+    @Test
+    void execute_residualPubSubImport_populatesStructuredFindings() {
+        MigratedFile file = MigratedFile.builder()
+                .originalPath("Listener.java").newPath("Listener.java")
+                .content("import google.cloud.pubsub; class Listener {}")
+                .changeType(FileChangeType.MODIFIED).diffSummary("partial migration")
+                .build();
+        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done"));
+
+        // Back-compat surface still works
+        assertThat(report.failures()).isNotEmpty();
+        // New structured surface carries the same data with runner + severity + path
+        assertThat(report.findings())
+                .isNotEmpty()
+                .anySatisfy(f -> {
+                    assertThat(f.runnerId()).isEqualTo("static");
+                    assertThat(f.severity()).isEqualTo("ERROR");
+                    assertThat(f.filePath()).isEqualTo("Listener.java");
+                    assertThat(f.message()).contains("Pub/Sub import not removed");
+                });
+    }
 }
