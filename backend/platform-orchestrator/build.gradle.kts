@@ -75,6 +75,13 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-bulkhead:$resilience4jVersion")
     implementation("org.springframework.boot:spring-boot-starter-aop")
 
+    // Docker SDK — used by DockerSandboxRunner (#16/#17/#99-#103) to run
+    // `mvn compile` against migrated source in an isolated container.
+    // zerodep transport keeps the dependency footprint small (no httpclient5
+    // / netty pull-through).
+    implementation("com.github.docker-java:docker-java-core:3.4.0")
+    implementation("com.github.docker-java:docker-java-transport-zerodep:3.4.0")
+
     // Lombok
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")

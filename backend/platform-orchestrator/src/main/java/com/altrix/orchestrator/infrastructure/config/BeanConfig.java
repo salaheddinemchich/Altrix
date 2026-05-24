@@ -28,7 +28,8 @@ import java.util.concurrent.Executor;
 @EnableScheduling
 @EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class,
         EncryptionConfig.class, McpConfig.class, ApprovalConfig.class, AutoPauseConfig.class,
-        ApprovalNotificationConfig.class, JwtConfig.class, RateLimitConfig.class, CacheConfig.class})
+        ApprovalNotificationConfig.class, JwtConfig.class, RateLimitConfig.class, CacheConfig.class,
+        SandboxDockerConfig.class})
 public class BeanConfig {
 
     @Bean
