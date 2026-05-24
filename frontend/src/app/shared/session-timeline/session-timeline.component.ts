@@ -83,6 +83,58 @@ export class SessionTimelineComponent implements OnDestroy {
     return id ? this.sandboxLogs().find(l => l.runnerId === id) ?? null : null;
   });
 
+  // #108 — log filter/search.  Pure client-side filtering because the log
+  // already lives in memory and the volume is bounded by the Docker runner's
+  // capture (which caps at the container's stdout).
+  /** Free-text filter — case-insensitive substring match. */
+  readonly logFilterQuery = signal<string>('');
+  /** Severity filter — 'all' lets everything through; others keep matching lines only. */
+  readonly logFilterLevel = signal<'all' | 'error' | 'warn' | 'info'>('all');
+
+  readonly filteredSandboxLog = computed<string>(() => {
+    const log = this.selectedSandboxLog();
+    if (!log || !log.content) return '';
+    const query = this.logFilterQuery().toLowerCase();
+    const level = this.logFilterLevel();
+    if (!query && level === 'all') return log.content;
+
+    return log.content
+      .split('\n')
+      .filter(line => {
+        if (query && !line.toLowerCase().includes(query)) return false;
+        if (level === 'all') return true;
+        const u = line.toUpperCase();
+        switch (level) {
+          case 'error': return u.includes('[ERROR]') || u.includes('ERROR ') || u.includes(' ERROR');
+          case 'warn':  return u.includes('[WARN')   || u.includes('WARNING') || u.includes(' WARN');
+          case 'info':  return u.includes('[INFO]')  || u.includes(' INFO');
+          default:      return true;
+        }
+      })
+      .join('\n');
+  });
+
+  /** Convenience for the template — total lines after filter, for the count badge. */
+  readonly filteredLineCount = computed<number>(() => {
+    const filtered = this.filteredSandboxLog();
+    if (!filtered) return 0;
+    return filtered.split('\n').length;
+  });
+
+  setLogFilterLevel(level: 'all' | 'error' | 'warn' | 'info'): void {
+    this.logFilterLevel.set(level);
+  }
+
+  setLogFilterQuery(query: string): void {
+    this.logFilterQuery.set(query);
+  }
+
+  /** Clears both filters in one click. */
+  clearLogFilter(): void {
+    this.logFilterQuery.set('');
+    this.logFilterLevel.set('all');
+  }
+
   readonly steps = signal<TimelineStep[]>(initialSteps());
   readonly now   = signal<number>(Date.now());
 

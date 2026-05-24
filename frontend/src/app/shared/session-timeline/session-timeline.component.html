@@ -83,7 +83,40 @@
                   }
                 </div>
                 @if (selectedSandboxLog(); as log) {
-                  <pre class="sandbox-log-viewer">{{ log.content }}</pre>
+                  <!-- #108 — filter + search.  Level chips short-circuit
+                       to the line patterns the Docker runners emit (Maven
+                       [INFO]/[WARN]/[ERROR], Surefire `ERROR `).  Text
+                       input is case-insensitive substring. -->
+                  <div class="sandbox-log-filter">
+                    <input class="sandbox-log-search"
+                           type="search"
+                           placeholder="Filter lines…"
+                           [value]="logFilterQuery()"
+                           (input)="setLogFilterQuery($any($event.target).value)"
+                           aria-label="Filter log lines"/>
+                    <div class="sandbox-log-levels">
+                      <button type="button"
+                              [class.active]="logFilterLevel() === 'all'"
+                              (click)="setLogFilterLevel('all')">all</button>
+                      <button type="button"
+                              [class.active]="logFilterLevel() === 'error'"
+                              (click)="setLogFilterLevel('error')">ERROR</button>
+                      <button type="button"
+                              [class.active]="logFilterLevel() === 'warn'"
+                              (click)="setLogFilterLevel('warn')">WARN</button>
+                      <button type="button"
+                              [class.active]="logFilterLevel() === 'info'"
+                              (click)="setLogFilterLevel('info')">INFO</button>
+                    </div>
+                    @if (logFilterQuery() || logFilterLevel() !== 'all') {
+                      <button type="button"
+                              class="sandbox-log-clear"
+                              (click)="clearLogFilter()"
+                              title="Clear filter">×</button>
+                      <span class="sandbox-log-count">{{ filteredLineCount() }} line(s)</span>
+                    }
+                  </div>
+                  <pre class="sandbox-log-viewer">{{ filteredSandboxLog() }}</pre>
                 }
               }
             </div>

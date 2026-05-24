@@ -279,6 +279,81 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
+
+  // #108 — filter + search strip above the log viewer
+  .sandbox-log-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .sandbox-log-search {
+    flex: 1;
+    min-width: 140px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 11px;
+    border: 1px solid var(--border, #e5e5e5);
+    border-radius: 4px;
+    background: var(--surface, #fff);
+    color: var(--color-text, #111);
+
+    &:focus {
+      outline: 2px solid var(--color-primary, #3b82f6);
+      outline-offset: -1px;
+    }
+  }
+
+  .sandbox-log-levels {
+    display: inline-flex;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+    padding: 2px;
+
+    button {
+      appearance: none;
+      background: transparent;
+      border: none;
+      padding: 3px 8px;
+      font: inherit;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted, #666);
+      cursor: pointer;
+      border-radius: 3px;
+
+      &:hover { background: rgba(0, 0, 0, 0.04); }
+
+      &.active {
+        background: var(--color-text, #111);
+        color: var(--color-bg, #fff);
+      }
+    }
+  }
+
+  .sandbox-log-clear {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--border, #e5e5e5);
+    border-radius: 3px;
+    width: 22px;
+    height: 22px;
+    line-height: 1;
+    font-size: 14px;
+    color: var(--muted, #666);
+    cursor: pointer;
+
+    &:hover { background: rgba(0, 0, 0, 0.04); color: var(--color-text); }
+  }
+
+  .sandbox-log-count {
+    font-size: 10px;
+    color: var(--muted, #888);
+    font-family: ui-monospace, monospace;
+  }
 }
 
 @keyframes timeline-pulse {
