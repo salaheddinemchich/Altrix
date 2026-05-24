@@ -50,6 +50,19 @@ export interface RagIndexManifest {
   indexedAt: string;
 }
 
+/**
+ * One persisted sandbox-runner log (#105).  Drives the log-viewer
+ * expansion on the Validate step of the JobDetail timeline.
+ * exitCode = null for runners that don't produce one
+ * (static / migration-quality).  exitCode = 137 is our timeout sentinel.
+ */
+export interface SandboxLog {
+  runnerId: string;
+  content: string;
+  exitCode: number | null;
+  generatedAt: string;
+}
+
 /** #126 — one entry of the approval-history timeline for a session. */
 export interface ApprovalHistoryEntry {
   decidedBy: string;

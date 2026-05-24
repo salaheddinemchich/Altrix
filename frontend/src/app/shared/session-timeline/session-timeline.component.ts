@@ -18,7 +18,7 @@ import {
 } from '../../core/models/pipeline.model';
 import { PipelineService } from '../../core/services/pipeline.service';
 import { SessionService } from '../../core/services/session.service';
-import { RagIndexManifest } from '../../core/models/session.model';
+import { RagIndexManifest, SandboxLog } from '../../core/models/session.model';
 import { IconComponent } from '../icon/icon.component';
 import { catchError, of } from 'rxjs';
 
@@ -69,6 +69,19 @@ export class SessionTimelineComponent implements OnDestroy {
   /** True when the manifest endpoint returned 404 / empty.  Differentiates
    *  "still loading" from "nothing to show". */
   readonly ragManifestMissing = signal<boolean>(false);
+
+  // ── Sandbox logs lazy-load state (#106) ──────────────────────────────────
+  readonly sandboxLogsExpanded = signal<boolean>(false);
+  readonly sandboxLogs = signal<SandboxLog[]>([]);
+  readonly sandboxLogsLoading = signal<boolean>(false);
+  readonly sandboxLogsMissing = signal<boolean>(false);
+  /** Which runner's log the viewer currently shows.  null = no selection. */
+  readonly selectedRunnerId = signal<string | null>(null);
+
+  readonly selectedSandboxLog = computed<SandboxLog | null>(() => {
+    const id = this.selectedRunnerId();
+    return id ? this.sandboxLogs().find(l => l.runnerId === id) ?? null : null;
+  });
 
   readonly steps = signal<TimelineStep[]>(initialSteps());
   readonly now   = signal<number>(Date.now());
@@ -175,6 +188,39 @@ export class SessionTimelineComponent implements OnDestroy {
     const end = step.endedAt ?? this.now();
     const ms  = Math.max(0, end - step.startedAt);
     return formatDuration(ms);
+  }
+
+  /**
+   * Toggles the "view sandbox logs" panel on the Validate step.  Same
+   * lazy-load pattern as the RAG manifest — fetch on first open, then
+   * just flip visibility.  Auto-selects the first log so the viewer
+   * has something to show without an extra click.
+   */
+  toggleSandboxLogs(): void {
+    const wasOpen = this.sandboxLogsExpanded();
+    this.sandboxLogsExpanded.set(!wasOpen);
+    if (wasOpen) return;
+    if (this.sandboxLogs().length > 0 || this.sandboxLogsMissing()) return; // already loaded
+    const id = this.sessionId();
+    if (!id) return;
+
+    this.sandboxLogsLoading.set(true);
+    this.sessionApi.getSandboxLogs(id)
+      .pipe(catchError(() => of<SandboxLog[]>([])))
+      .subscribe(logs => {
+        this.sandboxLogsLoading.set(false);
+        if (logs && logs.length > 0) {
+          this.sandboxLogs.set(logs);
+          this.selectedRunnerId.set(logs[0].runnerId);
+        } else {
+          this.sandboxLogsMissing.set(true);
+        }
+      });
+  }
+
+  /** Switch which runner's log is shown in the viewer. */
+  selectRunner(runnerId: string): void {
+    this.selectedRunnerId.set(runnerId);
   }
 
   /**

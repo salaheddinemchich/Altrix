@@ -22,14 +22,14 @@ class DockerSandboxRunnerTest {
 
     @Test
     void idAndOrder_areStable() {
-        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig());
+        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig(), null);
         assertThat(r.id()).isEqualTo("docker");
         assertThat(r.order()).isEqualTo(10);   // after static (0) + migration-quality (1)
     }
 
     @Test
     void disabledByDefault_isAvailableReturnsFalse() {
-        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig());
+        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig(), null);
         // probeDaemon hasn't run (no @PostConstruct outside of Spring); the
         // enabled flag alone gates isAvailable false.
         assertThat(r.isAvailable()).isFalse();
@@ -40,7 +40,7 @@ class DockerSandboxRunnerTest {
         // enabled+daemon-not-probed → daemonReachable=false → isAvailable=false.
         // But run() is still safe to call directly; with no pom.xml the
         // early-return path executes before any docker call.
-        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig());
+        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig(), null);
 
         MigratedFile java = MigratedFile.builder()
                 .originalPath("Foo.java").newPath("Foo.java")
@@ -57,13 +57,13 @@ class DockerSandboxRunnerTest {
 
     @Test
     void emptyArtifact_returnsEmptyFindings() {
-        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig());
+        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig(), null);
         assertThat(r.run(MigrationArtifact.empty("p1"))).isEmpty();
     }
 
     @Test
     void nullArtifact_returnsEmptyFindings_neverThrows() {
-        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig());
+        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig(), null);
         assertThat(r.run(null)).isEmpty();
     }
 
@@ -71,7 +71,7 @@ class DockerSandboxRunnerTest {
 
     @Test
     void mavenErrorParser_extractsPathLineAndMessage() throws Exception {
-        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig());
+        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig(), null);
         String logs = """
                 [INFO] Scanning for projects...
                 [INFO] Compiling 3 source files
@@ -100,7 +100,7 @@ class DockerSandboxRunnerTest {
 
     @Test
     void mavenSuccess_returnsSingleInfoFinding() throws Exception {
-        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig());
+        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig(), null);
         List<SandboxFinding> findings = invokeInterpret(r, 0, "[INFO] BUILD SUCCESS\n");
         assertThat(findings).hasSize(1);
         assertThat(findings.get(0).severity()).isEqualTo(SandboxFinding.Severity.INFO);
@@ -109,7 +109,7 @@ class DockerSandboxRunnerTest {
 
     @Test
     void mavenFailureWithoutParseableLines_emitsErrorWithLogTail() throws Exception {
-        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig());
+        DockerSandboxRunner r = new DockerSandboxRunner(disabledConfig(), null);
         String logs = "[ERROR] Something went wrong in plugin\n[ERROR] BUILD FAILURE\n";
         List<SandboxFinding> findings = invokeInterpret(r, 1, logs);
         assertThat(findings).hasSize(1);
