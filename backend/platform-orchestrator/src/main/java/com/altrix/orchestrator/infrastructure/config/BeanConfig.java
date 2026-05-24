@@ -136,13 +136,18 @@ public class BeanConfig {
             MigratedFileStoragePort migratedFileStoragePort,
             JobStatusUpdatePort jobStatusUpdatePort,
             ProgressNotifierPort progressNotifierPort,
-            com.altrix.orchestrator.domain.port.out.MigrationReportRepository migrationReportRepository
+            com.altrix.orchestrator.domain.port.out.MigrationReportRepository migrationReportRepository,
+            // #98 — extra migrator retries when the validator returns failures.
+            // Service-side clamps to [0, 5] so a misconfig can't cost 100 LLM
+            // calls.  0 restores the pre-#98 single-attempt behaviour.
+            @Value("${migration.validation.max-retries:1}") int maxValidationRetries
     ) {
         return new ResumeMigrationService(
                 workflowSessionRepository,
                 migrator, validator, reporter,
                 migratedFileStoragePort, jobStatusUpdatePort, progressNotifierPort,
-                migrationReportRepository);
+                migrationReportRepository,
+                maxValidationRetries);
     }
 
     @Bean

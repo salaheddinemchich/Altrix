@@ -18,7 +18,6 @@ import com.altrix.orchestrator.domain.port.out.MigratedFileStoragePort;
 import com.altrix.orchestrator.domain.port.out.MigrationReportRepository;
 import com.altrix.orchestrator.domain.port.out.ProgressNotifierPort;
 import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
@@ -36,12 +35,14 @@ import java.util.List;
  *       blocking is fine; the originating REST call already returned.</li>
  * </ul>
  *
- * <p>The validator retry loop is intentionally NOT replicated here in this
- * first pass — a single attempt is taken.  Adding it later requires extracting
- * {@code RetryContextBuilder} into a domain port and is a separate ticket.
+ * <p>#98 — when the validator returns failures, the migrator is re-invoked
+ * with a structured retry context describing those failures, up to
+ * {@code maxRetries} extra attempts.  The retry loop uses ONLY the last
+ * attempt's artifact + validation for the final report / persistence —
+ * intermediate artefacts are discarded so the user never sees a half-good
+ * intermediate state.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ResumeMigrationService implements ResumeMigrationUseCase {
 
     private final WorkflowSessionRepository sessionRepository;
@@ -53,6 +54,34 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
     private final ProgressNotifierPort progressNotifierPort;
     /** #129 — persists the markdown report Agent 5 produces. */
     private final MigrationReportRepository migrationReportRepository;
+    /**
+     * #98 — extra migrator invocations beyond the initial run.  Default 1
+     * (so up to 2 total passes).  0 disables retry entirely, restoring
+     * the pre-#98 single-attempt behaviour.  Tuneable via
+     * {@code migration.validation.max-retries} (see BeanConfig).
+     */
+    private final int maxRetries;
+
+    public ResumeMigrationService(WorkflowSessionRepository sessionRepository,
+                                  MigrationAgent<ApprovedPlan, MigrationArtifact> migrator,
+                                  MigrationAgent<MigrationArtifact, ValidationReport> validator,
+                                  MigrationAgent<WorkflowOutcome, MigrationReport> reporter,
+                                  MigratedFileStoragePort migratedFileStoragePort,
+                                  JobStatusUpdatePort jobStatusUpdatePort,
+                                  ProgressNotifierPort progressNotifierPort,
+                                  MigrationReportRepository migrationReportRepository,
+                                  int maxRetries) {
+        this.sessionRepository = sessionRepository;
+        this.migrator = migrator;
+        this.validator = validator;
+        this.reporter = reporter;
+        this.migratedFileStoragePort = migratedFileStoragePort;
+        this.jobStatusUpdatePort = jobStatusUpdatePort;
+        this.progressNotifierPort = progressNotifierPort;
+        this.migrationReportRepository = migrationReportRepository;
+        // Clamp to a sensible band so a misconfig can't trigger 100 LLM calls.
+        this.maxRetries = Math.max(0, Math.min(maxRetries, 5));
+    }
 
     @Override
     public void resume(WorkflowSessionId sessionId) {
@@ -76,17 +105,13 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
         ApprovedPlan approvedPlan = new ApprovedPlan(plan, "reviewer", Instant.now(), null);
 
         try {
-            // ── Migrator ────────────────────────────────────────────────────
-            progressNotifierPort.notify(jobId, "Core Migrator", "RUNNING", null);
-            MigrationArtifact artifact = migrator.execute(approvedPlan);
-            progressNotifierPort.notify(jobId, "Core Migrator", "DONE", null);
-
-            jobStatusUpdatePort.markMigrating(jobId);
-
-            // ── Validator (single attempt — graph's retry loop is not here) ─
-            progressNotifierPort.notify(jobId, "Sandbox Validator", "RUNNING", null);
-            ValidationReport validation = validator.execute(artifact);
-            progressNotifierPort.notify(jobId, "Sandbox Validator", "DONE", null);
+            // ── Migrate → validate, retrying on validation failures (#98) ───
+            // The loop always returns the LAST attempt's pair.  Intermediate
+            // failed artefacts are discarded — the user only sees the final
+            // result (either the first PASS or the last attempt's output).
+            MigrateValidateResult mv = migrateWithRetries(jobId, approvedPlan);
+            MigrationArtifact artifact = mv.artifact();
+            ValidationReport validation = mv.validation();
 
             // ── Reporter ────────────────────────────────────────────────────
             // analysisReport is intentionally null — at resume time the graph's
@@ -131,6 +156,89 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
             jobStatusUpdatePort.markFailed(jobId, e.getMessage());
             progressNotifierPort.notify(jobId, "Pipeline", "FAILED", e.getMessage());
         }
+    }
+
+    /** Bundles the artifact + validation pair the retry loop produces. */
+    private record MigrateValidateResult(MigrationArtifact artifact, ValidationReport validation) {}
+
+    /**
+     * Runs Agent 3 → Agent 4 in a loop, feeding validation failures from
+     * attempt N back into attempt N+1's retry context.  Stops at:
+     *   • validation.passed = true, or
+     *   • attempt count > 1 + maxRetries.
+     *
+     * <p>Each attempt emits its own RUNNING / DONE pair on the progress
+     * topic with the attempt number in the message so the JobDetail
+     * timeline can show "Migrating (retry 1/2)…" instead of going silent
+     * during a long re-run.
+     */
+    private MigrateValidateResult migrateWithRetries(String jobId, ApprovedPlan basePlan) {
+        // markMigrating once — subsequent retries stay in the same job status.
+        jobStatusUpdatePort.markMigrating(jobId);
+
+        ApprovedPlan plan = basePlan;
+        MigrationArtifact artifact = null;
+        ValidationReport validation = null;
+
+        int totalAttempts = 1 + maxRetries;
+        for (int attempt = 1; attempt <= totalAttempts; attempt++) {
+            String attemptLabel = attempt == 1
+                    ? null
+                    : "retry %d/%d".formatted(attempt - 1, maxRetries);
+
+            // ── Migrator ────────────────────────────────────────────────
+            progressNotifierPort.notify(jobId, "Core Migrator", "RUNNING", attemptLabel);
+            artifact = migrator.execute(plan);
+            progressNotifierPort.notify(jobId, "Core Migrator", "DONE", attemptLabel);
+
+            // ── Validator ───────────────────────────────────────────────
+            progressNotifierPort.notify(jobId, "Sandbox Validator", "RUNNING", attemptLabel);
+            validation = validator.execute(artifact);
+            progressNotifierPort.notify(jobId, "Sandbox Validator", "DONE",
+                    validation.passed() ? attemptLabel : (attemptLabel != null
+                            ? attemptLabel + " — " + validation.failures().size() + " issue(s)"
+                            : validation.failures().size() + " issue(s)"));
+
+            if (validation.passed() || attempt == totalAttempts) {
+                if (attempt > 1) {
+                    log.info("Validation {} on attempt {}/{} for job '{}'",
+                            validation.passed() ? "PASSED" : "FAILED",
+                            attempt, totalAttempts, jobId);
+                }
+                return new MigrateValidateResult(artifact, validation);
+            }
+
+            // Build retry context for the next attempt and loop.
+            String retryContext = buildRetryContext(attempt, validation);
+            plan = new ApprovedPlan(plan.plan(), plan.approvedBy(), plan.approvedAt(), retryContext);
+            log.info("Validation FAILED on attempt {}/{} for job '{}' — retrying with {} issue(s) in context",
+                    attempt, totalAttempts, jobId, validation.failures().size());
+        }
+
+        // Loop body always returns; this is just to keep the compiler honest.
+        return new MigrateValidateResult(artifact, validation);
+    }
+
+    /**
+     * Renders validation failures as a short instruction the migrator can
+     * prepend to its SYSTEM_PROMPT.  Kept terse — the model is already
+     * carrying the full source content, so adding 200+ char paths × 50
+     * failures would blow the context budget.  First 20 issues only.
+     */
+    static String buildRetryContext(int previousAttempt, ValidationReport failedValidation) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Previous migration attempt #").append(previousAttempt)
+          .append(" produced the following validation failures. ")
+          .append("Fix EACH of these in this attempt — re-rewrite the affected files so the listed issues are gone:\n");
+        List<String> failures = failedValidation.failures();
+        int limit = Math.min(failures.size(), 20);
+        for (int i = 0; i < limit; i++) {
+            sb.append("  - ").append(failures.get(i)).append('\n');
+        }
+        if (failures.size() > limit) {
+            sb.append("  - … and ").append(failures.size() - limit).append(" more (truncated)\n");
+        }
+        return sb.toString();
     }
 
     /**
