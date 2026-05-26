@@ -11,7 +11,10 @@
     <!-- Status summary chips -->
     <div class="counts">
       <span class="chip modified"  title="Modified files">M {{ counts().modified }}</span>
-      <span class="chip created"   title="Created files">C {{ counts().created }}</span>
+      <span class="chip created"
+            title="Proposed NEW files — they did not exist in your source ZIP. Review carefully.">
+        ✚ NEW {{ counts().created }}
+      </span>
       <span class="chip deleted"   title="Deleted files">D {{ counts().deleted }}</span>
       <span class="chip unchanged" title="Untouched / unchanged">— {{ counts().unchanged + counts().untouched }}</span>
     </div>
@@ -62,9 +65,30 @@
     <section class="editor-pane">
       @if (selected(); as sel) {
         <div class="diff-meta">
-          <span class="badge" [class]="statusClass(sel.status)">{{ sel.status }}</span>
+          @if (sel.status === 'CREATED') {
+            <span class="badge created">✚ NEW FILE</span>
+          } @else {
+            <span class="badge" [class]="statusClass(sel.status)">{{ sel.status }}</span>
+          }
           <span class="meta-path">{{ sel.path }}</span>
         </div>
+
+        <!-- #2 — Loud banner on proposed-new files so the reviewer doesn't
+             mistake them for an edit. The migrator may legitimately need to
+             create a new pom.xml dep / application.yml; this banner ensures
+             those are deliberate decisions, not silent additions. -->
+        @if (sel.status === 'CREATED') {
+          <div class="new-file-banner">
+            <app-icon name="alert" [size]="14"/>
+            <div class="new-file-banner-text">
+              <strong>This file does not exist in your source project.</strong>
+              The migrator is <em>proposing</em> to add it. If your project
+              doesn't need it (for example, you already configure things
+              elsewhere), you can drop it from the downloaded .patch before
+              applying.
+            </div>
+          </div>
+        }
       }
       <div #editorHost class="editor-host"></div>
     </section>

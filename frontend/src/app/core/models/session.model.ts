@@ -51,6 +51,31 @@ export interface RagIndexManifest {
 }
 
 /**
+ * One retrieved documentation chunk's identity + snippet (#1).
+ * Mirrors the backend's FileProvenance.DocReference record.
+ */
+export interface DocReference {
+  /** Logical doc bucket — e.g. "kafka/producers", "gcp-pubsub/overview". */
+  logicalPath: string;
+  /** Canonical URL the content was fetched from. */
+  sourceUrl: string;
+  /** First ~400 chars of the matched chunk text. */
+  snippet: string;
+}
+
+/**
+ * Per-file RAG provenance for a session (#1).  For each migrated file,
+ * lists the doc chunks the AI used as context.  Powers the
+ * "what docs informed this file" panel on the Index step.
+ */
+export interface FileProvenance {
+  sessionId: string;
+  /** Source-file path → ordered list of doc chunks (first = most relevant). */
+  perFile: Record<string, DocReference[]>;
+  generatedAt: string;
+}
+
+/**
  * One persisted sandbox-runner log (#105).  Drives the log-viewer
  * expansion on the Validate step of the JobDetail timeline.
  * exitCode = null for runners that don't produce one

@@ -11,7 +11,9 @@ import com.altrix.orchestrator.domain.port.out.SandboxRunnerPort;
 import com.altrix.orchestrator.infrastructure.config.SandboxDockerConfig;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.dockerjava.api.command.PullImageResultCallback;
 import com.github.dockerjava.api.command.WaitContainerResultCallback;
+import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.HostConfig;
@@ -104,9 +106,37 @@ public class DockerSandboxRunner implements SandboxRunnerPort {
             this.client.pingCmd().exec();
             this.daemonReachable = true;
             log.info("[DockerSandboxRunner] Docker daemon reachable — runner armed");
+            // Pre-pull the Maven image so the first compile doesn't hit a
+            // 404 ("No such image") — the Docker SDK does not auto-pull on
+            // createContainer.  Best-effort; if the pull fails the runner
+            // is still armed and the failure will surface clearly on first use.
+            pullImageIfMissing(config.mavenImage());
         } catch (Exception e) {
             this.daemonReachable = false;
             log.warn("[DockerSandboxRunner] Docker daemon unreachable ({}) — runner will skip", e.getMessage());
+        }
+    }
+
+    /** Pulls the image if it isn't already in the local Docker cache. */
+    void pullImageIfMissing(String image) {
+        try {
+            client.inspectImageCmd(image).exec();
+            return; // already present
+        } catch (NotFoundException expected) {
+            // fall through to pull
+        } catch (Exception e) {
+            log.warn("[DockerSandboxRunner] could not inspect {} ({}), attempting pull anyway",
+                    image, e.getMessage());
+        }
+        try {
+            log.info("[DockerSandboxRunner] pulling image {} (first run takes a few minutes) …", image);
+            client.pullImageCmd(image)
+                  .exec(new PullImageResultCallback())
+                  .awaitCompletion(10, TimeUnit.MINUTES);
+            log.info("[DockerSandboxRunner] image {} ready", image);
+        } catch (Exception e) {
+            log.warn("[DockerSandboxRunner] could not pull image {} ({}); first run may fail with 404",
+                    image, e.getMessage());
         }
     }
 

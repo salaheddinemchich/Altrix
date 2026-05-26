@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ApprovalHistoryEntry, FileDiff, MigratedFile, MigrationPlan, PauseRecord, RagIndexManifest, SandboxLog, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
+import { ApprovalHistoryEntry, FileDiff, FileProvenance, MigratedFile, MigrationPlan, PauseRecord, RagIndexManifest, SandboxLog, Session, SessionFileNode, SessionPage, SessionStatus } from '../models/session.model';
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -66,6 +66,15 @@ export class SessionService {
   /** #105 — every persisted sandbox-runner log for the session. */
   getSandboxLogs(sessionId: string): Observable<SandboxLog[]> {
     return this.http.get<SandboxLog[]>(`${this.base}/${sessionId}/sandbox-logs`);
+  }
+
+  /**
+   * #1 — per-file RAG provenance: for each migrated file, the doc chunks
+   * the AI retrieved as context.  Drives the file→docs panel on the
+   * Index step of the JobDetail timeline.  404 → empty (older sessions).
+   */
+  getFileProvenance(sessionId: string): Observable<FileProvenance> {
+    return this.http.get<FileProvenance>(`${this.base}/${sessionId}/file-provenance`);
   }
 
   approve(sessionId: string): Observable<Session> {

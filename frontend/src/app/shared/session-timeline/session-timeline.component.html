@@ -72,7 +72,12 @@
                             [class.active]="selectedRunnerId() === l.runnerId"
                             (click)="selectRunner(l.runnerId)">
                       {{ l.runnerId }}
-                      @if (l.exitCode !== null) {
+                      @if (l.exitCode === -2) {
+                        <!-- Sentinel from DockerBootHealthRunner during a
+                             still-in-progress flush.  Show a pulsing
+                             "running" pill instead of "exit -2". -->
+                        <span class="sandbox-log-exit running">running…</span>
+                      } @else if (l.exitCode !== null) {
                         <span class="sandbox-log-exit"
                               [class.success]="l.exitCode === 0"
                               [class.fail]="l.exitCode !== 0">
@@ -118,6 +123,78 @@
                   </div>
                   <pre class="sandbox-log-viewer">{{ filteredSandboxLog() }}</pre>
                 }
+              }
+            </div>
+          }
+        }
+
+        <!-- #1 — per-file RAG provenance.  For each migrated file shows
+             which doc chunks the AI was anchored to (with snippets +
+             source URL).  Sibling of the "indexed files" toggle below;
+             both live on the Index step. -->
+        @if (step.id === 'index' && sessionId() && step.status !== 'PENDING') {
+          <button type="button" class="rag-toggle" (click)="toggleFileProvenance()"
+                  [attr.aria-expanded]="fileProvenanceExpanded()">
+            <app-icon [name]="fileProvenanceExpanded() ? 'chevron-down' : 'chevron-right'" [size]="11"/>
+            {{ fileProvenanceExpanded() ? 'Hide' : 'View' }} docs used per file
+            @if (provenanceFiles().length > 0) {
+              <span class="rag-toggle-count">({{ provenanceFiles().length }})</span>
+            }
+          </button>
+
+          @if (fileProvenanceExpanded()) {
+            <div class="rag-manifest">
+              @if (fileProvenanceLoading()) {
+                <div class="rag-manifest-state">Loading provenance…</div>
+              } @else if (fileProvenanceMissing()) {
+                <div class="rag-manifest-state muted">
+                  No per-file provenance recorded — either the migrator ran
+                  without an embedding store, or no relevant doc chunks
+                  matched any source file in this run.
+                </div>
+              } @else {
+                <div class="provenance-layout">
+                  <ul class="provenance-files">
+                    @for (path of provenanceFiles(); track path) {
+                      <li>
+                        <button type="button"
+                                class="provenance-file"
+                                [class.active]="selectedProvenanceFile() === path"
+                                (click)="selectProvenanceFile(path)"
+                                [title]="path">
+                          {{ path }}
+                          <span class="provenance-file-count">{{ (fileProvenance()?.perFile)?.[path]?.length ?? 0 }}</span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                  <div class="provenance-docs">
+                    @if (selectedProvenanceDocs().length === 0) {
+                      <div class="rag-manifest-state muted">Pick a file on the left to see which docs informed it.</div>
+                    } @else {
+                      <ul class="provenance-doc-list">
+                        @for (doc of selectedProvenanceDocs(); track doc.sourceUrl + doc.logicalPath) {
+                          <li class="provenance-doc">
+                            <div class="provenance-doc-head">
+                              <span class="provenance-doc-path">{{ doc.logicalPath }}</span>
+                              @if (doc.sourceUrl) {
+                                <a class="provenance-doc-url"
+                                   [href]="doc.sourceUrl"
+                                   target="_blank"
+                                   rel="noopener">
+                                  open ↗
+                                </a>
+                              }
+                            </div>
+                            @if (doc.snippet) {
+                              <pre class="provenance-doc-snippet">{{ doc.snippet }}</pre>
+                            }
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </div>
+                </div>
               }
             </div>
           }

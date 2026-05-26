@@ -11,7 +11,9 @@ import com.altrix.orchestrator.domain.port.out.SandboxRunnerPort;
 import com.altrix.orchestrator.infrastructure.config.SandboxDockerConfig;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.dockerjava.api.command.PullImageResultCallback;
 import com.github.dockerjava.api.command.WaitContainerResultCallback;
+import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.HostConfig;
@@ -104,9 +106,30 @@ public class DockerTestRunner implements SandboxRunnerPort {
             this.client.pingCmd().exec();
             this.daemonReachable = true;
             log.info("[DockerTestRunner] Docker daemon reachable — runner armed (runs after compile)");
+            pullImageIfMissing(config.mavenImage());
         } catch (Exception e) {
             this.daemonReachable = false;
             log.warn("[DockerTestRunner] Docker daemon unreachable ({}) — runner will skip", e.getMessage());
+        }
+    }
+
+    void pullImageIfMissing(String image) {
+        try {
+            client.inspectImageCmd(image).exec();
+            return;
+        } catch (NotFoundException expected) {
+            // fall through to pull
+        } catch (Exception e) {
+            log.warn("[DockerTestRunner] could not inspect {} ({}), pulling anyway", image, e.getMessage());
+        }
+        try {
+            log.info("[DockerTestRunner] pulling image {} …", image);
+            client.pullImageCmd(image)
+                  .exec(new PullImageResultCallback())
+                  .awaitCompletion(10, TimeUnit.MINUTES);
+            log.info("[DockerTestRunner] image {} ready", image);
+        } catch (Exception e) {
+            log.warn("[DockerTestRunner] could not pull image {} ({})", image, e.getMessage());
         }
     }
 

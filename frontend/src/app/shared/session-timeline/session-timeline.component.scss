@@ -263,6 +263,17 @@
 
     &.success { background: #dcfce7; color: #166534; }
     &.fail    { background: #fee2e2; color: #991b1b; }
+    // Shown while the boot-health runner is mid-flight (#3).
+    &.running {
+      background: #dbeafe;
+      color: #1e40af;
+      animation: sandbox-log-running 1.4s ease-in-out infinite;
+    }
+  }
+
+  @keyframes sandbox-log-running {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
   }
 
   .sandbox-log-viewer {
@@ -354,6 +365,119 @@
     color: var(--muted, #888);
     font-family: ui-monospace, monospace;
   }
+}
+
+// #1 — per-file RAG provenance panel: two-column layout, files on the
+// left, doc chunks on the right.  Lives inside the same .rag-manifest
+// shell as the indexed-files list so it inherits padding + border.
+.provenance-layout {
+  display: grid;
+  grid-template-columns: minmax(140px, 35%) 1fr;
+  gap: 10px;
+  max-height: 320px;
+}
+
+.provenance-files {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 0 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border, #e5e5e5);
+}
+
+.provenance-file {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 4px 6px;
+  margin: 1px 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--color-text, #111);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+
+  &:hover { background: rgba(0, 0, 0, 0.04); }
+  &.active {
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--color-primary, #1e40af);
+    font-weight: 600;
+  }
+
+  .provenance-file-count {
+    font-size: 10px;
+    color: var(--muted, #888);
+    background: rgba(0, 0, 0, 0.06);
+    padding: 0 5px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+}
+
+.provenance-docs {
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.provenance-doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.provenance-doc {
+  padding: 6px 8px;
+  margin: 0 0 6px;
+  background: rgba(0, 0, 0, 0.025);
+  border-left: 2px solid #3b82f6;
+  border-radius: 0 3px 3px 0;
+}
+
+.provenance-doc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 4px;
+
+  .provenance-doc-path {
+    font-family: ui-monospace, monospace;
+    font-weight: 600;
+    color: #1e40af;
+    word-break: break-all;
+  }
+
+  .provenance-doc-url {
+    font-size: 10px;
+    color: var(--muted, #666);
+    text-decoration: none;
+    flex-shrink: 0;
+    &:hover { color: var(--color-text, #111); text-decoration: underline; }
+  }
+}
+
+.provenance-doc-snippet {
+  margin: 0;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 2px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--color-text, #333);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 110px;
+  overflow-y: auto;
 }
 
 @keyframes timeline-pulse {

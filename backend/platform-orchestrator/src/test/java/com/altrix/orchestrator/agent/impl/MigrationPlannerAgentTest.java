@@ -4,6 +4,7 @@ import com.altrix.common.domain.model.AnalysisReport;
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.domain.service.PlanSimilarityService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ class MigrationPlannerAgentTest {
 
     @Mock AiPort aiPort;
     @Mock PlanSimilarityService planSimilarityService;
+    @Mock FileReaderPort fileReader;
     @InjectMocks MigrationPlannerAgent agent;
 
     @BeforeEach
@@ -107,5 +109,22 @@ class MigrationPlannerAgentTest {
     void execute_nullInput_throwsAgentFailureException() {
         assertThatThrownBy(() -> agent.execute(null))
                 .isInstanceOf(AgentFailureException.class);
+    }
+
+    @Test
+    void execute_filtersTargetFilesNotPresentInSourceZip() {
+        AnalysisReport input = new AnalysisReport(
+                "p1", "uploads/p1.zip", List.of("c1"), List.of("i1"), "ran analysis");
+        // AI proposes both a real file and a hallucinated one
+        when(aiPort.chatFast(anyString(), anyString())).thenReturn("""
+                {"targetStack":"Spring Boot 3 + Kafka","steps":["Step 1"],\
+                "riskLevel":"LOW","estimatedEffort":"1d","summary":"s",\
+                "targetFiles":["src/main/java/Real.java","application.yml"]}""");
+        when(fileReader.listAllPaths("uploads/p1.zip"))
+                .thenReturn(java.util.Set.of("src/main/java/Real.java", "pom.xml"));
+
+        MigrationPlan plan = agent.execute(input);
+
+        assertThat(plan.targetFiles()).containsExactly("src/main/java/Real.java");
     }
 }

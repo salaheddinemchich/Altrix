@@ -70,11 +70,12 @@ public class DockerSandboxReaper {
 
     /**
      * Sweep runs at a fixed delay tied to {@code sandbox.docker.reaper.sweep-interval}.
-     * The Spring {@code @Scheduled} fixed-rate expression in Spel reads from
-     * the property file directly so reconfig requires a restart — sweep
-     * intervals shouldn't change at runtime anyway.
+     * Reads the property directly so reconfig requires a restart — sweep
+     * intervals shouldn't change at runtime anyway. ISO-8601 format
+     * required because @Scheduled.fixedRateString doesn't accept the
+     * suffixed "10m" form that Duration-binding @ConfigurationProperties does.
      */
-    @Scheduled(fixedRateString = "#{@sandboxDockerConfig.reaper().sweepInterval().toMillis()}")
+    @Scheduled(fixedRateString = "${sandbox.docker.reaper.sweep-interval:PT10M}")
     void sweep() {
         if (client == null || !config.reaper().enabled()) return;
         try {

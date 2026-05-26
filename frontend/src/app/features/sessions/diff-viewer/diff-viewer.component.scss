@@ -51,7 +51,14 @@
       color: #555;
 
       &.modified  { background: #fef3c7; color: #92400e; }
-      &.created   { background: #dcfce7; color: #166534; }
+      // CREATED gets a stronger treatment than MODIFIED because the user
+      // needs to *consciously* accept that a new file is being added (#2).
+      &.created   {
+        background: #dcfce7;
+        color: #166534;
+        font-weight: 700;
+        border: 1px solid #16a34a;
+      }
       &.deleted   { background: #fee2e2; color: #991b1b; }
       &.unchanged { background: rgba(0,0,0,0.04); color: var(--muted, #888); }
     }
@@ -195,8 +202,15 @@ button.file {
 
   &.modified  .file-status { background: #fef3c7; color: #92400e; }
   &.modified  .file-name   { color: #92400e; font-weight: 500; }
-  &.created   .file-status { background: #dcfce7; color: #166534; }
-  &.created   .file-name   { color: #166534; font-weight: 500; }
+  // CREATED files get an explicit "NEW" prefix + dashed left edge so they
+  // stand out from MODIFIED.  See #2 — proposed-new files were getting lost
+  // in the diff list and the user couldn't tell what was new vs. modified.
+  &.created {
+    border-left: 3px dashed #16a34a;
+    .file-status { background: #16a34a; color: #fff; font-weight: 700; }
+    .file-status::before { content: '✚ '; }
+    .file-name   { color: #166534; font-weight: 600; }
+  }
   &.deleted   .file-status { background: #fee2e2; color: #991b1b; }
   &.deleted   .file-name   { color: #991b1b; text-decoration: line-through; }
   &.unchanged .file-status,
@@ -216,10 +230,32 @@ button.file {
   color: #555;
 
   &.modified  { background: #fef3c7; color: #92400e; }
-  &.created   { background: #dcfce7; color: #166534; }
+  &.created   { background: #16a34a; color: #fff; }
   &.deleted   { background: #fee2e2; color: #991b1b; }
   &.unchanged,
   &.untouched { background: rgba(0,0,0,0.05); color: var(--muted, #888); }
+}
+
+// #2 — Banner that appears above the Monaco editor when a CREATED file is
+// selected.  Loud on purpose: the user complained the migrator was
+// proposing config files (application.yaml/properties) that weren't in
+// the source project, and the soft green badge wasn't enough to make that
+// obvious.
+.new-file-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  background: linear-gradient(90deg, rgba(22, 163, 74, 0.12), rgba(22, 163, 74, 0.04));
+  border-bottom: 1px solid rgba(22, 163, 74, 0.3);
+  border-left: 4px solid #16a34a;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #14532d;
+
+  app-icon { color: #16a34a; flex-shrink: 0; margin-top: 1px; }
+
+  .new-file-banner-text strong { display: block; margin-bottom: 2px; }
 }
 
 // ── Right panel: Monaco diff editor ─────────────────────────────────────

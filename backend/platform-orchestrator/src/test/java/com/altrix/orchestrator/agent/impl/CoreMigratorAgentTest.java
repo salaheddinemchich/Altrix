@@ -37,6 +37,10 @@ class CoreMigratorAgentTest {
     ContextPruner contextPruner;
     @Mock
     FileMigrationCachePort migrationCache;
+    @Mock
+    com.altrix.orchestrator.domain.port.out.EmbeddingStorePort embeddingStore;
+    @Mock
+    com.altrix.orchestrator.domain.port.out.FileProvenanceRepository fileProvenanceRepository;
     @InjectMocks
     CoreMigratorAgent agent;
 

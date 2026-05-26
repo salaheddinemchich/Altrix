@@ -75,6 +75,7 @@ public class SessionController {
     private final FileReaderPort fileReader;
     private final MigrationReportRepository migrationReportRepository;
     private final RagIndexManifestRepository ragIndexManifestRepository;
+    private final com.altrix.orchestrator.domain.port.out.FileProvenanceRepository fileProvenanceRepository;
     private final SandboxLogRepository sandboxLogRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
@@ -420,6 +421,26 @@ public class SessionController {
         WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
         return ragIndexManifestRepository.findBySessionId(id)
                 .map(RagIndexManifestResponse::from)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * GET /api/v1/sessions/{id}/file-provenance — for each migrated file,
+     * returns the documentation chunks the AI retrieved from the vector
+     * store as context (#1).  Drives the per-file → docs panel on the
+     * Index step of the JobDetail timeline.
+     *
+     * <p>404 when nothing has been persisted yet (session predates the
+     * feature, or the migrator ran without an embedding store / no
+     * chunks were relevant to any file).
+     */
+    @GetMapping("/{sessionId}/file-provenance")
+    public ResponseEntity<com.altrix.orchestrator.adapter.in.rest.dto.FileProvenanceResponse> getFileProvenance(
+            @PathVariable String sessionId) {
+        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
+        return fileProvenanceRepository.findBySessionId(id)
+                .map(com.altrix.orchestrator.adapter.in.rest.dto.FileProvenanceResponse::from)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }

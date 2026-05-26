@@ -1,14 +1,22 @@
 package com.altrix.orchestrator.agent.impl;
 
+import com.altrix.common.domain.enums.DocumentType;
 import com.altrix.common.domain.enums.FileChangeType;
 import com.altrix.common.domain.model.ApprovedPlan;
+import com.altrix.common.domain.model.DocumentChunk;
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.model.PrunedContext;
+import com.altrix.orchestrator.domain.model.rag.FileProvenance;
+import com.altrix.orchestrator.domain.model.rag.FileProvenance.DocReference;
+import com.altrix.orchestrator.domain.model.sandbox.SandboxContext;
+import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.domain.port.out.EmbeddingStorePort;
 import com.altrix.orchestrator.domain.port.out.FileMigrationCachePort;
+import com.altrix.orchestrator.domain.port.out.FileProvenanceRepository;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.infrastructure.ai.ContextPruner;
 import com.altrix.orchestrator.infrastructure.ai.PubSubDetector;
@@ -19,10 +27,13 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Agent 3 — Core Migrator (typed pipeline variant).
@@ -160,6 +171,20 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
     private final FileReaderPort fileReader;
     private final ContextPruner contextPruner;
     private final FileMigrationCachePort migrationCache;
+    /** #1 — RAG retrieval per file.  Optional: when the vector store is
+     *  unavailable, every call returns an empty list and we fall back to
+     *  the static system prompt only. */
+    private final EmbeddingStorePort embeddingStore;
+    /** #1 — persists the per-file provenance once a migration loop completes. */
+    private final FileProvenanceRepository fileProvenanceRepository;
+
+    /** How many doc chunks to retrieve per file.  Small on purpose so the
+     *  prompt doesn't balloon; the AI gets enough to anchor on without
+     *  blowing the context window. */
+    private static final int RAG_TOP_K = 3;
+    /** Max chars of each chunk we include in the prompt; also the length
+     *  of the snippet we persist for the UI. */
+    private static final int RAG_SNIPPET_CHARS = 400;
 
     @Override
     public String getName() {
@@ -193,7 +218,12 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         try {
             Map<String, String> allFiles = fileReader.readSourceFiles(storageKey);
             PrunedContext pruned = contextPruner.prune(allFiles, input.plan());
-            List<MigratedFile> migrated = migrateFiles(pruned.files(), effectiveSystemPrompt);
+            // perFileProvenance accumulates which doc chunks the embedding
+            // store handed back for each file we actually migrated.  Insertion
+            // order matters (LinkedHashMap) so the UI renders files in the
+            // order they were touched, which matches the timeline.
+            Map<String, List<DocReference>> perFileProvenance = new LinkedHashMap<>();
+            List<MigratedFile> migrated = migrateFiles(pruned.files(), effectiveSystemPrompt, perFileProvenance);
 
             // Include unchanged versions of files excluded by the pruner
             List<MigratedFile> result = new ArrayList<>(migrated);
@@ -202,6 +232,8 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                     result.add(unchanged(entry.getKey(), entry.getValue(), "Excluded by context pruner"));
                 }
             }
+
+            persistProvenance(perFileProvenance);
 
             long modifiedCount = result.stream()
                     .filter(f -> f.changeType() == FileChangeType.MODIFIED).count();
@@ -214,7 +246,8 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         }
     }
 
-    private List<MigratedFile> migrateFiles(Map<String, String> sourceFiles, String systemPrompt) {
+    private List<MigratedFile> migrateFiles(Map<String, String> sourceFiles, String systemPrompt,
+                                            Map<String, List<DocReference>> perFileProvenance) {
         List<MigratedFile> result = new ArrayList<>();
         for (Map.Entry<String, String> entry : sourceFiles.entrySet()) {
             String path = entry.getKey();
@@ -229,10 +262,23 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                 continue;
             }
 
+            // #1 — pull the most-relevant doc chunks for this file BEFORE the
+            // cache check so the prompt is RAG-augmented on every call.
+            // Including chunk-content hashes in the cache key means a doc
+            // update invalidates the cache automatically.
+            List<DocumentChunk> ragChunks = retrieveDocs(content);
+            String ragSection = buildRagSection(ragChunks);
+            // Record provenance per file regardless of cache outcome — the
+            // user wants to see which docs informed THIS file's migration,
+            // even when the rewrite came from cache.
+            if (!ragChunks.isEmpty()) {
+                perFileProvenance.put(path, toDocReferences(ragChunks));
+            }
+
             // #28 — content-addressed cache.  Key includes the system prompt so
             // a prompt tweak forces a fresh AI call.  Cuts iterative-dev cost to
             // zero when nothing in the source changed.
-            String cacheKey = computeCacheKey(systemPrompt, path, content);
+            String cacheKey = computeCacheKey(systemPrompt + ragSection, path, content);
             Optional<String> cached = migrationCache.get(cacheKey);
             if (cached.isPresent()) {
                 String migrated = cached.get();
@@ -246,7 +292,8 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             }
 
             try {
-                String raw = aiPort.chat(systemPrompt, "File: " + path + "\n\n" + content);
+                String userMessage = "File: " + path + "\n\n" + content + ragSection;
+                String raw = aiPort.chat(systemPrompt, userMessage);
                 String migrated = stripMarkdownFences(raw);
 
                 if (looksTruncated(migrated, content)) {
@@ -273,6 +320,83 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             }
         }
         return result;
+    }
+
+    /**
+     * Retrieves top-K documentation chunks most relevant to the file's
+     * content.  Returns an empty list when the embedding store is
+     * unavailable / disabled / errors — the migration still runs, just
+     * without RAG anchoring.
+     */
+    private List<DocumentChunk> retrieveDocs(String fileContent) {
+        if (embeddingStore == null) return List.of();
+        try {
+            return embeddingStore.findRelevant(
+                    fileContent,
+                    null, // null projectId = search across the shared documentation corpus
+                    List.of(DocumentType.DOCUMENTATION),
+                    RAG_TOP_K);
+        } catch (Exception e) {
+            log.debug("[{}] RAG retrieval skipped ({})", getName(), e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Formats retrieved chunks as a "Reference documentation" appendix to
+     * the user message.  Kept clearly delimited so the AI doesn't confuse
+     * reference material with the file to rewrite.
+     */
+    private String buildRagSection(List<DocumentChunk> chunks) {
+        if (chunks.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("\n\n--- Reference documentation (use as guidance, do not copy verbatim) ---\n");
+        for (DocumentChunk c : chunks) {
+            String text = c.text() != null ? c.text() : "";
+            if (text.length() > RAG_SNIPPET_CHARS) text = text.substring(0, RAG_SNIPPET_CHARS) + "...";
+            sb.append("\n[")
+              .append(c.filePath() != null ? c.filePath() : "doc")
+              .append("] (")
+              .append(c.sourceUrl() != null ? c.sourceUrl() : "")
+              .append(")\n")
+              .append(text)
+              .append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** Map domain chunks to lightweight UI-facing references. */
+    private List<DocReference> toDocReferences(List<DocumentChunk> chunks) {
+        List<DocReference> refs = new ArrayList<>(chunks.size());
+        for (DocumentChunk c : chunks) {
+            String text = c.text() != null ? c.text() : "";
+            String snippet = text.length() > RAG_SNIPPET_CHARS
+                    ? text.substring(0, RAG_SNIPPET_CHARS) + "..."
+                    : text;
+            refs.add(new DocReference(
+                    c.filePath() != null ? c.filePath() : "doc",
+                    c.sourceUrl() != null ? c.sourceUrl() : "",
+                    snippet));
+        }
+        return refs;
+    }
+
+    /**
+     * Best-effort persistence of the per-file provenance.  Skips silently
+     * when the session context isn't set (unit tests, or the migrator
+     * is being invoked outside the workflow) or persistence fails — the
+     * migration result must not depend on observability succeeding.
+     */
+    private void persistProvenance(Map<String, List<DocReference>> perFile) {
+        if (perFile.isEmpty() || fileProvenanceRepository == null) return;
+        String sessionId = SandboxContext.currentSessionId();
+        if (sessionId == null || sessionId.isBlank()) return;
+        try {
+            WorkflowSessionId id = new WorkflowSessionId(UUID.fromString(sessionId));
+            fileProvenanceRepository.save(id,
+                    new FileProvenance(sessionId, perFile, Instant.now()));
+        } catch (Exception e) {
+            log.warn("[{}] could not persist file provenance: {}", getName(), e.getMessage());
+        }
     }
 
     /**

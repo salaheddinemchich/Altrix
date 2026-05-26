@@ -52,8 +52,8 @@ public record SandboxDockerConfig(
      */
     public record Reaper(
             @DefaultValue("true") boolean enabled,
-            @DefaultValue("10m") Duration sweepInterval,
-            @DefaultValue("30m") Duration maxAge
+            @DefaultValue("PT10M") Duration sweepInterval,
+            @DefaultValue("PT30M") Duration maxAge
     ) {
         public Reaper {
             if (sweepInterval == null) sweepInterval = Duration.ofMinutes(10);

@@ -1,0 +1,64 @@
+1	Feature Request: Add recipes for migrating Google Cloud Pub/Sub to Apache Kafka
+9	[Phase 2] WebSocket Infrastructure for Real-Time Agent Progress Notifications
+12	[Phase 3] Replace ZIP Upload with JGit-Based Git Repository Ingestion
+14	[Phase 3] migrator-cli — Local Agent for Air-Gapped Private Repository Ingestion
+15	[Phase 3] Webhook Integration for Automatic Re-Migration on New Commits
+16	[Phase 4] Create platform-validator Microservice
+17	[Phase 4] Sandboxed Compilation and Integration Testing via Docker SDK
+18	[Phase 4] Stream Live Validation Logs to Client via WebSocket
+19	[Phase 5] Bootstrap Angular 18 Workspace with Auth Shell
+22	[Phase 5] Per-File Approval and Modification UI Between Agent Stages
+23	[Phase 5] Report Dashboard with Searchable Migration History
+24	[Platform] Create platform-gateway — OAuth, Rate Limiting, and Audit Logging
+25	[Platform] Multi-Tenancy Foundation — org_id Scoping on All Tables and APIs
+28	[Platform] Agent Output Caching by Input Hash for Idempotent Re-Runs
+29	[Platform] Create platform-report Microservice — Report Generation and Artifact Storage
+63	[Sub of #9] Integration test: WebSocket end-to-end session progress stream
+78	[Sub of #12] Integration test: full ingest of a real multi-module Maven project
+84	[Sub of #14] GraalVM native-image build configuration for migrator-cli
+85	[Sub of #14] Picocli command structure: migrate, status, config subcommands
+86	[Sub of #14] REST client for CLI — authenticate and start migration session
+87	[Sub of #14] Docker image and CI release pipeline for migrator-cli binary
+88	[Sub of #14] Shell completion and man page generation via Picocli
+93	[Sub of #15] GitHub App installation flow for repository access
+94	[Sub of #16] ValidationReport structured schema and SandboxValidator agent loop
+95	[Sub of #16] Compile migrated code inside sandbox and capture build output
+96	[Sub of #16] Run test suite inside sandbox and report test results
+97	[Sub of #16] Static analysis in sandbox — Checkstyle and SpotBugs integration
+98	[Sub of #16] Cyclic retry loop: CoreMigrator re-runs on ValidationReport failure
+99	[Sub of #17] Docker Java SDK — container lifecycle management for sandboxes
+100	[Sub of #17] Write migrated source files to sandbox volume before build
+101	[Sub of #17] Network isolation for sandbox containers
+102	[Sub of #17] Testcontainers-based integration test for full sandbox pipeline
+103	[Sub of #17] Sandbox resource cleanup — orphaned container reaper
+104	[Sub of #18] Docker container log streaming via WebSocket — attach and stream
+105	[Sub of #18] Persist sandbox logs to PostgreSQL for post-execution review
+106	[Sub of #18] Angular log viewer component with virtual scroll
+107	[Sub of #18] SSE fallback for log streaming when WebSocket unavailable
+108	[Sub of #18] Log level filter and search in log viewer
+112	[Sub of #19] E2E test setup with Cypress and test fixtures
+124	[Sub of #22] Plan summary card — migration impact visualisation before approval
+125	[Sub of #22] Reviewer identity validation before approval submission
+126	[Sub of #22] Approval history timeline on session detail
+127	[Sub of #22] Email notification to reviewer with deep link to approval UI
+128	[Sub of #22] Mobile-responsive approval UI layout
+129	[Sub of #23] MigrationReport aggregate — structure, persistence, and generation
+130	[Sub of #23] Report dashboard Angular page with charts and metrics
+131	[Sub of #23] Aggregate metrics across all sessions — organisation summary
+132	[Sub of #23] PDF export of migration report via headless Chrome
+133	[Sub of #23] Report sharing — generate shareable public link with TTL
+134	[Sub of #24] Spring Cloud Gateway routing config for all microservices
+135	[Sub of #24] JWT validation at gateway — single auth entry point
+136	[Sub of #24] Rate limiting per user at gateway with Redis
+137	[Sub of #24] CORS configuration centralised at gateway
+138	[Sub of #24] Circuit breaker at gateway for downstream service failures
+139	[Sub of #25] Organisation entity and tenant context propagation
+140	[Sub of #25] Organisation admin API — create, update, add/remove members
+141	[Sub of #25] Per-org AI provider configuration and token quota
+142	[Sub of #25] Row-level security — Hibernate filter activated per request
+143	[Sub of #25] Org slug and custom subdomain routing at gateway
+159	[Sub of #29] platform-report Spring Boot microservice bootstrap
+160	[Sub of #29] ReportGeneratorAgent — LangChain4j service for narrative summary
+161	[Sub of #29] Scheduled report digest email — weekly summary for org admins
+162	[Sub of #29] Report versioning — track report history per session
+163	[Sub of #29] Report search API — full-text search across recommendations

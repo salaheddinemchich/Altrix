@@ -18,7 +18,7 @@ import {
 } from '../../core/models/pipeline.model';
 import { PipelineService } from '../../core/services/pipeline.service';
 import { SessionService } from '../../core/services/session.service';
-import { RagIndexManifest, SandboxLog } from '../../core/models/session.model';
+import { FileProvenance, RagIndexManifest, SandboxLog } from '../../core/models/session.model';
 import { IconComponent } from '../icon/icon.component';
 import { catchError, of } from 'rxjs';
 
@@ -69,6 +69,30 @@ export class SessionTimelineComponent implements OnDestroy {
   /** True when the manifest endpoint returned 404 / empty.  Differentiates
    *  "still loading" from "nothing to show". */
   readonly ragManifestMissing = signal<boolean>(false);
+
+  // ── Per-file RAG provenance lazy-load state (#1) ─────────────────────────
+  /** Whether the per-file provenance panel is expanded on the Index step. */
+  readonly fileProvenanceExpanded = signal<boolean>(false);
+  readonly fileProvenance = signal<FileProvenance | null>(null);
+  readonly fileProvenanceLoading = signal<boolean>(false);
+  readonly fileProvenanceMissing = signal<boolean>(false);
+  /** Which file's docs are currently shown in the right pane.  null = none. */
+  readonly selectedProvenanceFile = signal<string | null>(null);
+
+  /** Sorted list of files that have provenance entries — drives the left list. */
+  readonly provenanceFiles = computed<string[]>(() => {
+    const p = this.fileProvenance();
+    if (!p) return [];
+    return Object.keys(p.perFile).sort();
+  });
+
+  /** Docs the AI used for the currently-selected file. */
+  readonly selectedProvenanceDocs = computed(() => {
+    const p = this.fileProvenance();
+    const f = this.selectedProvenanceFile();
+    if (!p || !f) return [];
+    return p.perFile[f] ?? [];
+  });
 
   // ── Sandbox logs lazy-load state (#106) ──────────────────────────────────
   readonly sandboxLogsExpanded = signal<boolean>(false);
@@ -140,6 +164,8 @@ export class SessionTimelineComponent implements OnDestroy {
 
   /** Re-emitted every second so elapsed times tick while a step is ACTIVE. */
   private readonly tickHandle: ReturnType<typeof setInterval>;
+  /** Tick counter for throttling the live sandbox-log refresh. */
+  private logRefreshTick = 0;
 
   readonly hasActive = computed(() =>
     this.steps().some(s => s.status === 'ACTIVE')
@@ -201,6 +227,11 @@ export class SessionTimelineComponent implements OnDestroy {
       // Only repaint while a step is running — saves a render per second
       // once everything is DONE/ERROR.
       if (this.hasActive()) this.now.set(Date.now());
+      // Live-tail the sandbox logs while validation is still in progress
+      // so the user sees Maven download + Spring Boot startup output
+      // appearing in real time instead of an empty box for 8 minutes.
+      // Throttled to every 3 ticks (~3s) to keep network chatter low.
+      this.maybeRefreshSandboxLogs();
     }, 1000);
 
     // Angular 18 forbids writing to signals from an effect by default
@@ -273,6 +304,76 @@ export class SessionTimelineComponent implements OnDestroy {
   /** Switch which runner's log is shown in the viewer. */
   selectRunner(runnerId: string): void {
     this.selectedRunnerId.set(runnerId);
+  }
+
+  /**
+   * Called every tick.  Refetches the sandbox-logs endpoint when ALL of:
+   *  - the panel is currently expanded;
+   *  - at least one step is still ACTIVE (typically Validate);
+   *  - the throttle window (3s) has elapsed.
+   * Without these gates we'd hammer the API once a second for every open
+   * timeline in the app.  Once validation finishes, refresh stops on its
+   * own because hasActive() becomes false.
+   */
+  private maybeRefreshSandboxLogs(): void {
+    if (!this.sandboxLogsExpanded()) return;
+    if (!this.hasActive()) return;
+    this.logRefreshTick = (this.logRefreshTick + 1) % 3;
+    if (this.logRefreshTick !== 0) return;
+    const id = this.sessionId();
+    if (!id) return;
+
+    this.sessionApi.getSandboxLogs(id)
+      .pipe(catchError(() => of<SandboxLog[]>([])))
+      .subscribe(logs => {
+        if (!logs || logs.length === 0) return;
+        // Only replace the in-memory list when the content actually changed
+        // — saves an OnPush re-render on every tick when nothing's new.
+        const current = this.sandboxLogs();
+        const same = current.length === logs.length
+                  && current.every((c, i) => c.runnerId === logs[i].runnerId
+                                          && c.content.length === logs[i].content.length);
+        if (same) return;
+        this.sandboxLogs.set(logs);
+        // Preserve the user's tab selection if it's still present.
+        if (this.selectedRunnerId() == null
+            || !logs.some(l => l.runnerId === this.selectedRunnerId())) {
+          this.selectedRunnerId.set(logs[0].runnerId);
+        }
+      });
+  }
+
+  /**
+   * Toggles the "based on which docs" panel (#1) on the Index step.
+   * Lazy-fetches once, then just flips visibility on subsequent toggles.
+   * Auto-selects the first file in the trace so the right pane has
+   * something to render without an extra click.
+   */
+  toggleFileProvenance(): void {
+    const wasOpen = this.fileProvenanceExpanded();
+    this.fileProvenanceExpanded.set(!wasOpen);
+    if (wasOpen) return;
+    if (this.fileProvenance() !== null || this.fileProvenanceMissing()) return;
+    const id = this.sessionId();
+    if (!id) return;
+
+    this.fileProvenanceLoading.set(true);
+    this.sessionApi.getFileProvenance(id)
+      .pipe(catchError(() => of<FileProvenance | null>(null)))
+      .subscribe(p => {
+        this.fileProvenanceLoading.set(false);
+        if (p && p.perFile && Object.keys(p.perFile).length > 0) {
+          this.fileProvenance.set(p);
+          this.selectedProvenanceFile.set(Object.keys(p.perFile).sort()[0]);
+        } else {
+          this.fileProvenanceMissing.set(true);
+        }
+      });
+  }
+
+  /** Picks which file's docs the right pane should show. */
+  selectProvenanceFile(path: string): void {
+    this.selectedProvenanceFile.set(path);
   }
 
   /**

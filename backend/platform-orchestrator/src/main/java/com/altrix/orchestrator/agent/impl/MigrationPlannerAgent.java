@@ -5,6 +5,7 @@ import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.domain.service.PlanSimilarityService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Agent 2 — Migration Planner.
@@ -86,6 +88,7 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
 
     private final AiPort aiPort;
     private final PlanSimilarityService planSimilarityService;
+    private final FileReaderPort fileReader;
 
     @Override
     public String getName() {
@@ -113,12 +116,61 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
         try {
             String response = aiPort.chatFast(SYSTEM_PROMPT, buildUserContent(input));
             MigrationPlan plan = parsePlan(input.projectId(), input.storageKey(), response);
+            plan = filterHallucinatedFiles(plan);
             planSimilarityService.store(input, plan);
             return plan;
         } catch (Exception e) {
             log.warn("[{}] AI planning failed ({}), using fallback plan", getName(), e.getMessage());
             return fallbackPlan(input);
         }
+    }
+
+    /**
+     * Drop targetFiles paths that don't exist in the source ZIP.
+     *
+     * <p>The planner prompt instructs the AI to "include the surrounding build
+     * + config files that wire Pub/Sub" — application.yml, application.properties,
+     * pom.xml, etc.  Models obediently list those paths even when the source
+     * project doesn't contain them, producing a plan with phantom files the
+     * migrator can't process (it only iterates real source files).  Reviewers
+     * then see entries in the plan for files that don't exist, which is
+     * confusing and erodes trust.
+     *
+     * <p>Filter at the planner boundary so the rest of the pipeline never sees
+     * hallucinated paths.  We don't surface "proposed new files" yet — when
+     * the migrator gains the ability to genuinely synthesise a new file, that
+     * file will appear in the diff viewer as CREATED with the loud banner
+     * already in place on the frontend.
+     */
+    private MigrationPlan filterHallucinatedFiles(MigrationPlan plan) {
+        if (plan.targetFiles().isEmpty() || plan.storageKey().isBlank()) {
+            return plan;
+        }
+        Set<String> actualPaths;
+        try {
+            actualPaths = fileReader.listAllPaths(plan.storageKey());
+        } catch (Exception e) {
+            log.warn("[{}] could not list source paths to validate targetFiles ({}): keeping AI list as-is",
+                    getName(), e.getMessage());
+            return plan;
+        }
+        if (actualPaths.isEmpty()) return plan; // nothing to validate against
+
+        List<String> kept = new ArrayList<>();
+        List<String> dropped = new ArrayList<>();
+        for (String path : plan.targetFiles()) {
+            if (actualPaths.contains(path)) kept.add(path); else dropped.add(path);
+        }
+        if (!dropped.isEmpty()) {
+            log.info("[{}] dropped {} hallucinated path(s) from targetFiles: {}",
+                    getName(), dropped.size(), dropped);
+        }
+        if (kept.size() == plan.targetFiles().size()) return plan;
+
+        return new MigrationPlan(
+                plan.projectId(), plan.storageKey(), plan.targetStack(),
+                plan.steps(), plan.riskLevel(), plan.estimatedEffort(),
+                plan.summary(), kept);
     }
 
     private String buildUserContent(AnalysisReport report) {

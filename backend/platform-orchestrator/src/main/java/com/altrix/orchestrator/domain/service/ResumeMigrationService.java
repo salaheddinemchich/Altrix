@@ -201,7 +201,15 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
 
             // ── Migrator ────────────────────────────────────────────────
             progressNotifierPort.notify(jobId, "Core Migrator", "RUNNING", attemptLabel);
-            artifact = migrator.execute(plan);
+            // #1 — session context needs to be visible to the migrator so
+            // it can persist per-file RAG provenance.  Same ThreadLocal as
+            // the sandbox runners use to persist logs (#105).
+            if (sessionIdForContext != null) SandboxContext.setSessionId(sessionIdForContext);
+            try {
+                artifact = migrator.execute(plan);
+            } finally {
+                if (sessionIdForContext != null) SandboxContext.clear();
+            }
             progressNotifierPort.notify(jobId, "Core Migrator", "DONE", attemptLabel);
 
             // ── Validator ───────────────────────────────────────────────
