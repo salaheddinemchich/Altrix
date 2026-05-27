@@ -110,39 +110,64 @@ export class SessionTimelineComponent implements OnDestroy {
   // #108 — log filter/search.  Pure client-side filtering because the log
   // already lives in memory and the volume is bounded by the Docker runner's
   // capture (which caps at the container's stdout).
-  /** Free-text filter — case-insensitive substring match. */
+  //
+  // Search supports real-world operators:
+  //   foo bar      → AND   (line must contain BOTH "foo" and "bar")
+  //   "foo bar"    → exact phrase match
+  //   -foo         → exclude lines containing "foo"
+  // All case-insensitive.  Severity chips (ERROR/WARN/INFO) compose with the
+  // text query, and clickable keyword chips (auto-extracted from the log)
+  // toggle terms into the query.
   readonly logFilterQuery = signal<string>('');
   /** Severity filter — 'all' lets everything through; others keep matching lines only. */
   readonly logFilterLevel = signal<'all' | 'error' | 'warn' | 'info'>('all');
 
-  readonly filteredSandboxLog = computed<string>(() => {
-    const log = this.selectedSandboxLog();
-    if (!log || !log.content) return '';
-    const query = this.logFilterQuery().toLowerCase();
-    const level = this.logFilterLevel();
-    if (!query && level === 'all') return log.content;
+  /** Parsed query — recomputed whenever the raw query changes. */
+  private readonly parsedQuery = computed<ParsedLogQuery>(() => parseLogQuery(this.logFilterQuery()));
 
-    return log.content
-      .split('\n')
-      .filter(line => {
-        if (query && !line.toLowerCase().includes(query)) return false;
-        if (level === 'all') return true;
-        const u = line.toUpperCase();
-        switch (level) {
-          case 'error': return u.includes('[ERROR]') || u.includes('ERROR ') || u.includes(' ERROR');
-          case 'warn':  return u.includes('[WARN')   || u.includes('WARNING') || u.includes(' WARN');
-          case 'info':  return u.includes('[INFO]')  || u.includes(' INFO');
-          default:      return true;
-        }
-      })
+  /** Filtered lines (array form — used by the highlighter + count). */
+  readonly filteredLogLines = computed<string[]>(() => {
+    const log = this.selectedSandboxLog();
+    if (!log || !log.content) return [];
+    const q = this.parsedQuery();
+    const level = this.logFilterLevel();
+    if (q.empty && level === 'all') return log.content.split('\n');
+
+    return log.content.split('\n').filter(line => {
+      if (!matchesLevel(line, level)) return false;
+      return matchesQuery(line.toLowerCase(), q);
+    });
+  });
+
+  /** Plain-text view (kept for the line-count + any non-HTML consumer). */
+  readonly filteredSandboxLog = computed<string>(() => this.filteredLogLines().join('\n'));
+
+  /**
+   * HTML view with matched terms wrapped in &lt;mark&gt;.  Bound via
+   * [innerHTML]; every line is HTML-escaped first so log content can never
+   * inject markup, then only our own &lt;mark&gt; tags are added back.
+   */
+  readonly filteredSandboxLogHtml = computed<string>(() => {
+    const q = this.parsedQuery();
+    const terms = [...q.includes, ...q.phrases]; // don't highlight exclusions
+    return this.filteredLogLines()
+      .map(line => highlightLine(line, terms))
       .join('\n');
   });
 
   /** Convenience for the template — total lines after filter, for the count badge. */
-  readonly filteredLineCount = computed<number>(() => {
-    const filtered = this.filteredSandboxLog();
-    if (!filtered) return 0;
-    return filtered.split('\n').length;
+  readonly filteredLineCount = computed<number>(() => this.filteredLogLines().length);
+
+  /**
+   * Auto-extracted clickable keywords from the selected log.  Picks the most
+   * frequent "interesting" tokens — class names, file names, qualified
+   * packages — that a developer would actually want to filter on.  Capped so
+   * the chip row stays compact.
+   */
+  readonly logKeywords = computed<string[]>(() => {
+    const log = this.selectedSandboxLog();
+    if (!log || !log.content) return [];
+    return extractKeywords(log.content, 12);
   });
 
   setLogFilterLevel(level: 'all' | 'error' | 'warn' | 'info'): void {
@@ -151,6 +176,25 @@ export class SessionTimelineComponent implements OnDestroy {
 
   setLogFilterQuery(query: string): void {
     this.logFilterQuery.set(query);
+  }
+
+  /** Toggles a keyword in/out of the query — click to add, click again to remove. */
+  toggleKeyword(kw: string): void {
+    const current = this.logFilterQuery().trim();
+    const tokens = current.length ? current.split(/\s+/) : [];
+    const idx = tokens.findIndex(t => t.toLowerCase() === kw.toLowerCase());
+    if (idx >= 0) {
+      tokens.splice(idx, 1);
+    } else {
+      tokens.push(kw);
+    }
+    this.logFilterQuery.set(tokens.join(' '));
+  }
+
+  /** True when a keyword chip is currently part of the active query. */
+  isKeywordActive(kw: string): boolean {
+    const tokens = this.logFilterQuery().toLowerCase().split(/\s+/);
+    return tokens.includes(kw.toLowerCase());
   }
 
   /** Clears both filters in one click. */
@@ -166,6 +210,8 @@ export class SessionTimelineComponent implements OnDestroy {
   private readonly tickHandle: ReturnType<typeof setInterval>;
   /** Tick counter for throttling the live sandbox-log refresh. */
   private logRefreshTick = 0;
+  /** Tick counter for throttling the live file-provenance refresh. */
+  private provenanceRefreshTick = 0;
 
   readonly hasActive = computed(() =>
     this.steps().some(s => s.status === 'ACTIVE')
@@ -232,6 +278,10 @@ export class SessionTimelineComponent implements OnDestroy {
       // appearing in real time instead of an empty box for 8 minutes.
       // Throttled to every 3 ticks (~3s) to keep network chatter low.
       this.maybeRefreshSandboxLogs();
+      // Same pattern for the per-file RAG provenance — the migrator now
+      // persists per-file as it goes, so the panel streams in instead
+      // of dropping all at once at the end of Migrate.
+      this.maybeRefreshFileProvenance();
     }, 1000);
 
     // Angular 18 forbids writing to signals from an effect by default
@@ -377,6 +427,43 @@ export class SessionTimelineComponent implements OnDestroy {
   }
 
   /**
+   * Tick-driven auto-refresh for the provenance panel.  Mirrors the
+   * sandbox-log live-tail: only fires when the panel is open AND a step
+   * is still active, throttled to ~3 s.  The backend writes provenance
+   * incrementally per migrated file, so each fetch gradually fills the
+   * left-hand list in real time.
+   */
+  private maybeRefreshFileProvenance(): void {
+    if (!this.fileProvenanceExpanded()) return;
+    if (!this.hasActive()) return;
+    this.provenanceRefreshTick = (this.provenanceRefreshTick + 1) % 3;
+    if (this.provenanceRefreshTick !== 0) return;
+    const id = this.sessionId();
+    if (!id) return;
+
+    this.sessionApi.getFileProvenance(id)
+      .pipe(catchError(() => of<FileProvenance | null>(null)))
+      .subscribe(p => {
+        if (!p || !p.perFile) return;
+        const incomingKeys = Object.keys(p.perFile);
+        if (incomingKeys.length === 0) return;
+        // Skip re-render when the set of files hasn't grown — the
+        // typical "still-running" tick.
+        const current = this.fileProvenance();
+        if (current && Object.keys(current.perFile).length === incomingKeys.length) return;
+        this.fileProvenance.set(p);
+        // Auto-select the first file if the user hasn't picked one yet.
+        if (this.selectedProvenanceFile() == null && incomingKeys.length > 0) {
+          this.selectedProvenanceFile.set(incomingKeys.sort()[0]);
+        }
+        // First time we see provenance: clear the "missing" flag we may
+        // have set when the panel was opened before the migrator had
+        // produced anything.
+        if (this.fileProvenanceMissing()) this.fileProvenanceMissing.set(false);
+      });
+  }
+
+  /**
    * Toggles the "view indexed files" panel on the Index step.  Fetches
    * the manifest the first time it's opened; subsequent toggles only
    * flip the visibility flag — no redundant HTTP calls.
@@ -443,6 +530,129 @@ interface TimelineStep extends PipelineNode {
   startedAt: number | null;
   endedAt:   number | null;
   lastUpdate?: number;
+}
+
+// ── log search (#108 enhancement) ────────────────────────────────────────────
+
+/** Parsed shape of a log search query. All terms are pre-lowercased. */
+interface ParsedLogQuery {
+  /** Plain terms — a line must contain ALL of them (AND). */
+  includes: string[];
+  /** "quoted phrases" — exact substring match, also ANDed. */
+  phrases: string[];
+  /** -terms — a line must contain NONE of them. */
+  excludes: string[];
+  /** True when there's nothing to filter on. */
+  empty: boolean;
+}
+
+/**
+ * Parses a raw search string into include / phrase / exclude terms.
+ *   foo bar     → includes ["foo","bar"]   (AND)
+ *   "foo bar"   → phrases  ["foo bar"]
+ *   -foo        → excludes ["foo"]
+ * Quotes win over the leading '-', so `-"a b"` excludes the phrase "a b".
+ */
+function parseLogQuery(raw: string): ParsedLogQuery {
+  const includes: string[] = [];
+  const phrases: string[] = [];
+  const excludes: string[] = [];
+  // Tokenise: either a "quoted phrase" (optionally negated) or a bare token.
+  const re = /(-?)"([^"]+)"|(\S+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) {
+    if (m[2] !== undefined) {
+      // quoted phrase
+      const phrase = m[2].toLowerCase();
+      if (m[1] === '-') excludes.push(phrase);
+      else phrases.push(phrase);
+    } else {
+      let tok = m[3];
+      if (tok.startsWith('-') && tok.length > 1) {
+        excludes.push(tok.slice(1).toLowerCase());
+      } else if (tok.length > 0) {
+        includes.push(tok.toLowerCase());
+      }
+    }
+  }
+  const empty = includes.length === 0 && phrases.length === 0 && excludes.length === 0;
+  return { includes, phrases, excludes, empty };
+}
+
+/** AND over includes+phrases, NOT over excludes.  `lineLower` is pre-lowercased. */
+function matchesQuery(lineLower: string, q: ParsedLogQuery): boolean {
+  for (const inc of q.includes) if (!lineLower.includes(inc)) return false;
+  for (const ph of q.phrases)  if (!lineLower.includes(ph)) return false;
+  for (const exc of q.excludes) if (lineLower.includes(exc)) return false;
+  return true;
+}
+
+/** Severity-chip predicate, mirrors the Maven/Surefire line shapes. */
+function matchesLevel(line: string, level: 'all' | 'error' | 'warn' | 'info'): boolean {
+  if (level === 'all') return true;
+  const u = line.toUpperCase();
+  switch (level) {
+    case 'error': return u.includes('[ERROR]') || u.includes('ERROR ') || u.includes(' ERROR');
+    case 'warn':  return u.includes('[WARN')   || u.includes('WARNING') || u.includes(' WARN');
+    case 'info':  return u.includes('[INFO]')  || u.includes(' INFO');
+    default:      return true;
+  }
+}
+
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+};
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, c => HTML_ESCAPES[c]);
+}
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * HTML-escapes a log line, then wraps any occurrence of the search terms in
+ * &lt;mark&gt;.  Safe to bind via [innerHTML]: the line is fully escaped
+ * first, so only our own &lt;mark&gt; tags are ever live markup.
+ */
+function highlightLine(line: string, terms: string[]): string {
+  const escaped = escapeHtml(line);
+  const real = terms.map(t => t.trim()).filter(t => t.length > 0);
+  if (real.length === 0) return escaped;
+  // One alternation pass so overlapping terms don't double-wrap.
+  const pattern = real.map(escapeRegExp).join('|');
+  try {
+    return escaped.replace(new RegExp(pattern, 'gi'), m => `<mark>${m}</mark>`);
+  } catch {
+    return escaped; // pathological regex — fail open to plain escaped text
+  }
+}
+
+/**
+ * Pulls the most useful filterable keywords out of a log: file names,
+ * CamelCase class names, and dotted package/qualified names that appear at
+ * least twice.  Ranked by frequency, capped at `limit`.
+ */
+function extractKeywords(content: string, limit: number): string[] {
+  const counts = new Map<string, number>();
+  // Candidate tokens: identifiers/paths of 4+ chars.
+  const re = /[A-Za-z_][A-Za-z0-9_.]{3,}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const tok = m[0];
+    const interesting =
+      tok.endsWith('.java') ||                 // file names
+      /^[a-z]+(\.[a-z0-9]+){2,}/.test(tok) ||  // qualified package (a.b.c…)
+      /[a-z][A-Z]/.test(tok);                  // CamelCase identifier
+    if (!interesting) continue;
+    // Skip noise: pure log boilerplate.
+    if (/^(org\.apache\.maven|INFO|ERROR|WARNING)/i.test(tok)) continue;
+    counts.set(tok, (counts.get(tok) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .filter(([, n]) => n >= 2)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([tok]) => tok);
 }
 
 function initialSteps(): TimelineStep[] {

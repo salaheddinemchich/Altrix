@@ -167,6 +167,70 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             markdown fences, no leading file path.
             """;
 
+    /**
+     * Hard rules appended on every migration call so the AI doesn't break
+     * cross-file references by renaming things.  The migrator processes
+     * files in isolation — if {@code PubsubConfig} becomes {@code KafkaConfig}
+     * in one file, every other file still imports the old name and the
+     * compile blows up.  Keep names stable; only the implementations swap.
+     */
+    private static final String IDENTITY_PRESERVATION_RULES = """
+
+            CROSS-FILE IDENTITY RULES — violating any of these guarantees a broken build:
+            * Do NOT rename classes.  PubsubConfig stays named PubsubConfig.
+              PubsubService stays named PubsubService.  PubsubServiceImpl
+              stays named PubsubServiceImpl.  Only their internal
+              implementations switch from Pub/Sub to Kafka.
+            * Do NOT rename packages.  com.example.altrix.pubsub stays
+              com.example.altrix.pubsub.  Do NOT introduce a new
+              com.example.altrix.kafka package.
+            * Do NOT rename public constants or fields.
+              PubsubConfig.ORDERS_CREATED stays PubsubConfig.ORDERS_CREATED.
+              Topic names (the VALUES of those constants) can change if
+              they need a Kafka-valid form, but the Java identifier must not.
+            * Do NOT rename enum types.  PaymentStatus stays PaymentStatus
+              with the same value names.
+            * Do NOT delete files.  If a file has no Pub/Sub code, return
+              it unchanged byte-for-byte.
+            """;
+
+    /** Inserted at the FRONT of the system prompt when the project is plain
+     *  Jakarta EE (no Spring on the classpath).  Forbids Spring annotations
+     *  / Spring Kafka and mandates raw kafka-clients + Jakarta lifecycle. */
+    private static final String JAKARTA_EE_PREFIX = """
+            DETECTED STACK: Jakarta EE 10 (NO Spring on the classpath).
+
+            This project uses jakarta.platform:jakarta.jakartaee-api with
+            EJB / CDI / JAX-RS.  The migration MUST stay on Jakarta APIs.
+
+            FORBIDDEN — these will not compile (no Spring deps exist):
+              * org.springframework.* (any package — kafka, stereotype, messaging, beans, …)
+              * @Component, @Service, @Autowired, @Configuration, @Bean
+              * @KafkaListener, KafkaTemplate, @SendTo, @Payload, @Header,
+                KafkaHeaders, Acknowledgment (org.springframework.kafka.support)
+
+            REQUIRED for Pub/Sub → Kafka here:
+              * org.apache.kafka:kafka-clients — KafkaProducer<String,String>,
+                KafkaConsumer<String,String>, ProducerRecord<>, ConsumerRecord<>
+              * @Singleton + @Startup + @Schedule (jakarta.ejb.*) for the
+                poller — keep the existing EJB scheduling pattern,
+                replacing the pubsubService.pull(...) body with
+                consumer.poll(Duration.ofSeconds(N)).
+              * @ApplicationScoped (jakarta.enterprise.context.*) + a
+                @Produces method (jakarta.enterprise.inject.Produces) for
+                wiring the KafkaProducer / KafkaConsumer singletons —
+                exactly how PubsubClientProducer wires the Pubsub client today.
+              * @Inject from jakarta.inject.* — NEVER @Autowired.
+
+            """;
+
+    /** Default prefix when the project IS Spring Boot.  Keep terse — the
+     *  rest of the prompt already assumes Spring + spring-kafka. */
+    private static final String SPRING_BOOT_PREFIX = """
+            DETECTED STACK: Spring Boot.
+
+            """;
+
     private final AiPort aiPort;
     private final FileReaderPort fileReader;
     private final ContextPruner contextPruner;
@@ -211,19 +275,33 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             return new MigrationArtifact(projectId, List.of(), "No files to migrate (storageKey missing)");
         }
 
-        String effectiveSystemPrompt = input.retryContext() != null && !input.retryContext().isBlank()
-                ? input.retryContext() + "\n\n" + SYSTEM_PROMPT
-                : SYSTEM_PROMPT;
-
         try {
             Map<String, String> allFiles = fileReader.readSourceFiles(storageKey);
             PrunedContext pruned = contextPruner.prune(allFiles, input.plan());
+
+            // Detect Jakarta EE vs Spring Boot from the pom and prepend the
+            // appropriate stack-specific prefix to the system prompt.
+            // Without this, the AI defaulted to Spring annotations
+            // (@KafkaListener, KafkaTemplate, @Component, etc.) on plain
+            // Jakarta EE projects with no Spring on the classpath — the
+            // result was 30+ "package org.springframework.* does not exist"
+            // compile errors in the sandbox.  Detection is cheap: just a
+            // substring scan of pom.xml.
+            boolean isJakarta = isJakartaProject(allFiles);
+            String stackPrefix = isJakarta ? JAKARTA_EE_PREFIX : SPRING_BOOT_PREFIX;
+            String baseSystemPrompt = stackPrefix + SYSTEM_PROMPT + IDENTITY_PRESERVATION_RULES;
+            String effectiveSystemPrompt = input.retryContext() != null && !input.retryContext().isBlank()
+                    ? input.retryContext() + "\n\n" + baseSystemPrompt
+                    : baseSystemPrompt;
             // perFileProvenance accumulates which doc chunks the embedding
             // store handed back for each file we actually migrated.  Insertion
             // order matters (LinkedHashMap) so the UI renders files in the
             // order they were touched, which matches the timeline.
-            Map<String, List<DocReference>> perFileProvenance = new LinkedHashMap<>();
-            List<MigratedFile> migrated = migrateFiles(pruned.files(), effectiveSystemPrompt, perFileProvenance);
+            // Wrapped synchronized because the per-file workers write into
+            // it concurrently when MAX_CONCURRENT_FILE_MIGRATIONS > 1.
+            Map<String, List<DocReference>> perFileProvenance =
+                    java.util.Collections.synchronizedMap(new LinkedHashMap<>());
+            List<MigratedFile> migrated = migrateFiles(pruned.files(), effectiveSystemPrompt, perFileProvenance, isJakarta);
 
             // Include unchanged versions of files excluded by the pruner
             List<MigratedFile> result = new ArrayList<>(migrated);
@@ -246,80 +324,181 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         }
     }
 
+    /**
+     * Max concurrent AI calls during a single migration run.  Bounded
+     * conservatively to stay under provider rate limits; raising it past
+     * 4 tends to trip 429s on Groq's free tier.  The validator-retry
+     * loop already handles transient failures, so this cap is the
+     * primary throttle.
+     */
+    private static final int MAX_CONCURRENT_FILE_MIGRATIONS = 4;
+
+    /**
+     * Per-file migration loop.  AI calls happen in parallel up to
+     * {@link #MAX_CONCURRENT_FILE_MIGRATIONS}; the cheap classifier
+     * checks ({@code PubSubDetector}) stay on the calling thread.
+     *
+     * <p>Was sequential before — a 10-file Pub/Sub project would queue
+     * 10 × ~30 s AI calls back-to-back (~5 minutes just for migration).
+     * Parallel-4 cuts that to roughly N/4 of the slowest call, which is
+     * the dominant speedup for small-to-medium projects.
+     */
     private List<MigratedFile> migrateFiles(Map<String, String> sourceFiles, String systemPrompt,
-                                            Map<String, List<DocReference>> perFileProvenance) {
-        List<MigratedFile> result = new ArrayList<>();
+                                            Map<String, List<DocReference>> perFileProvenance,
+                                            boolean isJakarta) {
+        // Pre-classify: files that don't need an AI call drop straight into
+        // the result list as UNCHANGED.  Only the genuine migration targets
+        // are submitted to the executor — saves us from spinning up threads
+        // just to short-circuit.
+        List<MigratedFile> straightThrough = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<Map.Entry<String, String>> toMigrate = new ArrayList<>();
         for (Map.Entry<String, String> entry : sourceFiles.entrySet()) {
             String path = entry.getKey();
             String content = entry.getValue();
-
             if (!PubSubDetector.isMigratableFile(path)) {
-                result.add(unchanged(path, content, "Not a migratable file type"));
-                continue;
-            }
-            if (!PubSubDetector.hasPubSubCode(content)) {
-                result.add(unchanged(path, content, "No Pub/Sub code detected"));
-                continue;
-            }
-
-            // #1 — pull the most-relevant doc chunks for this file BEFORE the
-            // cache check so the prompt is RAG-augmented on every call.
-            // Including chunk-content hashes in the cache key means a doc
-            // update invalidates the cache automatically.
-            List<DocumentChunk> ragChunks = retrieveDocs(content);
-            String ragSection = buildRagSection(ragChunks);
-            // Record provenance per file regardless of cache outcome — the
-            // user wants to see which docs informed THIS file's migration,
-            // even when the rewrite came from cache.
-            if (!ragChunks.isEmpty()) {
-                perFileProvenance.put(path, toDocReferences(ragChunks));
-            }
-
-            // #28 — content-addressed cache.  Key includes the system prompt so
-            // a prompt tweak forces a fresh AI call.  Cuts iterative-dev cost to
-            // zero when nothing in the source changed.
-            String cacheKey = computeCacheKey(systemPrompt + ragSection, path, content);
-            Optional<String> cached = migrationCache.get(cacheKey);
-            if (cached.isPresent()) {
-                String migrated = cached.get();
-                FileChangeType changeType = migrated.equals(content)
-                        ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
-                result.add(MigratedFile.builder()
-                        .originalPath(path).newPath(path).content(migrated)
-                        .changeType(changeType).diffSummary("Migrated Pub/Sub → Kafka (cache hit)")
-                        .build());
-                continue;
-            }
-
-            try {
-                String userMessage = "File: " + path + "\n\n" + content + ragSection;
-                String raw = aiPort.chat(systemPrompt, userMessage);
-                String migrated = stripMarkdownFences(raw);
-
-                if (looksTruncated(migrated, content)) {
-                    log.warn("[{}] AI output for '{}' looks truncated ({} chars vs {} original) — keeping original",
-                            getName(), path, migrated.length(), content.length());
-                    result.add(unchanged(path, content, "Migration skipped — AI output truncated"));
-                    continue;
-                }
-
-                FileChangeType changeType = migrated.equals(content)
-                        ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
-                // Only cache successful migrations — never cache an unchanged
-                // pass-through (saves no AI call) nor a truncation fallback.
-                if (changeType == FileChangeType.MODIFIED) {
-                    migrationCache.put(cacheKey, migrated);
-                }
-                result.add(MigratedFile.builder()
-                        .originalPath(path).newPath(path).content(migrated)
-                        .changeType(changeType).diffSummary("Migrated Pub/Sub → Kafka")
-                        .build());
-            } catch (Exception e) {
-                log.warn("[{}] AI failed for '{}', keeping original: {}", getName(), path, e.getMessage());
-                result.add(unchanged(path, content, "Migration skipped — AI unavailable"));
+                straightThrough.add(unchanged(path, content, "Not a migratable file type"));
+            } else if (!PubSubDetector.hasPubSubCode(content)) {
+                straightThrough.add(unchanged(path, content, "No Pub/Sub code detected"));
+            } else {
+                toMigrate.add(entry);
             }
         }
-        return result;
+
+        if (toMigrate.isEmpty()) return new ArrayList<>(straightThrough);
+
+        int poolSize = Math.min(MAX_CONCURRENT_FILE_MIGRATIONS, toMigrate.size());
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(
+                poolSize,
+                r -> {
+                    Thread t = new Thread(r, "migrator-file-worker");
+                    t.setDaemon(true);
+                    return t;
+                });
+
+        List<java.util.concurrent.Future<MigratedFile>> futures = new ArrayList<>(toMigrate.size());
+        try {
+            for (Map.Entry<String, String> entry : toMigrate) {
+                futures.add(pool.submit(() ->
+                        migrateOneFile(entry.getKey(), entry.getValue(), systemPrompt, perFileProvenance, isJakarta)));
+            }
+
+            List<MigratedFile> result = new ArrayList<>(straightThrough);
+            for (java.util.concurrent.Future<MigratedFile> f : futures) {
+                try {
+                    result.add(f.get());
+                } catch (Exception e) {
+                    log.warn("[{}] worker failed unexpectedly: {}", getName(), e.getMessage());
+                    // Worker swallows its own failures and returns an UNCHANGED
+                    // MigratedFile — getting here means a JVM-level fault
+                    // (OOM, interrupt).  Skip; the file is missing from the
+                    // result, which sandbox compile will surface clearly.
+                }
+            }
+            return result;
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    /**
+     * Migrate a single file.  Runs on a worker thread — must be reentrant
+     * and not depend on caller-thread state.  Provenance map is shared but
+     * only written here; the map type is supplied as a synchronised
+     * LinkedHashMap by the caller so put() + iteration are thread-safe.
+     */
+    private MigratedFile migrateOneFile(String path, String content, String systemPrompt,
+                                        Map<String, List<DocReference>> perFileProvenance,
+                                        boolean isJakarta) {
+        // #1 — pull the most-relevant doc chunks for this file BEFORE the
+        // cache check so the prompt is RAG-augmented on every call.
+        // Including chunk-content hashes in the cache key means a doc
+        // update invalidates the cache automatically.
+        List<DocumentChunk> ragChunks = retrieveDocs(content, isJakarta);
+        String ragSection = buildRagSection(ragChunks);
+        // Record provenance per file regardless of cache outcome — the
+        // user wants to see which docs informed THIS file's migration,
+        // even when the rewrite came from cache.  Persisting after EACH
+        // file (not at the end of the loop) is what makes the panel
+        // "stream" in the UI — the auto-refresh on the frontend sees
+        // entries appear as they're produced.
+        if (!ragChunks.isEmpty()) {
+            synchronized (perFileProvenance) {
+                perFileProvenance.put(path, toDocReferences(ragChunks));
+            }
+            persistProvenance(perFileProvenance);
+        }
+
+        // #28 — content-addressed cache.  Key includes the system prompt so
+        // a prompt tweak forces a fresh AI call.  Cuts iterative-dev cost to
+        // zero when nothing in the source changed.
+        String cacheKey = computeCacheKey(systemPrompt + ragSection, path, content);
+        Optional<String> cached = migrationCache.get(cacheKey);
+        if (cached.isPresent()) {
+            String migrated = cached.get();
+            FileChangeType changeType = migrated.equals(content)
+                    ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
+            return MigratedFile.builder()
+                    .originalPath(path).newPath(path).content(migrated)
+                    .changeType(changeType).diffSummary("Migrated Pub/Sub → Kafka (cache hit)")
+                    .build();
+        }
+
+        try {
+            String userMessage = "File: " + path + "\n\n" + content + ragSection;
+            String raw = aiPort.chat(systemPrompt, userMessage);
+            String migrated = stripLeadingProse(stripMarkdownFences(raw), path);
+
+            if (looksTruncated(migrated, content)) {
+                log.warn("[{}] AI output for '{}' looks truncated ({} chars vs {} original) — keeping original",
+                        getName(), path, migrated.length(), content.length());
+                return unchanged(path, content, "Migration skipped — AI output truncated");
+            }
+
+            // Structural safety net: a malformed build/config file fails the
+            // ENTIRE Maven/Gradle build before any source compiles ("Non-parseable
+            // POM ... seen H...").  That's strictly worse than not migrating the
+            // file at all.  If the model emitted something that can't be a valid
+            // pom/build/config, keep the original.
+            if (looksStructurallyBroken(migrated, path)) {
+                log.warn("[{}] migrated '{}' failed a structural sanity check — keeping original", getName(), path);
+                return unchanged(path, content, "Migration skipped — output failed structural check");
+            }
+
+            FileChangeType changeType = migrated.equals(content)
+                    ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
+            // Only cache successful migrations — never cache an unchanged
+            // pass-through (saves no AI call) nor a truncation fallback.
+            if (changeType == FileChangeType.MODIFIED) {
+                migrationCache.put(cacheKey, migrated);
+            }
+            return MigratedFile.builder()
+                    .originalPath(path).newPath(path).content(migrated)
+                    .changeType(changeType).diffSummary("Migrated Pub/Sub → Kafka")
+                    .build();
+        } catch (Exception e) {
+            log.warn("[{}] AI failed for '{}', keeping original: {}", getName(), path, e.getMessage());
+            return unchanged(path, content, "Migration skipped — AI unavailable");
+        }
+    }
+
+    /**
+     * Scans pom.xml / build.gradle* to decide whether this is a plain
+     * Jakarta EE project (no Spring on the classpath).  Substring scan is
+     * intentional — we only need a strong signal about which Kafka API to
+     * target, not a full POM parse.
+     */
+    private boolean isJakartaProject(Map<String, String> allFiles) {
+        String pom = allFiles.getOrDefault("pom.xml", "");
+        String gradle = allFiles.getOrDefault("build.gradle", "");
+        String gradleKts = allFiles.getOrDefault("build.gradle.kts", "");
+        String all = pom + "\n" + gradle + "\n" + gradleKts;
+        boolean isSpringBoot = all.contains("spring-boot-starter");
+        boolean isJakartaEe = all.contains("jakarta.jakartaee-api")
+                           || all.contains("javax.javaee-api")
+                           || all.contains("microprofile");
+        boolean jakarta = isJakartaEe && !isSpringBoot;
+        log.info("[{}] detected stack: {}", getName(), jakarta ? "Jakarta EE (kafka-clients)" : "Spring Boot");
+        return jakarta;
     }
 
     /**
@@ -327,19 +506,41 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      * content.  Returns an empty list when the embedding store is
      * unavailable / disabled / errors — the migration still runs, just
      * without RAG anchoring.
+     *
+     * <p>On a Jakarta project we DROP Spring-specific doc chunks: feeding the
+     * model Spring-Kafka reference material (e.g. docs.spring.io/spring-kafka)
+     * was actively pushing it to emit {@code org.springframework.kafka.*}
+     * code that can't compile against a plain Jakarta classpath.  We over-
+     * fetch then filter so a Jakarta file still gets up to RAG_TOP_K
+     * non-Spring chunks.
      */
-    private List<DocumentChunk> retrieveDocs(String fileContent) {
+    private List<DocumentChunk> retrieveDocs(String fileContent, boolean isJakarta) {
         if (embeddingStore == null) return List.of();
         try {
-            return embeddingStore.findRelevant(
+            int fetch = isJakarta ? RAG_TOP_K * 3 : RAG_TOP_K; // over-fetch to survive filtering
+            List<DocumentChunk> chunks = embeddingStore.findRelevant(
                     fileContent,
                     null, // null projectId = search across the shared documentation corpus
                     List.of(DocumentType.DOCUMENTATION),
-                    RAG_TOP_K);
+                    fetch);
+            if (isJakarta) {
+                chunks = chunks.stream()
+                        .filter(c -> !isSpringDoc(c))
+                        .limit(RAG_TOP_K)
+                        .toList();
+            }
+            return chunks;
         } catch (Exception e) {
             log.debug("[{}] RAG retrieval skipped ({})", getName(), e.getMessage());
             return List.of();
         }
+    }
+
+    /** True when a doc chunk is Spring-specific (by logical path or source URL). */
+    private static boolean isSpringDoc(DocumentChunk c) {
+        String path = c.filePath() != null ? c.filePath().toLowerCase() : "";
+        String url  = c.sourceUrl() != null ? c.sourceUrl().toLowerCase() : "";
+        return path.contains("spring") || url.contains("spring");
     }
 
     /**
@@ -390,10 +591,17 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         if (perFile.isEmpty() || fileProvenanceRepository == null) return;
         String sessionId = SandboxContext.currentSessionId();
         if (sessionId == null || sessionId.isBlank()) return;
+        // Snapshot under the map's monitor — workers may be doing put() on
+        // another thread at the same time, which would otherwise throw a
+        // ConcurrentModificationException during serialization.
+        Map<String, List<DocReference>> snapshot;
+        synchronized (perFile) {
+            snapshot = new LinkedHashMap<>(perFile);
+        }
         try {
             WorkflowSessionId id = new WorkflowSessionId(UUID.fromString(sessionId));
             fileProvenanceRepository.save(id,
-                    new FileProvenance(sessionId, perFile, Instant.now()));
+                    new FileProvenance(sessionId, snapshot, Instant.now()));
         } catch (Exception e) {
             log.warn("[{}] could not persist file provenance: {}", getName(), e.getMessage());
         }
@@ -462,6 +670,93 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         }
 
         return s;
+    }
+
+    /**
+     * Strips any leading natural-language preamble the model prepended despite
+     * the prompt forbidding it — e.g. "Here is the migrated pom.xml:" before
+     * the actual {@code <?xml ...>}.  That preamble is what produced the
+     * "Non-parseable POM ... seen H..." build failure (the 'H' of "Here").
+     *
+     * <p>Extension-aware so we only cut when we know what the real content
+     * must start with:
+     * <ul>
+     *   <li><b>XML</b> (pom.xml, *.xml) — content must start at the first
+     *       {@code <}; drop anything before it.</li>
+     *   <li><b>Java</b> — drop leading lines until the first plausible Java
+     *       start ({@code package} / {@code import} / comment / annotation /
+     *       type declaration).</li>
+     * </ul>
+     * Other formats are returned untouched — we don't have a reliable anchor
+     * and a wrong cut would do more harm than good.
+     */
+    static String stripLeadingProse(String content, String path) {
+        if (content == null || content.isEmpty() || path == null) return content;
+        String lower = path.toLowerCase();
+
+        // XML family — must begin with '<'.  Trim only if a non-blank prefix
+        // precedes the first '<' (otherwise leave well-formed content alone).
+        if (lower.endsWith(".xml") || lower.endsWith("pom.xml")) {
+            int lt = content.indexOf('<');
+            if (lt > 0 && !content.substring(0, lt).isBlank()) {
+                return content.substring(lt);
+            }
+            return content;
+        }
+
+        // Java — find the first line that looks like real Java and drop
+        // anything above it.
+        if (lower.endsWith(".java")) {
+            String[] lines = content.split("\n", -1);
+            for (int i = 0; i < lines.length; i++) {
+                String t = lines[i].strip();
+                if (t.isEmpty()) continue;
+                if (looksLikeJavaStart(t)) {
+                    return i == 0 ? content
+                            : String.join("\n", java.util.Arrays.copyOfRange(lines, i, lines.length));
+                }
+                // First non-empty line is NOT Java — it's prose; keep scanning.
+            }
+        }
+        return content;
+    }
+
+    private static boolean looksLikeJavaStart(String trimmedLine) {
+        return trimmedLine.startsWith("package ")
+            || trimmedLine.startsWith("import ")
+            || trimmedLine.startsWith("//")
+            || trimmedLine.startsWith("/*")
+            || trimmedLine.startsWith("*")
+            || trimmedLine.startsWith("@")
+            || trimmedLine.startsWith("public ")
+            || trimmedLine.startsWith("final ")
+            || trimmedLine.startsWith("abstract ")
+            || trimmedLine.startsWith("class ")
+            || trimmedLine.startsWith("interface ")
+            || trimmedLine.startsWith("enum ")
+            || trimmedLine.startsWith("record ");
+    }
+
+    /**
+     * Returns true when the migrated content can't possibly be a valid file
+     * of its kind, so we should keep the original rather than break the build.
+     * Conservative: only flags the cases we're certain about (XML that doesn't
+     * start with {@code <} or has no closing tag).  A broken build file is the
+     * worst failure mode because it stops the build before any code compiles.
+     */
+    static boolean looksStructurallyBroken(String migrated, String path) {
+        if (migrated == null || path == null) return false;
+        String lower = path.toLowerCase();
+        if (lower.endsWith(".xml") || lower.endsWith("pom.xml")) {
+            String t = migrated.strip();
+            if (t.isEmpty()) return true;
+            // Must open with an XML declaration or a root element.
+            if (!t.startsWith("<")) return true;
+            // Must contain a closing tag somewhere — a truncated POM with no
+            // </project> is non-parseable.
+            if (!t.contains("</")) return true;
+        }
+        return false;
     }
 
     /**

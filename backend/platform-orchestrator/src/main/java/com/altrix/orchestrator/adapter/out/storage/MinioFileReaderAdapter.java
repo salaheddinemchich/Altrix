@@ -39,11 +39,26 @@ public class MinioFileReaderAdapter implements FileReaderPort {
             "gradle-wrapper.jar", "gradle-wrapper.properties"
     );
 
-    // Max bytes per file — keeps token count manageable for Groq free tier
+    // Max bytes per file — keeps token count manageable for Groq free tier.
+    // This is the REAL per-AI-call token guard (the migrator sends one file
+    // per call), so it stays tight.
     private static final int MAX_FILE_BYTES = 32 * 1024; // 32 KB
 
-    // Max total files sent to AI — prevents token overflow
-    private static final int MAX_FILES = 15;
+    /**
+     * Max source files read from the project ZIP.  Crucially this is NOT a
+     * per-prompt limit — the migrator processes one file per AI call, and the
+     * analyzer applies its OWN {@code MAX_PROMPT_FILES} cap before building a
+     * prompt.  This cap exists only to bound memory on a pathologically huge
+     * upload.  It MUST be high enough to include every source file, because
+     * any file dropped here is simply absent from the migrated artifact and
+     * the sandbox compile then fails with "package/class does not exist".
+     *
+     * <p>Was hard-coded to 15, which silently truncated any project larger
+     * than 15 files (e.g. dropped an entire package) — the cause of the
+     * missing-symbol compile failures.  Now configurable, defaulting high.
+     */
+    @Value("${migration.max-source-files:1000}")
+    private int maxFiles;
 
     @Override
     public Map<String, String> readSourceFiles(String storageKey) {
@@ -55,8 +70,9 @@ public class MinioFileReaderAdapter implements FileReaderPort {
 
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
-                if (files.size() >= MAX_FILES) {
-                    log.debug("Reached max file limit ({}), stopping read", MAX_FILES);
+                if (files.size() >= maxFiles) {
+                    log.warn("Reached max source-file limit ({}) for '{}' — remaining files skipped. "
+                            + "Raise migration.max-source-files if the project is larger.", maxFiles, storageKey);
                     break;
                 }
                 if (!entry.isDirectory()

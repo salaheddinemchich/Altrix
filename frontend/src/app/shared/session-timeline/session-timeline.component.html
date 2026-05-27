@@ -88,17 +88,19 @@
                   }
                 </div>
                 @if (selectedSandboxLog(); as log) {
-                  <!-- #108 — filter + search.  Level chips short-circuit
-                       to the line patterns the Docker runners emit (Maven
-                       [INFO]/[WARN]/[ERROR], Surefire `ERROR `).  Text
-                       input is case-insensitive substring. -->
+                  <!-- #108 — filter + search.  Supports real-world operators:
+                       multiple terms = AND, "quoted phrase" = exact, -term =
+                       exclude.  Level chips compose with the text query; the
+                       keyword chips below are auto-extracted from the log and
+                       toggle terms into the query on click.  Matches are
+                       highlighted in the viewer. -->
                   <div class="sandbox-log-filter">
                     <input class="sandbox-log-search"
                            type="search"
-                           placeholder="Filter lines…"
+                           placeholder='Search…  e.g.  KafkaTemplate  "cannot find symbol"  -INFO'
                            [value]="logFilterQuery()"
                            (input)="setLogFilterQuery($any($event.target).value)"
-                           aria-label="Filter log lines"/>
+                           aria-label="Search log lines"/>
                     <div class="sandbox-log-levels">
                       <button type="button"
                               [class.active]="logFilterLevel() === 'all'"
@@ -121,7 +123,23 @@
                       <span class="sandbox-log-count">{{ filteredLineCount() }} line(s)</span>
                     }
                   </div>
-                  <pre class="sandbox-log-viewer">{{ filteredSandboxLog() }}</pre>
+
+                  <!-- Auto-extracted keyword chips — click to add/remove the
+                       term from the search query. -->
+                  @if (logKeywords().length > 0) {
+                    <div class="sandbox-log-keywords">
+                      <span class="kw-label">keywords:</span>
+                      @for (kw of logKeywords(); track kw) {
+                        <button type="button"
+                                class="kw-chip"
+                                [class.active]="isKeywordActive(kw)"
+                                (click)="toggleKeyword(kw)"
+                                [title]="'Filter by ' + kw">{{ kw }}</button>
+                      }
+                    </div>
+                  }
+
+                  <pre class="sandbox-log-viewer" [innerHTML]="filteredSandboxLogHtml()"></pre>
                 }
               }
             </div>

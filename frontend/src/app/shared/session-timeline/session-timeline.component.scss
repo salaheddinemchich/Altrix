@@ -276,6 +276,45 @@
     50%      { opacity: 0.5; }
   }
 
+  // #108 — auto-extracted keyword chips above the viewer.
+  .sandbox-log-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+
+    .kw-label {
+      font-size: 10px;
+      color: var(--muted, #888);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-right: 2px;
+    }
+
+    .kw-chip {
+      appearance: none;
+      border: 1px solid var(--border, #e5e5e5);
+      background: var(--surface, #fff);
+      border-radius: 999px;
+      padding: 2px 9px;
+      font: inherit;
+      font-size: 10px;
+      font-family: ui-monospace, monospace;
+      color: var(--color-text, #333);
+      cursor: pointer;
+      white-space: nowrap;
+
+      &:hover { background: rgba(0, 0, 0, 0.05); }
+
+      &.active {
+        background: var(--color-primary, #3b82f6);
+        border-color: var(--color-primary, #3b82f6);
+        color: #fff;
+      }
+    }
+  }
+
   .sandbox-log-viewer {
     margin: 0;
     padding: 8px 10px;
@@ -289,6 +328,15 @@
     overflow: auto;
     white-space: pre-wrap;
     word-break: break-word;
+
+    // Search-match highlight (#108).  Bright enough to spot on the dark
+    // viewer background without washing out the surrounding text.
+    ::ng-deep mark {
+      background: #fde047;
+      color: #1a1a1a;
+      border-radius: 2px;
+      padding: 0 1px;
+    }
   }
 
   // #108 — filter + search strip above the log viewer

@@ -154,4 +154,40 @@ class CoreMigratorAgentTest {
         assertThatThrownBy(() -> agent.execute(null))
                 .isInstanceOf(AgentFailureException.class);
     }
+
+    // ── output sanitization (#pom-prose bug) ──────────────────────────────
+
+    @Test
+    void stripLeadingProse_removesPreambleBeforeXml() {
+        String raw = "Here is the migrated pom.xml:\n<?xml version=\"1.0\"?>\n<project></project>";
+        String cleaned = CoreMigratorAgent.stripLeadingProse(raw, "pom.xml");
+        assertThat(cleaned).startsWith("<?xml");
+    }
+
+    @Test
+    void stripLeadingProse_leavesCleanXmlUntouched() {
+        String raw = "<?xml version=\"1.0\"?>\n<project></project>";
+        assertThat(CoreMigratorAgent.stripLeadingProse(raw, "pom.xml")).isEqualTo(raw);
+    }
+
+    @Test
+    void stripLeadingProse_dropsPreambleBeforeJavaPackage() {
+        String raw = "Sure! Here's the file:\npackage com.example;\nclass A {}";
+        String cleaned = CoreMigratorAgent.stripLeadingProse(raw, "src/A.java");
+        assertThat(cleaned).startsWith("package com.example;");
+    }
+
+    @Test
+    void looksStructurallyBroken_flagsPomStartingWithProse() {
+        assertThat(CoreMigratorAgent.looksStructurallyBroken(
+                "Here is the pom <project></project>", "pom.xml")).isTrue();
+        assertThat(CoreMigratorAgent.looksStructurallyBroken(
+                "<project><artifactId>x</artifactId></project>", "pom.xml")).isFalse();
+    }
+
+    @Test
+    void looksStructurallyBroken_flagsTruncatedPomWithNoClosingTag() {
+        assertThat(CoreMigratorAgent.looksStructurallyBroken(
+                "<project><dependencies>", "pom.xml")).isTrue();
+    }
 }
