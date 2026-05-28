@@ -415,7 +415,9 @@ export class SessionTimelineComponent implements OnDestroy {
         if (p && p.perFile && Object.keys(p.perFile).length > 0) {
           this.fileProvenance.set(p);
           this.selectedProvenanceFile.set(Object.keys(p.perFile).sort()[0]);
-        } else {
+        } else if (!this.hasActive()) {
+          // Permanently empty only when nothing is still running — otherwise
+          // the live-tail will populate it as files are migrated.
           this.fileProvenanceMissing.set(true);
         }
       });

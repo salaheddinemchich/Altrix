@@ -33,9 +33,17 @@ export class ShellComponent {
     { path: '/sessions', icon: 'layers',    label: 'Sessions',  exact: false },
   ];
 
-  protected readonly configNav = [
+  /**
+   * Each entry may carry an {@code adminOnly} flag; the template renders
+   * it only when {@link #isAdmin} is true.  Keeping the flag on the data
+   * (not in the template) means we add new admin-gated items by adding
+   * one boolean, not by editing the markup.
+   */
+  protected readonly configNav: ReadonlyArray<{
+    path: string; icon: string; label: string; adminOnly?: boolean;
+  }> = [
     { path: '/providers', icon: 'cpu',         label: 'AI Providers' },
-    { path: '/billing',   icon: 'credit-card', label: 'Billing'      },
+    { path: '/billing',   icon: 'credit-card', label: 'Billing', adminOnly: true },
   ];
 
   protected logout(): void {

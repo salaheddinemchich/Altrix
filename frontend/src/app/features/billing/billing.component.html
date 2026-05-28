@@ -1,3 +1,21 @@
+@if (!canViewBilling()) {
+  <!-- Mirrors the backend @PreAuthorize on BillingController: a non-admin
+       hitting /billing by URL sees a friendly notice instead of a blank
+       page + 403s in the console. -->
+  <div class="page-header">
+    <div>
+      <h1>Billing & Usage</h1>
+      <p class="muted">Admin-only view.</p>
+    </div>
+  </div>
+  <div class="alert" style="padding:16px; border:1px solid var(--border,#e5e5e5); border-radius:6px; max-width:520px">
+    <strong>Admin access required.</strong>
+    <p class="muted" style="margin:6px 0 0">
+      Billing usage and cost data is restricted to organisation administrators.
+      Contact your admin if you need access.
+    </p>
+  </div>
+} @else {
 <div class="page-header">
   <div>
     <h1>Billing & Usage</h1>
@@ -150,3 +168,4 @@
     </div>
   }
 </section>
+}

@@ -29,7 +29,7 @@ import java.util.concurrent.Executor;
 @EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class,
         EncryptionConfig.class, McpConfig.class, ApprovalConfig.class, AutoPauseConfig.class,
         ApprovalNotificationConfig.class, JwtConfig.class, RateLimitConfig.class, CacheConfig.class,
-        SandboxDockerConfig.class})
+        SandboxDockerConfig.class, MigrationConfig.class})
 public class BeanConfig {
 
     @Bean

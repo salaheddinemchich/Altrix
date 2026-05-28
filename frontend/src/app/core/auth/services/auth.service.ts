@@ -50,7 +50,16 @@ export class AuthService {
   readonly isAuthenticated = computed(() => !!this._state().accessToken);
   readonly isLoading = computed(() => this._state().loading);
   readonly error = computed(() => this._state().error);
-  readonly isAdmin = computed(() => this._state().user?.role === 'ROLE_ADMIN');
+  /**
+   * True when the current user holds an admin-class role.  Mirrors the
+   * backend's {@code hasAnyRole('ADMIN','SUPER_ADMIN')} so the frontend can
+   * pre-emptively skip admin-only API calls (e.g. billing usage) for
+   * non-admin users instead of issuing a request the server will 403.
+   */
+  readonly isAdmin = computed(() => {
+    const r = this._state().user?.role;
+    return r === 'ROLE_ADMIN' || r === 'ROLE_SUPER_ADMIN';
+  });
 
   /**
    * Synchronous userId derived from the JWT `sub` claim — available the moment

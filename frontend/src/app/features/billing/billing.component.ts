@@ -1,6 +1,7 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { AiCallUsageSummary, TokenUsageSummary } from '../../core/models/billing.model';
+import { AuthService } from '../../core/auth/services/auth.service';
 import { BillingService } from '../../core/services/billing.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 
@@ -15,6 +16,15 @@ type Period = 'mtd' | '7d' | '30d' | '90d';
 })
 export class BillingComponent {
   private readonly billingApi = inject(BillingService);
+  private readonly auth       = inject(AuthService);
+
+  /**
+   * True when the current user is allowed to call the billing endpoints
+   * (mirrors the backend's @PreAuthorize on BillingController).  For
+   * non-admin users we skip the HTTP calls entirely and render a friendly
+   * "admin-only" placeholder, instead of letting the browser log 403s.
+   */
+  readonly canViewBilling = this.auth.isAdmin;
 
   readonly usage    = signal<AiCallUsageSummary[] | null>(null);
   readonly tokens   = signal<TokenUsageSummary[] | null>(null);
@@ -39,15 +49,15 @@ export class BillingComponent {
     this.usage()?.reduce((a, r) => a + r.callCount, 0) ?? null);
 
   constructor() {
-    // #153 — reload the usage table whenever the period chip changes.  The
-    // token-summary endpoint has no time filter so it loads once.
-    // allowSignalWrites: loadUsageForPeriod() seeds error+usage signals from
-    // the period input — Angular 18 forbids that inside effect() by default.
+    // #153 — reload the usage table whenever the period chip changes.  Skip
+    // entirely for non-admin users — the backend would 403 and we don't
+    // want noisy "Failed to load resource: 403" lines in the console for
+    // what is normal authorization behavior.
     effect(() => {
       const p = this.period();
-      this.loadUsageForPeriod(p);
+      if (this.canViewBilling()) this.loadUsageForPeriod(p);
     }, { allowSignalWrites: true });
-    this.loadTokenSummaryOnce();
+    if (this.canViewBilling()) this.loadTokenSummaryOnce();
   }
 
   setPeriod(p: Period): void { this.period.set(p); }

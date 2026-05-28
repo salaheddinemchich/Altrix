@@ -20,10 +20,15 @@ import com.altrix.orchestrator.domain.port.out.FileProvenanceRepository;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.infrastructure.ai.ContextPruner;
 import com.altrix.orchestrator.infrastructure.ai.PubSubDetector;
+import com.altrix.orchestrator.infrastructure.migration.PomSanitizer;
+import com.altrix.orchestrator.infrastructure.migration.ProjectSymbolValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.xml.sax.InputSource;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -192,6 +197,33 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
               with the same value names.
             * Do NOT delete files.  If a file has no Pub/Sub code, return
               it unchanged byte-for-byte.
+            * For XML files (pom.xml, beans.xml, web.xml): a comment body
+              MUST NOT contain `--` — that's invalid XML and Maven will
+              refuse to parse the POM.  Preserve the original characters in
+              comments exactly (including em-dashes `—`); do not normalise
+              them to `--`.
+            * Do NOT invent class names.  Every type you reference in
+              imports, field types, parameter types, or method calls MUST
+              either (a) be present in the file you were given, (b) be
+              present in another file of this project that already has
+              that exact simple name, or (c) be a real, documented class
+              of the kafka-clients / Jakarta EE standard library.  When in
+              doubt — when no real Kafka equivalent exists for a Pub/Sub
+              concept (IAM permissions, push subscriptions, etc.) — leave
+              the original code in place and add a `// TODO altrix:` comment
+              explaining what manual follow-up is needed.  Inventing a
+              plausible-sounding class name guarantees a "cannot find
+              symbol" compile failure.
+            * NEVER explain your decision in prose.  Do NOT write phrases
+              like "Here is the file", "Since the provided file …", or
+              "The file does not require any modifications".  If the file
+              needs no changes, return the original file BYTES exactly —
+              and ONLY those bytes.  For a `.java` file the output must
+              start with `package` (or with an `import` / comment / blank
+              line that precedes the package declaration); for `pom.xml`
+              it must start with `<?xml` or `<project`.  A response that
+              starts with English prose will be rejected and the original
+              kept.
             """;
 
     /** Inserted at the FRONT of the system prompt when the project is plain
@@ -241,6 +273,14 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
     private final EmbeddingStorePort embeddingStore;
     /** #1 — persists the per-file provenance once a migration loop completes. */
     private final FileProvenanceRepository fileProvenanceRepository;
+    /** Strips hallucinated dependency entries from migrated pom.xml output. */
+    private final PomSanitizer pomSanitizer;
+    /** Cross-file consistency check — catches files referencing intra-project
+     *  classes that don't exist anywhere in the artifact (typical model
+     *  failure: renames {@code PubsubService} → {@code KafkaService} in
+     *  importers without creating the new class).  Such files revert to
+     *  the original so the build can still proceed. */
+    private final ProjectSymbolValidator projectSymbolValidator;
 
     /** How many doc chunks to retrieve per file.  Small on purpose so the
      *  prompt doesn't balloon; the AI gets enough to anchor on without
@@ -310,6 +350,14 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                     result.add(unchanged(entry.getKey(), entry.getValue(), "Excluded by context pruner"));
                 }
             }
+
+            // Cross-file consistency pass: revert any file whose intra-project
+            // imports reference classes that don't exist in the artifact (the
+            // model invented `KafkaService` etc. without creating the class).
+            // Reverted files keep the original content, so the build can
+            // proceed with the per-file failures the retry loop can actually
+            // act on, instead of dying on "cannot find symbol".
+            result = revertFilesWithUnresolvedImports(result, allFiles);
 
             persistProvenance(perFileProvenance);
 
@@ -448,6 +496,14 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             String raw = aiPort.chat(systemPrompt, userMessage);
             String migrated = stripLeadingProse(stripMarkdownFences(raw), path);
 
+            // POM-specific guard: drop any new <dependency> the AI inserted
+            // that the original didn't have and isn't on the configured
+            // allow-list (e.g. kafka-clients).  Caught real production case
+            // where the model hallucinated `hibernate-entitymanager`.
+            if (isPom(path) && pomSanitizer != null) {
+                migrated = pomSanitizer.stripHallucinatedDependencies(content, migrated);
+            }
+
             if (looksTruncated(migrated, content)) {
                 log.warn("[{}] AI output for '{}' looks truncated ({} chars vs {} original) — keeping original",
                         getName(), path, migrated.length(), content.length());
@@ -455,13 +511,21 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             }
 
             // Structural safety net: a malformed build/config file fails the
-            // ENTIRE Maven/Gradle build before any source compiles ("Non-parseable
-            // POM ... seen H...").  That's strictly worse than not migrating the
-            // file at all.  If the model emitted something that can't be a valid
-            // pom/build/config, keep the original.
+            // ENTIRE Maven/Gradle build before any source compiles
+            // ("Non-parseable POM ...").  That's strictly worse than not
+            // migrating the file at all.  For XML we actually PARSE the
+            // result; if it fails we try a known auto-repair (the model
+            // often normalises em-dashes inside <!-- comments --> to "--",
+            // which is illegal XML) before falling back to the original.
             if (looksStructurallyBroken(migrated, path)) {
-                log.warn("[{}] migrated '{}' failed a structural sanity check — keeping original", getName(), path);
-                return unchanged(path, content, "Migration skipped — output failed structural check");
+                String repaired = repairXmlCommentDashes(migrated);
+                if (!repaired.equals(migrated) && !looksStructurallyBroken(repaired, path)) {
+                    log.info("[{}] auto-repaired XML comment dashes in '{}'", getName(), path);
+                    migrated = repaired;
+                } else {
+                    log.warn("[{}] migrated '{}' failed a structural sanity check — keeping original", getName(), path);
+                    return unchanged(path, content, "Migration skipped — output failed structural check");
+                }
             }
 
             FileChangeType changeType = migrated.equals(content)
@@ -487,6 +551,51 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      * intentional — we only need a strong signal about which Kafka API to
      * target, not a full POM parse.
      */
+    /**
+     * Cross-file consistency post-pass.  Builds a path → content map of the
+     * MODIFIED files, asks {@link ProjectSymbolValidator} to flag imports
+     * that don't resolve inside the artifact, and reverts each flagged file
+     * back to its original content.  Reverted files come from {@code allFiles}.
+     *
+     * <p>Conservative on purpose: the symbol index is built from the entire
+     * artifact (modified + unchanged), so a file is only reverted when the
+     * intra-project import is unresolved against EVERYTHING — not when one
+     * sibling-file happens to also drop the same import.
+     */
+    private List<MigratedFile> revertFilesWithUnresolvedImports(List<MigratedFile> migratedFiles,
+                                                                Map<String, String> allFiles) {
+        if (projectSymbolValidator == null || migratedFiles.isEmpty()) return migratedFiles;
+
+        Map<String, String> snapshot = new LinkedHashMap<>();
+        for (MigratedFile f : migratedFiles) {
+            String path = f.newPath() != null ? f.newPath() : f.originalPath();
+            if (path != null && f.content() != null) snapshot.put(path, f.content());
+        }
+        String basePackage = projectSymbolValidator.inferBasePackage(snapshot);
+        if (basePackage == null || basePackage.isBlank()) return migratedFiles;
+
+        Map<String, java.util.Set<String>> unresolved =
+                projectSymbolValidator.findUnresolvedImports(basePackage, snapshot);
+        if (unresolved.isEmpty()) return migratedFiles;
+
+        List<MigratedFile> repaired = new ArrayList<>(migratedFiles.size());
+        for (MigratedFile f : migratedFiles) {
+            String path = f.newPath() != null ? f.newPath() : f.originalPath();
+            java.util.Set<String> bad = unresolved.get(path);
+            if (bad == null || bad.isEmpty()
+                    || f.changeType() != FileChangeType.MODIFIED
+                    || !allFiles.containsKey(path)) {
+                repaired.add(f);
+                continue;
+            }
+            log.warn("[{}] reverting '{}' — intra-project import(s) reference missing classes: {}",
+                    getName(), path, bad);
+            repaired.add(unchanged(path, allFiles.get(path),
+                    "Reverted — imports reference classes not present in the artifact: " + bad));
+        }
+        return repaired;
+    }
+
     private boolean isJakartaProject(Map<String, String> allFiles) {
         String pom = allFiles.getOrDefault("pom.xml", "");
         String gradle = allFiles.getOrDefault("build.gradle", "");
@@ -631,6 +740,12 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         }
     }
 
+    private static boolean isPom(String path) {
+        if (path == null) return false;
+        String p = path.toLowerCase();
+        return p.equals("pom.xml") || p.endsWith("/pom.xml");
+    }
+
     private static MigratedFile unchanged(String path, String content, String reason) {
         return MigratedFile.builder()
                 .originalPath(path).newPath(path).content(content)
@@ -639,37 +754,48 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
     }
 
     /**
-     * Removes leading/trailing markdown code fences ({@code ```java}, {@code ```xml},
-     * {@code ```}) that AI models stubbornly add despite the prompt forbidding them.
-     * Without this strip the fence ends up as the first line of the migrated file,
-     * making the source uncompilable.
+     * Extracts the migrated file content from a raw AI response, removing any
+     * markdown code fences ({@code ```java} / {@code ```}) and any prose the
+     * model wrote outside the first code block.
+     *
+     * <p>Handles three real-world response shapes the migrator has hit:
+     * <ol>
+     *   <li><b>Plain content</b> — raw starts with {@code package} / {@code <?xml}
+     *       and has no fences.  Returned as-is.</li>
+     *   <li><b>Single fenced block</b> — {@code ```java\n...code...\n```}.
+     *       The opening fence and matching closing fence are stripped.</li>
+     *   <li><b>Code followed by prose (and sometimes a second block)</b> —
+     *       the model writes the code first, then closes it with {@code ```}
+     *       and continues with markdown analysis like
+     *       {@code **Rationale**: …} possibly followed by another
+     *       {@code ```java …``` } block.  We keep ONLY the content up to
+     *       the first stray fence; anything after is markdown garbage that
+     *       would break the compile (was producing {@code illegal character: '`'}).
+     *       </li>
+     * </ol>
      */
     static String stripMarkdownFences(String raw) {
         if (raw == null || raw.isEmpty()) return raw;
         String s = raw.strip();
 
-        // Leading fence: ``` optionally followed by a language tag and a newline
         if (s.startsWith("```")) {
+            // Shape 2: drop the opening fence (and optional language tag)
             int firstNewline = s.indexOf('\n');
-            if (firstNewline > 0) {
-                // Drop the ``` and any language tag on the same line
-                s = s.substring(firstNewline + 1);
-            } else {
-                // Pathological case: only the fence, no body
-                return "";
-            }
+            if (firstNewline < 0) return "";
+            s = s.substring(firstNewline + 1);
+            // …then cut at the next ``` (closing fence + any trailing prose
+            // or second block).  If there's no closing fence we keep what we
+            // have — the trim() below tidies trailing whitespace.
+            int closing = s.indexOf("```");
+            if (closing >= 0) s = s.substring(0, closing);
+        } else if (s.contains("```")) {
+            // Shape 3: code first, fence-then-prose afterwards.  Everything
+            // after the first stray fence is markdown garbage — drop it.
+            int firstFence = s.indexOf("```");
+            s = s.substring(0, firstFence);
         }
 
-        // Trailing fence
-        if (s.endsWith("```")) {
-            s = s.substring(0, s.length() - 3);
-            // Strip whitespace that may sit just before the closing fence
-            int lastNonWs = s.length() - 1;
-            while (lastNonWs >= 0 && Character.isWhitespace(s.charAt(lastNonWs))) lastNonWs--;
-            s = s.substring(0, lastNonWs + 1);
-        }
-
-        return s;
+        return s.stripTrailing();
     }
 
     /**
@@ -749,14 +875,100 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         String lower = path.toLowerCase();
         if (lower.endsWith(".xml") || lower.endsWith("pom.xml")) {
             String t = migrated.strip();
-            if (t.isEmpty()) return true;
-            // Must open with an XML declaration or a root element.
-            if (!t.startsWith("<")) return true;
-            // Must contain a closing tag somewhere — a truncated POM with no
-            // </project> is non-parseable.
-            if (!t.contains("</")) return true;
+            if (t.isEmpty() || !t.startsWith("<") || !t.contains("</")) return true;
+            // Real parse — catches the cases a regex misses, including
+            // invalid -- inside <!-- comment --> bodies (which Maven
+            // rejects as a "Non-parseable POM").
+            return !parsesAsXml(migrated);
+        }
+        if (lower.endsWith(".java")) {
+            return hasMarkdownContamination(migrated);
         }
         return false;
+    }
+
+    /**
+     * Conservative content-shape check for files the migrator claims are
+     * Java source.  Triggers on patterns that have zero chance of appearing
+     * in clean Java and high chance of appearing in an AI response that
+     * bled markdown / English prose into the output:
+     * <ul>
+     *   <li>A literal triple-backtick anywhere — never valid in Java.</li>
+     *   <li>A line that starts with {@code **} — markdown bold heading.</li>
+     *   <li>No {@code package} declaration in the file at all — every
+     *       legitimate Java source file under {@code src/main/java} declares
+     *       its package, so its absence is a strong signal the AI returned
+     *       prose instead of code (e.g. "Since the provided file …").</li>
+     *   <li>No type declaration ({@code class} / {@code interface} /
+     *       {@code enum} / {@code record}) anywhere — a Java source without
+     *       any type is structurally empty.</li>
+     * </ul>
+     */
+    static boolean hasMarkdownContamination(String javaSource) {
+        if (javaSource == null || javaSource.isBlank()) return true;
+        if (javaSource.contains("```")) return true;
+        for (String line : javaSource.split("\n", -1)) {
+            String trimmed = line.stripLeading();
+            if (trimmed.startsWith("**") && !trimmed.startsWith("*/")) return true;
+        }
+        if (!PACKAGE_DECL.matcher(javaSource).find()) return true;
+        if (!TYPE_DECL.matcher(javaSource).find())    return true;
+        return false;
+    }
+
+    /** Matches a {@code package x.y.z;} line.  Anchored so an `import` or
+     *  string literal that happens to contain "package" doesn't satisfy it. */
+    private static final java.util.regex.Pattern PACKAGE_DECL =
+            java.util.regex.Pattern.compile("^\\s*package\\s+[\\w.]+\\s*;", java.util.regex.Pattern.MULTILINE);
+
+    /** Matches a top-level Java type declaration of any kind. */
+    private static final java.util.regex.Pattern TYPE_DECL =
+            java.util.regex.Pattern.compile(
+                    "(?:^|\\s)(?:public\\s+|final\\s+|abstract\\s+|static\\s+|sealed\\s+|non-sealed\\s+|private\\s+|protected\\s+)*"
+                    + "(?:class|interface|enum|record)\\s+\\w+",
+                    java.util.regex.Pattern.MULTILINE);
+
+    /**
+     * Strict XML well-formedness check.  External entities + DOCTYPE are
+     * disabled (XXE protection) — we never need them for build config.
+     */
+    static boolean parsesAsXml(String content) {
+        try {
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+            dbf.setNamespaceAware(false);
+            dbf.setValidating(false);
+            dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            dbf.setExpandEntityReferences(false);
+            dbf.newDocumentBuilder()
+                    .parse(new InputSource(new StringReader(content)));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Replaces every {@code --} inside an XML {@code <!-- ... -->} comment
+     * body with a single {@code -}.  XML forbids {@code --} in a comment
+     * (only the closing {@code -->} may contain it), but the model
+     * frequently produces it when normalising em-dashes ({@code —}) from
+     * the source.  Targeted: leaves everything outside comments untouched.
+     */
+    static String repairXmlCommentDashes(String xml) {
+        if (xml == null || xml.isEmpty()) return xml;
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("<!--(.*?)-->", java.util.regex.Pattern.DOTALL)
+                .matcher(xml);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String body = m.group(1);
+            while (body.contains("--")) body = body.replace("--", "-");
+            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement("<!--" + body + "-->"));
+        }
+        m.appendTail(out);
+        return out.toString();
     }
 
     /**

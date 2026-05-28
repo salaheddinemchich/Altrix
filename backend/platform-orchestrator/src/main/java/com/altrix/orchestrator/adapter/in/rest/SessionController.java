@@ -439,10 +439,16 @@ public class SessionController {
     public ResponseEntity<com.altrix.orchestrator.adapter.in.rest.dto.FileProvenanceResponse> getFileProvenance(
             @PathVariable String sessionId) {
         WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
-        return fileProvenanceRepository.findBySessionId(id)
+        // Return 200 with an empty perFile map when nothing is persisted yet
+        // (migration in flight, or session predates the feature).  A 404
+        // here would be semantically defensible but would produce noisy
+        // red entries in the browser console for the *normal* "no data
+        // yet" case — the UI polls this endpoint while Migrate is ACTIVE.
+        var response = fileProvenanceRepository.findBySessionId(id)
                 .map(com.altrix.orchestrator.adapter.in.rest.dto.FileProvenanceResponse::from)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseGet(() -> new com.altrix.orchestrator.adapter.in.rest.dto.FileProvenanceResponse(
+                        sessionId, java.util.Map.of(), java.time.Instant.now()));
+        return ResponseEntity.ok(response);
     }
 
     // ── Approval history (#126) ───────────────────────────────────────────────
