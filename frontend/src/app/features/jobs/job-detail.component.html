@@ -64,6 +64,18 @@
       [sessionId]="session()?.sessionId ?? null"/>
   </div>
 
+  <!-- ══ Migration Apply (Branch Strategy + Confirmation) ══════════════════
+       Shown once the session reaches DONE.  Self-contained — fetches
+       its own repo permissions (server resolves the project from the
+       session id) and drives the full strategy / branch-name /
+       confirmation gate / apply / cancel flow.  Emits {@link applied}
+       when the workflow finishes. -->
+  @if (session()?.status === 'DONE' && session()?.sessionId) {
+    <div class="card" style="margin-top:16px">
+      <app-migration-apply [sessionId]="session()!.sessionId"/>
+    </div>
+  }
+
   <!-- ══ Details + Session grid ════════════════════════════════════════════ -->
   <div class="detail-grid">
 

@@ -10,7 +10,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PomSanitizerTest {
 
     private PomSanitizer sanitizer(List<String> allowed) {
-        return new PomSanitizer(new MigrationConfig(new MigrationConfig.Pom(allowed)));
+        return new PomSanitizer(new MigrationConfig(
+                new MigrationConfig.Pom(allowed),
+                new MigrationConfig.Source(null)));
     }
 
     /**

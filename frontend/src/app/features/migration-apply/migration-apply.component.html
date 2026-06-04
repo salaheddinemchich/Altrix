@@ -1,0 +1,178 @@
+<section class="apply-card">
+  <header class="apply-header">
+    <h3>Apply migration to repository</h3>
+    <p class="muted">
+      Choose how the migrated code should land in your repository. No repository
+      action happens until you tick the final confirmation box.
+    </p>
+  </header>
+
+  <!-- Permissions / loading banner (no alias — Angular 18 only allows
+       'as' on the primary @if, not on @else if). -->
+  @if (accessError()) {
+    <div class="banner banner-error">
+      <app-icon name="alert" [size]="14"/>
+      <span>{{ accessError() }}</span>
+    </div>
+  } @else if (accessLoading()) {
+    <div class="banner banner-muted">Checking repository permissions…</div>
+  }
+
+  @if (access(); as a) {
+
+    <div class="repo-meta">
+      <div><strong>Repository:</strong> <code>{{ a.fullName }}</code></div>
+      <div><strong>Default branch:</strong> <code>{{ a.defaultBranch }}</code></div>
+      <div><strong>Your access:</strong> <code>{{ a.permission }}</code></div>
+    </div>
+
+    <!-- Strategy radios -->
+    @if (a.availableStrategies.length === 0) {
+      <div class="banner banner-error">
+        You do not have permission to push branches on this repository.
+      </div>
+    } @else {
+      <fieldset class="strategy-list" aria-label="Branch strategy">
+        <legend class="muted">Branch strategy</legend>
+        @for (s of a.availableStrategies; track s) {
+          <label class="strategy-row" [class.selected]="selectedStrategy() === s">
+            <input type="radio"
+                   name="strategy"
+                   [value]="s"
+                   [checked]="selectedStrategy() === s"
+                   (change)="selectStrategy(s)"/>
+            <span class="strategy-text">
+              <strong>{{ strategyLabel(s) }}</strong>
+              <em class="muted">{{ strategyDescription(s) }}</em>
+            </span>
+          </label>
+        }
+      </fieldset>
+
+      <!-- Branch name (for NEW_BRANCH / PULL_REQUEST) -->
+      @if (needsBranchName()) {
+        <label class="field">
+          <span class="lbl">Branch name <span class="muted">(optional — a default is generated)</span></span>
+          <input class="text-input"
+                 type="text"
+                 [value]="branchName()"
+                 (input)="branchName.set($any($event.target).value)"
+                 placeholder="altrix/migration-…"
+                 aria-label="Branch name"/>
+          @if (!branchNameValid()) {
+            <span class="error">Allowed: letters, digits, dot, slash, dash, underscore (max 128 chars).</span>
+          }
+        </label>
+      }
+
+      <!-- Optional: commit message -->
+      <label class="field">
+        <span class="lbl">Commit message <span class="muted">(optional)</span></span>
+        <input class="text-input"
+               type="text"
+               [value]="commitMessage()"
+               (input)="commitMessage.set($any($event.target).value)"
+               placeholder="chore(altrix): apply migration…"/>
+      </label>
+
+      <!-- PR title + body (only for PULL_REQUEST) -->
+      @if (selectedStrategy() === 'PULL_REQUEST') {
+        <label class="field">
+          <span class="lbl">PR title <span class="muted">(optional)</span></span>
+          <input class="text-input"
+                 type="text"
+                 [value]="prTitle()"
+                 (input)="prTitle.set($any($event.target).value)"
+                 placeholder="Altrix migration…"/>
+        </label>
+        <label class="field">
+          <span class="lbl">PR body <span class="muted">(optional, Markdown)</span></span>
+          <textarea class="text-input"
+                    rows="4"
+                    [value]="prBody()"
+                    (input)="prBody.set($any($event.target).value)"
+                    placeholder="Automated migration produced by Altrix…"></textarea>
+        </label>
+      }
+
+      <div class="action-row">
+        <button type="button"
+                class="btn btn-gold"
+                [disabled]="!readyToOpenConfirm() || applying()"
+                (click)="openConfirmation()">
+          <app-icon name="check" [size]="14"/>
+          Review &amp; confirm
+        </button>
+      </div>
+
+      <!-- Final confirmation gate -->
+      @if (confirmationToken()) {
+        <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="apply-confirm-title">
+          <div class="confirm-card">
+            <h4 id="apply-confirm-title">Final confirmation</h4>
+            <p>
+              You are about to apply the migration changes to
+              <code>{{ access()?.fullName }}</code>.
+              <br/>
+              Strategy: <strong>{{ strategyLabel(selectedStrategy()!) }}</strong>
+              @if (needsBranchName()) {
+                <br/>Branch: <code>{{ branchName() || 'auto-generated' }}</code>
+              }
+            </p>
+            <label class="approval">
+              <input type="checkbox"
+                     [checked]="approvalChecked()"
+                     (change)="approvalChecked.set($any($event.target).checked)"/>
+              I have reviewed my migration settings and approve this action.
+            </label>
+
+            @if (errorMessage(); as msg) {
+              <div class="banner banner-error inline">
+                <app-icon name="alert" [size]="14"/>
+                <span>{{ msg }}</span>
+              </div>
+            }
+
+            <div class="confirm-actions">
+              <button type="button" class="btn" (click)="closeConfirmation()" [disabled]="applying()">
+                Cancel
+              </button>
+              <button type="button"
+                      class="btn btn-gold"
+                      [disabled]="applyDisabled()"
+                      (click)="confirmAndApply()">
+                @if (applying()) { Applying… } @else { Confirm and apply }
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  }
+
+  <!-- Result -->
+  @if (result(); as r) {
+    <div [class]="resultBannerClass(r)">
+      @if (r.success) { <app-icon name="check" [size]="14"/> }
+      @else if (r.outcome === 'CANCELLED') { <app-icon name="clock" [size]="14"/> }
+      @else { <app-icon name="alert" [size]="14"/> }
+      <span class="result-text">
+        <strong>{{ r.outcome }}</strong>
+        @if (r.message) { — {{ r.message }} }
+        @if (r.prUrl) {
+          <br/><a [href]="r.prUrl" target="_blank" rel="noopener">Open PR ↗</a>
+        }
+        @if (r.branchName && !r.prUrl) {
+          <br/>Branch: <code>{{ r.branchName }}</code>
+        }
+      </span>
+    </div>
+  }
+
+  @if (errorMessage() && !confirmationToken()) {
+    <div class="banner banner-error">
+      <app-icon name="alert" [size]="14"/>
+      <span>{{ errorMessage() }}</span>
+    </div>
+  }
+</section>

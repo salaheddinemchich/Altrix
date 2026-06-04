@@ -45,6 +45,16 @@ class CoreMigratorAgentTest {
     com.altrix.orchestrator.infrastructure.migration.PomSanitizer pomSanitizer;
     @Mock
     com.altrix.orchestrator.infrastructure.migration.ProjectSymbolValidator projectSymbolValidator;
+    @Mock
+    com.altrix.orchestrator.infrastructure.config.MigrationConfig migrationConfig;
+    @Mock
+    com.altrix.orchestrator.infrastructure.contract.ContractValidator contractValidator;
+    @Mock
+    com.altrix.orchestrator.infrastructure.contract.ContractRepairer contractRepairer;
+    @Mock
+    com.altrix.orchestrator.infrastructure.leak.PubSubLeakValidator pubSubLeakValidator;
+    @Mock
+    com.altrix.orchestrator.infrastructure.leak.PubSubLeakRepairer pubSubLeakRepairer;
     @InjectMocks
     CoreMigratorAgent agent;
 
@@ -328,5 +338,252 @@ class CoreMigratorAgentTest {
     void hasMarkdownContamination_passesCleanRecord() {
         String rec = "package x;\npublic record R(int x) {}";
         assertThat(CoreMigratorAgent.hasMarkdownContamination(rec)).isFalse();
+    }
+
+    // ── hallucinated-imports deny-list (real production case) ───────────────
+
+    /**
+     * Reproduces the exact failure pattern from
+     * AcknowledgeMessagesTask.java in production: the model invented an
+     * {@code OffsetCommitResult} that doesn't exist in kafka-clients.
+     * The deny-list check must flag it so the file reverts to the
+     * original instead of failing sandbox compile with "cannot find symbol".
+     */
+    @Test
+    void firstDeniedImport_detectsOffsetCommitResultHallucination() {
+        String src = """
+                package p;
+                import org.apache.kafka.clients.consumer.OffsetCommitResult;
+                public class X {}
+                """;
+        String hit = CoreMigratorAgent.firstDeniedImport(src,
+                java.util.List.of("org.apache.kafka.clients.consumer.OffsetCommitResult"));
+        assertThat(hit).isEqualTo("org.apache.kafka.clients.consumer.OffsetCommitResult");
+    }
+
+    @Test
+    void firstDeniedImport_detectsWrongPackageKafkaException() {
+        // org.apache.kafka.common.errors.KafkaException does NOT exist —
+        // the real KafkaException lives at org.apache.kafka.common.KafkaException.
+        String src = """
+                package p;
+                import org.apache.kafka.common.errors.KafkaException;
+                public class X {}
+                """;
+        String hit = CoreMigratorAgent.firstDeniedImport(src,
+                java.util.List.of("org.apache.kafka.common.errors.KafkaException"));
+        assertThat(hit).isEqualTo("org.apache.kafka.common.errors.KafkaException");
+    }
+
+    @Test
+    void firstDeniedImport_returnsNullForCleanFile() {
+        String src = """
+                package p;
+                import org.apache.kafka.clients.consumer.KafkaConsumer;
+                import org.apache.kafka.common.KafkaException;
+                public class X {}
+                """;
+        String hit = CoreMigratorAgent.firstDeniedImport(src, java.util.List.of(
+                "org.apache.kafka.clients.consumer.OffsetCommitResult",
+                "org.apache.kafka.common.errors.KafkaException"));
+        assertThat(hit).isNull();
+    }
+
+    @Test
+    void firstDeniedImport_handlesStaticImports() {
+        String src = "package p;\nimport static p.Foo.BAR;\npublic class X {}";
+        assertThat(CoreMigratorAgent.firstDeniedImport(src, java.util.List.of("p.Foo.BAR")))
+                .isEqualTo("p.Foo.BAR");
+    }
+
+    @Test
+    void firstDeniedImport_returnsNullOnEmptyDenyList() {
+        String src = "package p;\nimport whatever.Anything;\npublic class X {}";
+        assertThat(CoreMigratorAgent.firstDeniedImport(src, java.util.List.of())).isNull();
+        assertThat(CoreMigratorAgent.firstDeniedImport(src, null)).isNull();
+    }
+
+    /**
+     * New hallucination seen in the field: model invents
+     * {@code org.apache.kafka.clients.consumer.ConsumerException} when
+     * trying to translate Pub/Sub error handling.  Caught by an
+     * explicit FQN in the deny-list.
+     */
+    @Test
+    void firstDeniedImport_detectsConsumerExceptionHallucination() {
+        String src = """
+                package p;
+                import org.apache.kafka.clients.consumer.ConsumerException;
+                public class X {}
+                """;
+        String hit = CoreMigratorAgent.firstDeniedImport(src,
+                java.util.List.of("org.apache.kafka.clients.consumer.ConsumerException"));
+        assertThat(hit).isEqualTo("org.apache.kafka.clients.consumer.ConsumerException");
+    }
+
+    /**
+     * The model invents an entire bogus package
+     * {@code org.apache.kafka.common.security.auth.permission.*} when
+     * mapping Pub/Sub IAM permission concepts.  The deny-list supports
+     * a trailing {@code .*} wildcard so a single rule blocks all
+     * classes in that fictional package.
+     */
+    @Test
+    void firstDeniedImport_wildcardMatchesAnyClassInBogusPackage() {
+        String src = """
+                package p;
+                import org.apache.kafka.common.security.auth.permission.AdminPermission;
+                public class X {}
+                """;
+        String hit = CoreMigratorAgent.firstDeniedImport(src,
+                java.util.List.of("org.apache.kafka.common.security.auth.permission.*"));
+        assertThat(hit).isEqualTo("org.apache.kafka.common.security.auth.permission.AdminPermission");
+    }
+
+    @Test
+    void firstDeniedImport_wildcardDoesNotMatchSiblingPackages() {
+        // org.apache.kafka.common.security.auth.* (the real one) is NOT denied —
+        // only the bogus .permission sub-package is.  Make sure the wildcard
+        // is strict about the package boundary.
+        String src = """
+                package p;
+                import org.apache.kafka.common.security.auth.SecurityProtocol;
+                public class X {}
+                """;
+        String hit = CoreMigratorAgent.firstDeniedImport(src,
+                java.util.List.of("org.apache.kafka.common.security.auth.permission.*"));
+        assertThat(hit).isNull();
+    }
+
+    // ── publicTypeMismatchingFilename ──────────────────────────────────────
+
+    /**
+     * Reproduces the real failure: the model rewrites the interface body
+     * and renames the type, but the file name is fixed at "IGoogleErrorConverter.java".
+     * javac then aborts compilation of every dependent file.
+     */
+    @Test
+    void publicTypeMismatchingFilename_detectsTypeRename() {
+        String src = """
+                package p;
+                public interface IKafkaErrorConverter {
+                    RuntimeException convert(Throwable cause);
+                }""";
+        String hit = CoreMigratorAgent.publicTypeMismatchingFilename(
+                "src/main/java/p/IGoogleErrorConverter.java", src);
+        assertThat(hit).isEqualTo("IKafkaErrorConverter");
+    }
+
+    @Test
+    void publicTypeMismatchingFilename_passesWhenNamesMatch() {
+        String src = "package p;\npublic class Foo {}";
+        assertThat(CoreMigratorAgent.publicTypeMismatchingFilename("Foo.java", src)).isNull();
+    }
+
+    @Test
+    void publicTypeMismatchingFilename_ignoresPackagePrivateTypes() {
+        // Package-private types may carry any filename — only `public` is enforced.
+        String src = "package p;\nclass Helper {}";
+        assertThat(CoreMigratorAgent.publicTypeMismatchingFilename("Other.java", src)).isNull();
+    }
+
+    @Test
+    void publicTypeMismatchingFilename_handlesWindowsPaths() {
+        String src = "package p;\npublic class Wrong {}";
+        assertThat(CoreMigratorAgent.publicTypeMismatchingFilename(
+                "C:\\repo\\src\\main\\java\\p\\Foo.java", src))
+                .isEqualTo("Wrong");
+    }
+
+    // ── firstUsedButNotImported ─────────────────────────────────────────────
+
+    /**
+     * The model writes `private final KafkaProducer<String,String> kafkaProducer`
+     * but forgets the corresponding `import org.apache.kafka.clients.producer.KafkaProducer;`.
+     * The class fails with "cannot find symbol class KafkaProducer".
+     */
+    @Test
+    void firstUsedButNotImported_flagsKafkaProducerFieldWithoutImport() {
+        String src = """
+                package p;
+                public class S {
+                    private final KafkaProducer<String, String> producer = null;
+                }""";
+        assertThat(CoreMigratorAgent.firstUsedButNotImported(src)).isEqualTo("KafkaProducer");
+    }
+
+    @Test
+    void firstUsedButNotImported_acceptsExplicitImport() {
+        String src = """
+                package p;
+                import org.apache.kafka.clients.producer.KafkaProducer;
+                public class S {
+                    private final KafkaProducer<String, String> p = null;
+                }""";
+        assertThat(CoreMigratorAgent.firstUsedButNotImported(src)).isNull();
+    }
+
+    @Test
+    void firstUsedButNotImported_acceptsWildcardImport() {
+        String src = """
+                package p;
+                import org.apache.kafka.clients.producer.*;
+                public class S {
+                    private final KafkaProducer<String, String> p = null;
+                }""";
+        assertThat(CoreMigratorAgent.firstUsedButNotImported(src)).isNull();
+    }
+
+    @Test
+    void firstUsedButNotImported_ignoresLocalDeclarations() {
+        // If the file itself declares an inner class with the same simple name,
+        // an explicit import would be a duplicate — don't flag the usage.
+        String src = """
+                package p;
+                public class S {
+                    private final KafkaProducer p = null;
+                    static class KafkaProducer {}
+                }""";
+        assertThat(CoreMigratorAgent.firstUsedButNotImported(src)).isNull();
+    }
+
+    @Test
+    void firstUsedButNotImported_returnsNullForCleanFile() {
+        String src = """
+                package p;
+                public class S {
+                    private final String name = "kafka";
+                }""";
+        assertThat(CoreMigratorAgent.firstUsedButNotImported(src)).isNull();
+    }
+
+    // ── stripLombokOnConstructor ────────────────────────────────────────────
+
+    @Test
+    void stripLombokOnConstructor_removesAnnotationParam() {
+        String src = """
+                package p;
+                @AllArgsConstructor(onConstructor_ = @Inject)
+                public class S {}""";
+        String stripped = CoreMigratorAgent.stripLombokOnConstructor(src);
+        assertThat(stripped).doesNotContain("onConstructor_");
+        // The annotation itself stays; just the bad param is gone.
+        assertThat(stripped).contains("@AllArgsConstructor");
+        // Empty arg list collapsed — no dangling @AllArgsConstructor().
+        assertThat(stripped).doesNotContain("@AllArgsConstructor(");
+    }
+
+    @Test
+    void stripLombokOnConstructor_preservesOtherParams() {
+        String src = "@AllArgsConstructor(access = AccessLevel.PROTECTED, onConstructor_ = @Inject)";
+        String stripped = CoreMigratorAgent.stripLombokOnConstructor(src);
+        assertThat(stripped).doesNotContain("onConstructor_");
+        assertThat(stripped).contains("access = AccessLevel.PROTECTED");
+    }
+
+    @Test
+    void stripLombokOnConstructor_noOpWhenAbsent() {
+        String src = "@AllArgsConstructor\npublic class S {}";
+        assertThat(CoreMigratorAgent.stripLombokOnConstructor(src)).isEqualTo(src);
     }
 }

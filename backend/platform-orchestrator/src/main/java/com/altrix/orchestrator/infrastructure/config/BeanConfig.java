@@ -29,7 +29,7 @@ import java.util.concurrent.Executor;
 @EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class,
         EncryptionConfig.class, McpConfig.class, ApprovalConfig.class, AutoPauseConfig.class,
         ApprovalNotificationConfig.class, JwtConfig.class, RateLimitConfig.class, CacheConfig.class,
-        SandboxDockerConfig.class, MigrationConfig.class})
+        SandboxDockerConfig.class, MigrationConfig.class, MigrationApplyConfig.class})
 public class BeanConfig {
 
     @Bean
@@ -172,6 +172,43 @@ public class BeanConfig {
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
+    }
+
+    // ── Migration Approval & Branch Strategy workflow (#PR-feature) ──────────
+
+    @Bean
+    public com.altrix.orchestrator.domain.service.RepositoryAccessService repositoryAccessService(
+            com.altrix.orchestrator.domain.port.out.ProjectMetadataLookupPort projects,
+            com.altrix.orchestrator.domain.port.out.OAuthTokenLookupPort tokens,
+            com.altrix.orchestrator.domain.port.out.RepositoryProviderPort provider,
+            com.altrix.orchestrator.domain.port.out.MigrationApplyStatePort applyState
+    ) {
+        return new com.altrix.orchestrator.domain.service.RepositoryAccessService(
+                projects, tokens, provider, applyState);
+    }
+
+    @Bean
+    public com.altrix.orchestrator.domain.service.BranchStrategyService branchStrategyService(
+            com.altrix.orchestrator.domain.port.in.CheckRepositoryAccessUseCase accessUseCase,
+            com.altrix.orchestrator.domain.port.out.MigrationApplyStatePort applyState,
+            com.altrix.orchestrator.domain.port.out.MigrationApplyAuditLogPort auditLog,
+            MigrationApplyConfig config
+    ) {
+        return new com.altrix.orchestrator.domain.service.BranchStrategyService(
+                accessUseCase, applyState, auditLog, config);
+    }
+
+    @Bean
+    public com.altrix.orchestrator.domain.service.MigrationApplyService migrationApplyService(
+            com.altrix.orchestrator.domain.port.out.MigrationApplyStatePort applyState,
+            com.altrix.orchestrator.domain.port.out.MigrationApplyAuditLogPort auditLog,
+            com.altrix.orchestrator.domain.port.out.ProjectMetadataLookupPort projects,
+            com.altrix.orchestrator.domain.port.out.OAuthTokenLookupPort tokens,
+            com.altrix.orchestrator.domain.port.in.CheckRepositoryAccessUseCase accessUseCase,
+            com.altrix.orchestrator.infrastructure.apply.BranchStrategyHandlerRegistry handlers
+    ) {
+        return new com.altrix.orchestrator.domain.service.MigrationApplyService(
+                applyState, auditLog, projects, tokens, accessUseCase, handlers);
     }
 
     @Bean

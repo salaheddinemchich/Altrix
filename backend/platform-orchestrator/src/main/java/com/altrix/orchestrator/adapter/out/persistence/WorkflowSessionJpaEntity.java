@@ -83,4 +83,53 @@ public class WorkflowSessionJpaEntity {
 
     @Column(name = "decision_kind", length = 16)
     private String decisionKind;
+
+    // ── Apply workflow (#PR-feature) ─────────────────────────────────────────
+    // Once a session reaches DONE, the user picks a BranchStrategy and the
+    // server issues a one-shot confirmation token.  The /apply endpoint
+    // re-validates everything against these columns.  All nullable — the
+    // apply workflow only attaches once the user opts in.
+
+    @Column(name = "apply_strategy", length = 20)
+    private String applyStrategy;
+
+    @Column(name = "apply_branch_name", length = 255)
+    private String applyBranchName;
+
+    @Column(name = "apply_base_branch", length = 255)
+    private String applyBaseBranch;
+
+    @Column(name = "apply_commit_message", columnDefinition = "TEXT")
+    private String applyCommitMessage;
+
+    @Column(name = "apply_pr_title", columnDefinition = "TEXT")
+    private String applyPrTitle;
+
+    @Column(name = "apply_pr_body", columnDefinition = "TEXT")
+    private String applyPrBody;
+
+    @Column(name = "apply_confirmation_token")
+    private java.util.UUID applyConfirmationToken;
+
+    @Column(name = "apply_confirmation_expires")
+    private Instant applyConfirmationExpires;
+
+    /** STRATEGY_SET | APPLIED | CANCELLED — never the outcome enum (that's separate). */
+    @Column(name = "apply_status", length = 20)
+    private String applyStatus;
+
+    @Column(name = "apply_outcome", length = 20)
+    private String applyOutcome;
+
+    @Column(name = "apply_result_url", length = 500)
+    private String applyResultUrl;
+
+    @Column(name = "apply_result_sha", length = 64)
+    private String applyResultSha;
+
+    @Column(name = "apply_actor_user_id", length = 64)
+    private String applyActorUserId;
+
+    @Column(name = "apply_completed_at")
+    private Instant applyCompletedAt;
 }

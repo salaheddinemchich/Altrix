@@ -18,6 +18,16 @@ import java.util.List;
  *     # pom.xml that were not present in the original.  Anything else the
  *     # AI inserts is treated as a hallucination and stripped.
  *     allowed-added-artifacts: kafka-clients, spring-kafka
+ *   source:
+ *     # Fully-qualified Java imports the model is KNOWN to hallucinate.
+ *     # When a migrated .java contains any of these imports the file is
+ *     # rejected and the original kept — the build then succeeds (with
+ *     # the old code in that file) instead of failing with
+ *     # "cannot find symbol" on a non-existent Kafka type.  Extend the
+ *     # list as new hallucinations are discovered.
+ *     denied-imports:
+ *       - org.apache.kafka.clients.consumer.OffsetCommitResult
+ *       - org.apache.kafka.common.errors.KafkaException     # real one lives at org.apache.kafka.common.KafkaException
  * </pre>
  *
  * <p>Add new knobs here as the migrator grows; do not reintroduce private
@@ -25,11 +35,13 @@ import java.util.List;
  */
 @ConfigurationProperties(prefix = "migration")
 public record MigrationConfig(
-        Pom pom
+        Pom pom,
+        Source source
 ) {
 
     public MigrationConfig {
-        if (pom == null) pom = new Pom(List.of("kafka-clients", "spring-kafka"));
+        if (pom == null)    pom    = new Pom(null);
+        if (source == null) source = new Source(null);
     }
 
     /**
@@ -50,6 +62,45 @@ public record MigrationConfig(
             allowedAddedArtifacts = allowedAddedArtifacts != null
                     ? List.copyOf(allowedAddedArtifacts)
                     : List.of("kafka-clients", "spring-kafka");
+        }
+    }
+
+    /**
+     * Per-source-file guards.
+     *
+     * @param deniedImports fully-qualified imports the model is known to
+     *                      invent.  Matching files are reverted to the
+     *                      original.  Default seeded with the patterns we
+     *                      have observed in real migrations; users can
+     *                      extend via YAML / env without code changes.
+     */
+    public record Source(
+            @DefaultValue({
+                    // Specific FQNs the model invents
+                    "org.apache.kafka.clients.consumer.OffsetCommitResult",
+                    "org.apache.kafka.clients.consumer.ConsumerException",
+                    // Wrong package — real KafkaException lives at org.apache.kafka.common.KafkaException
+                    "org.apache.kafka.common.errors.KafkaException",
+                    // Whole bogus packages the model invents (mapping Pub/Sub IAM permissions
+                    // to a non-existent Kafka "security.auth.permission" namespace).
+                    // Trailing ".*" matches any class under that package.
+                    "org.apache.kafka.common.security.auth.permission.*",
+                    // Wrong CDI package — real @Produces lives at jakarta.enterprise.inject.Produces.
+                    // The model occasionally collapses it into jakarta.inject because @Inject
+                    // lives there, but @Produces does not.
+                    "jakarta.inject.Produces"
+            })
+            List<String> deniedImports
+    ) {
+        public Source {
+            deniedImports = deniedImports != null
+                    ? List.copyOf(deniedImports)
+                    : List.of(
+                            "org.apache.kafka.clients.consumer.OffsetCommitResult",
+                            "org.apache.kafka.clients.consumer.ConsumerException",
+                            "org.apache.kafka.common.errors.KafkaException",
+                            "org.apache.kafka.common.security.auth.permission.*",
+                            "jakarta.inject.Produces");
         }
     }
 }

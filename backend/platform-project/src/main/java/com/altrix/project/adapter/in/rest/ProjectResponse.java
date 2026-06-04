@@ -4,6 +4,7 @@ import com.altrix.common.domain.enums.BuildSystem;
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.DetectedFramework;
 import com.altrix.project.domain.model.Project;
+import com.altrix.project.domain.model.ProjectSource;
 import com.altrix.project.domain.model.ProjectStatus;
 
 import java.time.Instant;
@@ -14,6 +15,13 @@ import java.util.List;
  *
  * <p>Never exposes the internal storage key — that is an infrastructure
  * detail the client does not need.
+ *
+ * <p>{@code repoUrl}, {@code trackedBranch} and {@code source} are
+ * exposed so downstream services (e.g. platform-orchestrator's
+ * apply-workflow access check) can resolve the remote repository
+ * without a second round-trip into project storage.  Returns
+ * {@code null} for projects that were not created from a remote
+ * (legacy ZIP uploads).
  */
 public record ProjectResponse(
         String id,
@@ -24,7 +32,10 @@ public record ProjectResponse(
         DetectedFramework framework,
         boolean eligibleForMigration,
         List<String> detectedTechnologies,
-        Instant createdAt
+        Instant createdAt,
+        String repoUrl,
+        String trackedBranch,
+        ProjectSource source
 ) {
     public static ProjectResponse from(Project project) {
         return new ProjectResponse(
@@ -36,7 +47,10 @@ public record ProjectResponse(
                 project.getFramework(),
                 project.isEligibleForMigration(),
                 project.getDetectedTechnologies(),
-                project.getCreatedAt()
+                project.getCreatedAt(),
+                project.getRepoUrl(),
+                project.getTrackedBranch(),
+                project.getSource()
         );
     }
 }

@@ -20,6 +20,10 @@ import com.altrix.orchestrator.domain.port.out.FileProvenanceRepository;
 import com.altrix.orchestrator.domain.port.out.FileReaderPort;
 import com.altrix.orchestrator.infrastructure.ai.ContextPruner;
 import com.altrix.orchestrator.infrastructure.ai.PubSubDetector;
+import com.altrix.orchestrator.infrastructure.contract.ContractRepairer;
+import com.altrix.orchestrator.infrastructure.contract.ContractValidator;
+import com.altrix.orchestrator.infrastructure.leak.PubSubLeakRepairer;
+import com.altrix.orchestrator.infrastructure.leak.PubSubLeakValidator;
 import com.altrix.orchestrator.infrastructure.migration.PomSanitizer;
 import com.altrix.orchestrator.infrastructure.migration.ProjectSymbolValidator;
 import lombok.RequiredArgsConstructor;
@@ -224,6 +228,29 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
               it must start with `<?xml` or `<project`.  A response that
               starts with English prose will be rejected and the original
               kept.
+            * FILE = CLASS NAME.  The Java compiler refuses to compile a
+              file named `Foo.java` whose public type is `Bar`.  You are
+              given one file at a time and you cannot rename the file.
+              Therefore: do NOT rename the public class / interface /
+              enum / record inside the file.  Keep the public type name
+              EXACTLY as it appears at the top of the input.  If the
+              original is `IGoogleErrorConverter`, the output must still
+              declare `public interface IGoogleErrorConverter` — only
+              the body / Javadoc may change.
+            * EVERY type used must be imported.  When you reference
+              `KafkaProducer<String, String>` as a field, parameter, or
+              return type — even ONCE — you MUST add `import
+              org.apache.kafka.clients.producer.KafkaProducer;` at the
+              top.  Same for `KafkaConsumer`, `ProducerRecord`,
+              `ConsumerRecord`, `OffsetAndMetadata`, `TopicPartition`,
+              and `java.time.Duration`.  Missing imports turn the whole
+              file into "cannot find symbol".
+            * DO NOT use Lombok's experimental `onConstructor_ = @Inject`
+              parameter on `@AllArgsConstructor` / `@RequiredArgsConstructor`
+              / `@NoArgsConstructor`.  It requires a special compile-time
+              configuration most projects do not enable.  Use a plain
+              `@AllArgsConstructor` without `onConstructor_`, or just
+              write the constructor by hand annotated with `@Inject`.
             """;
 
     /** Inserted at the FRONT of the system prompt when the project is plain
@@ -254,6 +281,55 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                 exactly how PubsubClientProducer wires the Pubsub client today.
               * @Inject from jakarta.inject.* — NEVER @Autowired.
 
+            EXACT CDI annotation packages — using the wrong one breaks compile:
+              * @Produces lives at jakarta.enterprise.inject.Produces.
+                It does NOT live at jakarta.inject.Produces — that import is
+                wrong and will fail to resolve.  @Inject DOES live in
+                jakarta.inject.Inject, which is why the confusion happens;
+                do not collapse the two packages.
+              * @Named lives at jakarta.inject.Named (correct).
+              * @ApplicationScoped / @Dependent / @Singleton (CDI scopes) live
+                under jakarta.enterprise.context.*.
+
+            EXACT Kafka API surface — use ONLY these, do not invent variants:
+              * org.apache.kafka.common.KafkaException  (NOT org.apache.kafka.common.errors.KafkaException — that package
+                does not exist; only specific subclasses live under .errors.* like RetriableException, SerializationException.)
+              * For committing offsets after manual ack of a Pub/Sub pull:
+                  consumer.commitAsync(new OffsetCommitCallback() {
+                      @Override
+                      public void onComplete(Map<TopicPartition, OffsetAndMetadata> offsets, Exception exception) { ... }
+                  });
+                  // OffsetAndMetadata lives in org.apache.kafka.clients.consumer.
+                  // The 2nd callback parameter is java.lang.Exception, NOT Throwable.
+                  // There is NO class called OffsetCommitResult — do not import it.
+                  // There is NO class called ConsumerException — catch RuntimeException
+                  // or specific subclasses of org.apache.kafka.common.errors.*.
+              * For synchronous commit: consumer.commitSync();
+              * Imports you typically need together: org.apache.kafka.clients.consumer.KafkaConsumer,
+                ConsumerRecord, ConsumerRecords, OffsetAndMetadata, OffsetCommitCallback,
+                org.apache.kafka.common.TopicPartition.  Always import KafkaConsumer explicitly
+                when you declare a field of that type — the compiler does NOT auto-discover it.
+
+            FORBIDDEN packages — they do NOT exist in kafka-clients, never import from them:
+              * org.apache.kafka.common.security.auth.permission.*   (you cannot map Pub/Sub IAM permissions
+                to Kafka by inventing this; for ACLs use org.apache.kafka.common.acl.AclOperation +
+                org.apache.kafka.common.resource.ResourcePattern instead, or — preferred — leave the
+                original method body and add a `// TODO altrix: ...` comment.)
+
+            When NO real Kafka equivalent exists for a Pub/Sub concept (IAM
+            permission tests, ack-id-based acknowledge, push subscriptions):
+              * Do NOT invent a placeholder type name like {@code Topic},
+                {@code Subscription}, {@code AdminPermission} as a return /
+                parameter / field type.  Inventing it guarantees
+                "cannot find symbol".
+              * Instead: keep the ORIGINAL return / parameter types
+                (`PubsubTopic`, `PubsubSubscription`, etc.) and put a
+                `// TODO altrix: ...` comment in the method body explaining
+                that the Kafka equivalent requires manual implementation
+                (e.g. via AdminClient, an external IAM system, etc.).
+              * OR change the return type to `void` / `String` / `boolean`
+                if the body can return a sensible primitive.
+
             """;
 
     /** Default prefix when the project IS Spring Boot.  Keep terse — the
@@ -281,6 +357,33 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      *  importers without creating the new class).  Such files revert to
      *  the original so the build can still proceed. */
     private final ProjectSymbolValidator projectSymbolValidator;
+    /** Configurable deny-list of fully-qualified imports the model is known
+     *  to hallucinate ({@code OffsetCommitResult},
+     *  {@code org.apache.kafka.common.errors.KafkaException}, …).  Migrated
+     *  files importing one of those revert to the original. */
+    private final com.altrix.orchestrator.infrastructure.config.MigrationConfig migrationConfig;
+    /** Project Semantic Index — flags cross-file inconsistencies (interface
+     *  drift, unknown method calls, constructor arity, file/class mismatch)
+     *  before the artifact reaches the sandbox.  Replaces the symptom-level
+     *  per-file revert with a structured violation list the repair loop
+     *  can act on. */
+    private final ContractValidator contractValidator;
+    /** Minimal-patch LLM loop driven by {@link #contractValidator}.  Runs
+     *  bounded iterations of "validate → patch each violating file →
+     *  re-validate" so the artifact reaches the sandbox contract-clean
+     *  whenever the model can see the fix. */
+    private final ContractRepairer contractRepairer;
+    /** Output-gate scanner — finds GCP Pub/Sub artifacts that survived
+     *  migration (typically because the per-file AI call silently failed
+     *  on rate-limit / contamination guards and the file was kept original).
+     *  Runs AFTER the contract pass so cross-file structure is stable
+     *  before we attempt to rewrite leaked Google API calls. */
+    private final PubSubLeakValidator pubSubLeakValidator;
+    /** Minimal-patch LLM loop fed by {@link #pubSubLeakValidator}.  Each
+     *  iteration rewrites every file with surviving Pub/Sub references,
+     *  using the validator's pre-computed Kafka replacement suggestions
+     *  to constrain the model's design freedom to zero. */
+    private final PubSubLeakRepairer pubSubLeakRepairer;
 
     /** How many doc chunks to retrieve per file.  Small on purpose so the
      *  prompt doesn't balloon; the AI gets enough to anchor on without
@@ -358,6 +461,23 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // proceed with the per-file failures the retry loop can actually
             // act on, instead of dying on "cannot find symbol".
             result = revertFilesWithUnresolvedImports(result, allFiles);
+
+            // Project Semantic Index — contract validation + minimal-patch
+            // LLM repair loop.  The earlier guards revert broken files to
+            // original; this one PATCHES them so the artifact can actually
+            // reach DONE.  Catches interface drift, unknown method calls,
+            // constructor arity mismatches, file/class rename, missing
+            // overrides — everything the file-by-file LLM pass can't see
+            // because it never holds two files at once.
+            result = applyContractRepairs(result);
+
+            // Output gate — every Pub/Sub artifact that survived the
+            // migration is a failure (the target is Kafka).  The repairer
+            // uses the validator's pre-computed Kafka replacement strategy
+            // per leak so the model has zero design freedom.  Runs AFTER
+            // contract repair because we need stable signatures before we
+            // can swap Google method chains for Kafka calls.
+            result = applyPubSubLeakRepairs(result);
 
             persistProvenance(perFileProvenance);
 
@@ -510,6 +630,73 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                 return unchanged(path, content, "Migration skipped — AI output truncated");
             }
 
+            // External-import hallucination guard: when the model emits a
+            // .java that imports a class we know doesn't exist on the
+            // target classpath (e.g. org.apache.kafka.clients.consumer.OffsetCommitResult,
+            // which the model invents because Pub/Sub ack returns a result
+            // and it assumes Kafka has the same), revert to the original.
+            // The deny-list lives in MigrationConfig.source.deniedImports
+            // and is user-extensible without code changes.
+            if (path != null && path.toLowerCase().endsWith(".java")) {
+                java.util.List<String> denied = migrationConfig != null && migrationConfig.source() != null
+                        ? migrationConfig.source().deniedImports() : null;
+                String hit = firstDeniedImport(migrated, denied);
+                if (hit != null) {
+                    log.warn("[{}] '{}' imports hallucinated class '{}' — keeping original",
+                            getName(), path, hit);
+                    return unchanged(path, content,
+                            "Migration skipped — output imported non-existent class: " + hit);
+                }
+                // File/class name mismatch guard.  Java enforces that a
+                // file with a public type matches the basename; the model
+                // sometimes renames the type inside a file ("IGoogleErrorConverter"
+                // → "IKafkaErrorConverter") without realising the file
+                // can't be renamed in this isolated call.  The compiler
+                // reports "class X is public, should be declared in a
+                // file named X.java" and gives up on every dependent
+                // file.  Reverting keeps the original name in the file.
+                String wrongPublicType = publicTypeMismatchingFilename(path, migrated);
+                if (wrongPublicType != null) {
+                    log.warn("[{}] '{}' declares public type '{}' but file basename differs — keeping original",
+                            getName(), path, wrongPublicType);
+                    return unchanged(path, content,
+                            "Migration skipped — public type '" + wrongPublicType
+                            + "' does not match filename");
+                }
+                // Used-but-not-imported guard.  When the model swaps a
+                // Pub/Sub type for KafkaProducer / KafkaConsumer as a
+                // field / parameter / return type but forgets the
+                // corresponding import, the compile dies with "cannot
+                // find symbol class KafkaProducer".  We check only types
+                // we know the migrator introduces (kafka-clients API
+                // surface, common java.time types it routinely needs)
+                // — false positives revert a file unnecessarily, which
+                // is worse than the symptom.
+                String missing = firstUsedButNotImported(migrated);
+                if (missing != null) {
+                    log.warn("[{}] '{}' uses type '{}' without importing it — keeping original",
+                            getName(), path, missing);
+                    return unchanged(path, content,
+                            "Migration skipped — used type without import: " + missing);
+                }
+                // Lombok experimental-feature guard.  `onConstructor_`
+                // requires a delombok-aware compiler config (an extra
+                // `-Xplugin:Lombok` arg or `lombok.addLombokGeneratedAnnotation`
+                // in lombok.config) that almost no project enables.
+                // The model adds it when it sees a CDI / Spring
+                // constructor — the result is "cannot find symbol
+                // method onConstructor_()" on every annotation use.
+                // Stripping it preserves the rest of the migration.
+                if (migrated.contains("onConstructor_")) {
+                    String stripped = stripLombokOnConstructor(migrated);
+                    if (!stripped.equals(migrated)) {
+                        log.info("[{}] stripped Lombok @AllArgsConstructor(onConstructor_=…) from '{}'",
+                                getName(), path);
+                        migrated = stripped;
+                    }
+                }
+            }
+
             // Structural safety net: a malformed build/config file fails the
             // ENTIRE Maven/Gradle build before any source compiles
             // ("Non-parseable POM ...").  That's strictly worse than not
@@ -562,6 +749,125 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      * intra-project import is unresolved against EVERYTHING — not when one
      * sibling-file happens to also drop the same import.
      */
+    /**
+     * Project-wide contract validation + minimal-patch repair loop.
+     *
+     * <p>Runs after every other per-file guard so the input to the
+     * validator is as clean as the rest of the pipeline can make it.
+     * The repairer mutates a working copy and returns it; we re-emit
+     * {@link MigratedFile} entries preserving the original ordering and
+     * marking only those whose content actually changed as MODIFIED.
+     *
+     * <p>No-op when the validator is disabled (null) so the agent is
+     * usable in tests without wiring the new components.
+     */
+    private List<MigratedFile> applyContractRepairs(List<MigratedFile> files) {
+        if (contractValidator == null || contractRepairer == null || files.isEmpty()) return files;
+
+        Map<String, String> working = new LinkedHashMap<>();
+        for (MigratedFile f : files) {
+            String path = f.newPath() != null ? f.newPath() : f.originalPath();
+            if (path != null && f.content() != null) working.put(path, f.content());
+        }
+
+        List<com.altrix.orchestrator.domain.model.contract.ContractViolation> before =
+                contractValidator.validate(working);
+        if (before.isEmpty()) {
+            log.info("[{}] contract check: clean — {} file(s)", getName(), working.size());
+            return files;
+        }
+        log.info("[{}] contract check: {} violation(s) across {} file(s); attempting repair",
+                getName(), before.size(),
+                contractValidator.groupByFile(before).size());
+
+        Map<String, String> repaired = contractRepairer.repair(working);
+
+        List<com.altrix.orchestrator.domain.model.contract.ContractViolation> after =
+                contractValidator.validate(repaired);
+        if (after.isEmpty()) {
+            log.info("[{}] contract repair: artifact is now clean ({} → 0 violations)",
+                    getName(), before.size());
+        } else {
+            log.warn("[{}] contract repair: {} violation(s) remain after repair pass — sandbox will surface them",
+                    getName(), after.size());
+        }
+
+        List<MigratedFile> rewired = new ArrayList<>(files.size());
+        for (MigratedFile f : files) {
+            String path = f.newPath() != null ? f.newPath() : f.originalPath();
+            String newContent = path != null ? repaired.get(path) : null;
+            if (newContent == null || newContent.equals(f.content())) {
+                rewired.add(f);
+                continue;
+            }
+            rewired.add(MigratedFile.builder()
+                    .originalPath(f.originalPath())
+                    .newPath(f.newPath())
+                    .content(newContent)
+                    .changeType(FileChangeType.MODIFIED)
+                    .diffSummary("Contract-repair patch applied")
+                    .build());
+        }
+        return rewired;
+    }
+
+    /**
+     * Output-gate scan for surviving GCP Pub/Sub artifacts + minimal-patch
+     * repair pass.  Runs after {@link #applyContractRepairs(List)} so
+     * cross-file structure is stable.  Same accounting pattern: only
+     * touched files are re-emitted as MODIFIED; everything else passes
+     * through.  No-op when the validator / repairer aren't wired (tests).
+     */
+    private List<MigratedFile> applyPubSubLeakRepairs(List<MigratedFile> files) {
+        if (pubSubLeakValidator == null || pubSubLeakRepairer == null || files.isEmpty()) return files;
+
+        Map<String, String> working = new LinkedHashMap<>();
+        for (MigratedFile f : files) {
+            String path = f.newPath() != null ? f.newPath() : f.originalPath();
+            if (path != null && f.content() != null) working.put(path, f.content());
+        }
+
+        List<com.altrix.orchestrator.domain.model.leak.PubSubLeakViolation> before =
+                pubSubLeakValidator.validate(working);
+        if (before.isEmpty()) {
+            log.info("[{}] leak check: clean — no Pub/Sub residue", getName());
+            return files;
+        }
+        log.info("[{}] leak check: {} Pub/Sub leak(s) across {} file(s); attempting repair",
+                getName(), before.size(),
+                pubSubLeakValidator.groupByFile(before).size());
+
+        Map<String, String> repaired = pubSubLeakRepairer.repair(working);
+
+        List<com.altrix.orchestrator.domain.model.leak.PubSubLeakViolation> after =
+                pubSubLeakValidator.validate(repaired);
+        if (after.isEmpty()) {
+            log.info("[{}] leak repair: artifact is now Pub/Sub-free ({} → 0 leaks)",
+                    getName(), before.size());
+        } else {
+            log.warn("[{}] leak repair: {} leak(s) remain after repair pass — sandbox will surface them",
+                    getName(), after.size());
+        }
+
+        List<MigratedFile> rewired = new ArrayList<>(files.size());
+        for (MigratedFile f : files) {
+            String path = f.newPath() != null ? f.newPath() : f.originalPath();
+            String newContent = path != null ? repaired.get(path) : null;
+            if (newContent == null || newContent.equals(f.content())) {
+                rewired.add(f);
+                continue;
+            }
+            rewired.add(MigratedFile.builder()
+                    .originalPath(f.originalPath())
+                    .newPath(f.newPath())
+                    .content(newContent)
+                    .changeType(FileChangeType.MODIFIED)
+                    .diffSummary("Pub/Sub leak repaired (Kafka replacement applied)")
+                    .build());
+        }
+        return rewired;
+    }
+
     private List<MigratedFile> revertFilesWithUnresolvedImports(List<MigratedFile> migratedFiles,
                                                                 Map<String, String> allFiles) {
         if (projectSymbolValidator == null || migratedFiles.isEmpty()) return migratedFiles;
@@ -988,5 +1294,159 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         if (origLen < 500) return false;
         // Less than 30 % the original size is the red flag.
         return migLen < origLen * 0.30;
+    }
+
+    /**
+     * Scans the migrated Java source for {@code import X;} lines where
+     * {@code X} matches the configured deny-list and returns the first
+     * matching FQN, or {@code null} if none.  Static imports are
+     * checked too — the model occasionally hallucinates a constant on
+     * a non-existent type.
+     *
+     * <p>A deny-list entry ending in {@code ".*"} matches any class
+     * under that package.  E.g.
+     * {@code org.apache.kafka.common.security.auth.permission.*} blocks
+     * both {@code AdminPermission} and {@code Permission} (the model
+     * invents a whole bogus package mapping Pub/Sub IAM to Kafka).
+     */
+    static String firstDeniedImport(String javaSource, java.util.List<String> deniedImports) {
+        if (javaSource == null || deniedImports == null || deniedImports.isEmpty()) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "^\\s*import\\s+(?:static\\s+)?([\\w.]+)\\s*;",
+                java.util.regex.Pattern.MULTILINE).matcher(javaSource);
+        while (m.find()) {
+            String fqn = m.group(1);
+            for (String denied : deniedImports) {
+                if (denied == null || denied.isBlank()) continue;
+                if (denied.endsWith(".*")) {
+                    String prefix = denied.substring(0, denied.length() - 2);
+                    if (fqn.startsWith(prefix + ".")) return fqn;
+                } else if (fqn.equals(denied)) {
+                    return fqn;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Matches the first public {@code class|interface|enum|record} declaration. */
+    private static final java.util.regex.Pattern PUBLIC_TYPE_DECL = java.util.regex.Pattern.compile(
+            "(?:^|\\s)public\\s+(?:final\\s+|abstract\\s+|static\\s+|sealed\\s+|non-sealed\\s+)*"
+            + "(?:class|interface|enum|record|@interface)\\s+(\\w+)",
+            java.util.regex.Pattern.MULTILINE);
+
+    /**
+     * If the file declares a {@code public} type whose name does NOT match
+     * the file's basename, returns that mismatched type name; otherwise
+     * {@code null}.  The Java compiler requires the names to match — when
+     * they don't every dependent file also fails ("bad source file: …").
+     *
+     * <p>Non-public top-level types are ignored (they're legal under any
+     * filename).  Files without any public type are ignored too — they
+     * compile fine.
+     */
+    static String publicTypeMismatchingFilename(String path, String javaSource) {
+        if (path == null || javaSource == null) return null;
+        int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        String fileName = path.substring(slash + 1);
+        int dot = fileName.lastIndexOf('.');
+        if (dot <= 0) return null;
+        String expected = fileName.substring(0, dot);
+
+        java.util.regex.Matcher m = PUBLIC_TYPE_DECL.matcher(javaSource);
+        if (!m.find()) return null;
+        String declared = m.group(1);
+        return declared.equals(expected) ? null : declared;
+    }
+
+    /**
+     * Kafka client / java.time types the migrator commonly introduces.
+     * When one of these appears as a type token in the source (declaration,
+     * generic argument, {@code new X(…)}, etc.) but no matching {@code import}
+     * brings it in, the file won't compile.  Kept short and conservative —
+     * each entry is a type the migrator EXPLICITLY writes, not something a
+     * hand-authored Java file might use through some other API.
+     */
+    private static final java.util.List<String[]> REQUIRED_IMPORTS_FOR_TYPES = java.util.List.of(
+            // {simple name, expected import FQN}
+            new String[]{"KafkaProducer",      "org.apache.kafka.clients.producer.KafkaProducer"},
+            new String[]{"KafkaConsumer",      "org.apache.kafka.clients.consumer.KafkaConsumer"},
+            new String[]{"ProducerRecord",     "org.apache.kafka.clients.producer.ProducerRecord"},
+            new String[]{"ConsumerRecord",     "org.apache.kafka.clients.consumer.ConsumerRecord"},
+            new String[]{"ConsumerRecords",    "org.apache.kafka.clients.consumer.ConsumerRecords"},
+            new String[]{"OffsetAndMetadata",  "org.apache.kafka.clients.consumer.OffsetAndMetadata"},
+            new String[]{"OffsetCommitCallback","org.apache.kafka.clients.consumer.OffsetCommitCallback"},
+            new String[]{"TopicPartition",     "org.apache.kafka.common.TopicPartition"},
+            new String[]{"Duration",           "java.time.Duration"});
+
+    /**
+     * If the source references one of {@link #REQUIRED_IMPORTS_FOR_TYPES}
+     * as a type token but doesn't import it (and the import wasn't covered
+     * by a {@code .*} wildcard import or a same-package declaration),
+     * returns the missing simple name.
+     *
+     * <p>"Reference as a type token" is approximated with word-boundary
+     * matching — good enough for the migrator's output, which writes
+     * Java in conventional style.  False positives here only revert a
+     * file to its original, never make a broken file worse.
+     */
+    static String firstUsedButNotImported(String javaSource) {
+        if (javaSource == null || javaSource.isEmpty()) return null;
+        for (String[] pair : REQUIRED_IMPORTS_FOR_TYPES) {
+            String simple = pair[0];
+            String fqn    = pair[1];
+            // Word-boundary match: type name surrounded by non-identifier
+            // characters at least once.  Skip if no usage.
+            if (!java.util.regex.Pattern.compile("\\b" + java.util.regex.Pattern.quote(simple) + "\\b")
+                    .matcher(javaSource).find()) {
+                continue;
+            }
+            // Imported explicitly?
+            if (javaSource.contains("import " + fqn + ";")
+                    || javaSource.contains("import static " + fqn + ".")) {
+                continue;
+            }
+            // Imported via wildcard from the same package?
+            String pkg = fqn.substring(0, fqn.lastIndexOf('.'));
+            if (javaSource.contains("import " + pkg + ".*;")) continue;
+            // Declared in the same compilation unit (a same-named inner
+            // type or sibling top-level type)?
+            if (java.util.regex.Pattern.compile(
+                    "\\b(?:class|interface|enum|record)\\s+" + java.util.regex.Pattern.quote(simple) + "\\b")
+                    .matcher(javaSource).find()) {
+                continue;
+            }
+            return simple;
+        }
+        return null;
+    }
+
+    /**
+     * Strips Lombok's experimental {@code onConstructor_ = …} parameter
+     * from {@code @AllArgsConstructor} / {@code @RequiredArgsConstructor}
+     * / {@code @NoArgsConstructor} annotations.  The feature needs an
+     * extra compile-time annotation processor most projects don't enable,
+     * so leaving it in produces {@code cannot find symbol method
+     * onConstructor_()} on every annotation use.
+     *
+     * <p>Preserves any other annotation parameters around it.  When the
+     * stripped parameter was the only one, the empty {@code ()} is
+     * removed too.
+     */
+    static String stripLombokOnConstructor(String javaSource) {
+        if (javaSource == null || !javaSource.contains("onConstructor_")) return javaSource;
+        // Match `onConstructor_` followed by `=`, optional whitespace, and
+        // either an `@…(…)` annotation reference or `@…`.  The body of the
+        // annotation reference may contain balanced parens — kept simple
+        // (one nesting level) which covers @Inject / @Autowired / @Inject(…).
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "\\s*,?\\s*onConstructor_\\s*=\\s*@\\w+(?:\\([^()]*\\))?\\s*,?",
+                java.util.regex.Pattern.MULTILINE);
+        String stripped = p.matcher(javaSource).replaceAll("");
+        // Clean any now-empty annotation argument lists like @AllArgsConstructor().
+        stripped = stripped.replaceAll(
+                "(@(?:AllArgsConstructor|RequiredArgsConstructor|NoArgsConstructor))\\(\\s*\\)",
+                "$1");
+        return stripped;
     }
 }

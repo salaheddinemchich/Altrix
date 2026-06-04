@@ -82,6 +82,14 @@ dependencies {
     implementation("com.github.docker-java:docker-java-core:3.4.0")
     implementation("com.github.docker-java:docker-java-transport-zerodep:3.4.0")
 
+    // JavaParser — AST-based intra-project contract validation (interface
+    // overrides, method-call resolution, constructor arity).  Runs against
+    // the migrated artifact BEFORE sandbox compile so violations can be
+    // patched via a minimal-LLM-edit loop instead of failing the Docker
+    // build.  Symbol-solver flavour pulls in the same library; the plain
+    // `javaparser-core` is enough for our local intra-project resolution.
+    implementation("com.github.javaparser:javaparser-core:3.26.2")
+
     // Lombok
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
@@ -91,6 +99,15 @@ dependencies {
     testImplementation("org.springframework.kafka:spring-kafka-test")
     testImplementation("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4jVersion")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
+}
+
+// Forward any `altrix.*` system properties from the Gradle CLI into the test
+// JVM.  Lets opt-in smoke tests (e.g. DockerSandboxRunnerOriginalProjectSmokeTest)
+// be activated via `-Daltrix.sandbox.smoke.root=...` without modifying source.
+tasks.withType<Test> {
+    System.getProperties()
+        .filterKeys { (it as? String)?.startsWith("altrix.") == true }
+        .forEach { (k, v) -> systemProperty(k as String, v as Any) }
 }
 
 // Load .env from the backend root into bootRun environment automatically.
