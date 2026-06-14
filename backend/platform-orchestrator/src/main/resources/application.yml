@@ -5,6 +5,12 @@ spring:
   application:
     name: platform-orchestrator
 
+  # Pull in the Kafka migration knowledge base from its own file so the
+  # catalog can grow without bloating this config.  Bound to
+  # KafkaMigrationKnowledgeBase (prefix: kafka-migration).
+  config:
+    import: classpath:kafka-migration-kb.yml
+
   security:
     oauth2:
       client:
@@ -220,14 +226,108 @@ ai:
     # Each server must expose an HTTP endpoint that accepts JSON-RPC 2.0 POST
     # requests (MCP Streamable HTTP transport, spec 2024-11-05).
     #
+    # When `web-fetch` (or any server exposing a `fetch` / `web_fetch` /
+    # `http_fetch` / `url_fetch` tool) is registered AND `enabled=true`,
+    # documentation ingestion goes through MCP instead of the plain HTTPS
+    # fallback.  Recommended server:
+    #   npx -y @modelcontextprotocol/server-fetch  →  http://localhost:3100/mcp
+    #
     # servers:
+    #   - name: web-fetch
+    #     base-url: ${MCP_WEB_FETCH_URL:http://localhost:3100/mcp}
+    #     timeout-seconds: 30
     #   - name: filesystem
     #     base-url: ${MCP_FILESYSTEM_URL:http://localhost:3001/mcp}
     #     timeout-seconds: 30
-    #   - name: git
-    #     base-url: ${MCP_GIT_URL:http://localhost:3002/mcp}
-    #     timeout-seconds: 15
     servers:
+
+# ── Documentation corpus ──────────────────────────────────────────────────
+# Replaces the legacy hard-coded URL list inside DocumentationIngestionService.
+# Edit `pages` to add/remove reference docs; new entries are fetched on next
+# boot and embedded into pgvector.  Every URL must clear `allowed-domains`
+# first — any host/path not in the allow-list is rejected without a network
+# call.
+#
+# Direction is strictly GCP Pub/Sub → Apache Kafka.  Do NOT add Kafka→Pub/Sub
+# guides here.
+documentation:
+  allowed-domains:
+    - host: kafka.apache.org
+    - host: cloud.google.com
+      path-prefixes:
+        - "/pubsub/"
+        - "/docs/authentication/"
+    - host: docs.spring.io
+    - host: quarkus.io
+    - host: openliberty.io
+    - host: download.eclipse.org
+    - host: jakarta.ee
+    - host: googlecloudplatform.github.io
+      path-prefixes:
+        - "/spring-cloud-gcp/"
+
+  mcp:
+    # Tool names to try, left to right, when MCP is enabled.  First match
+    # wins; if none of these are registered by any configured MCP server
+    # the fetch is skipped (and the page is logged + skipped — not fatal).
+    fetch-tool-names: ${MCP_FETCH_TOOL_NAMES:fetch,web_fetch,http_fetch,url_fetch}
+
+  pages:
+    # ── Apache Kafka — the migration target ───────────────────────────────
+    - logical-path: kafka/introduction
+      url: https://kafka.apache.org/documentation/#gettingStarted
+    - logical-path: kafka/producers
+      url: https://kafka.apache.org/documentation/#producerapi
+    - logical-path: kafka/consumers
+      url: https://kafka.apache.org/documentation/#consumerapi
+    - logical-path: kafka/consumer-groups
+      url: https://kafka.apache.org/documentation/#intro_consumers
+    - logical-path: kafka/topic-config
+      url: https://kafka.apache.org/documentation/#topicconfigs
+    - logical-path: kafka/streams-concepts
+      url: https://kafka.apache.org/documentation/streams/
+    - logical-path: kafka/connect-overview
+      url: https://kafka.apache.org/documentation/#connect
+    - logical-path: kafka/spring-boot
+      url: https://docs.spring.io/spring-kafka/reference/quick-tour.html
+
+    # ── GCP Pub/Sub — the migration source (semantics to preserve) ────────
+    - logical-path: gcp-pubsub/overview
+      url: https://cloud.google.com/pubsub/docs/overview
+    - logical-path: gcp-pubsub/publisher
+      url: https://cloud.google.com/pubsub/docs/publish-receive-messages-client-library
+    - logical-path: gcp-pubsub/subscriber
+      url: https://cloud.google.com/pubsub/docs/pull
+    - logical-path: gcp-pubsub/push-subscriptions
+      url: https://cloud.google.com/pubsub/docs/push
+    - logical-path: gcp-pubsub/ordering
+      url: https://cloud.google.com/pubsub/docs/ordering
+    - logical-path: gcp-pubsub/dead-letter
+      url: https://cloud.google.com/pubsub/docs/dead-letter-topics
+    - logical-path: gcp-pubsub/spring-cloud-gcp
+      url: https://googlecloudplatform.github.io/spring-cloud-gcp/reference/html/index.html#spring-integration-channel-adapters-for-cloud-pub-sub
+
+    # ── Jakarta EE — for projects without Spring ──────────────────────────
+    - logical-path: jakarta-ee/messaging-overview
+      url: https://jakarta.ee/specifications/messaging/3.1/
+    - logical-path: jakarta-ee/messaging-api
+      url: https://jakarta.ee/specifications/messaging/3.1/apidocs/
+    - logical-path: jakarta-ee/cdi-events
+      url: https://jakarta.ee/specifications/cdi/4.0/jakarta-cdi-spec-4.0.html#events
+    - logical-path: jakarta-ee/microprofile-reactive-messaging
+      url: https://download.eclipse.org/microprofile/microprofile-reactive-messaging-3.0/microprofile-reactive-messaging-spec-3.0.html
+    - logical-path: jakarta-ee/kafka-clients-producer
+      url: https://kafka.apache.org/documentation/#producerconfigs
+    - logical-path: jakarta-ee/kafka-clients-consumer
+      url: https://kafka.apache.org/documentation/#consumerconfigs
+    - logical-path: jakarta-ee/gcp-pubsub-java-client
+      url: https://cloud.google.com/pubsub/docs/reference/libraries
+    - logical-path: jakarta-ee/quarkus-kafka
+      url: https://quarkus.io/guides/kafka
+    - logical-path: jakarta-ee/openliberty-kafka
+      url: https://openliberty.io/docs/latest/reactive-messaging.html
+    - logical-path: jakarta-ee/gcp-auth-java
+      url: https://cloud.google.com/docs/authentication/client-libraries
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:4200,http://localhost:8080}

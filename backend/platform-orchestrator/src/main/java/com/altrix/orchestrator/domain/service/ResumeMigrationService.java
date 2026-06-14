@@ -48,6 +48,9 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
 
     private final WorkflowSessionRepository sessionRepository;
     private final MigrationAgent<ApprovedPlan, MigrationArtifact> migrator;
+    /** SemanticValidator phase — runs between migrator and sandbox; verifies
+     *  the artifact semantically before the expensive compile. */
+    private final MigrationAgent<MigrationArtifact, MigrationArtifact> semanticValidator;
     private final MigrationAgent<MigrationArtifact, ValidationReport> validator;
     private final MigrationAgent<WorkflowOutcome, MigrationReport> reporter;
     private final MigratedFileStoragePort migratedFileStoragePort;
@@ -65,6 +68,7 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
 
     public ResumeMigrationService(WorkflowSessionRepository sessionRepository,
                                   MigrationAgent<ApprovedPlan, MigrationArtifact> migrator,
+                                  MigrationAgent<MigrationArtifact, MigrationArtifact> semanticValidator,
                                   MigrationAgent<MigrationArtifact, ValidationReport> validator,
                                   MigrationAgent<WorkflowOutcome, MigrationReport> reporter,
                                   MigratedFileStoragePort migratedFileStoragePort,
@@ -74,6 +78,7 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
                                   int maxRetries) {
         this.sessionRepository = sessionRepository;
         this.migrator = migrator;
+        this.semanticValidator = semanticValidator;
         this.validator = validator;
         this.reporter = reporter;
         this.migratedFileStoragePort = migratedFileStoragePort;
@@ -211,6 +216,21 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
                 if (sessionIdForContext != null) SandboxContext.clear();
             }
             progressNotifierPort.notify(jobId, "Core Migrator", "DONE", attemptLabel);
+
+            // ── Semantic Validator ──────────────────────────────────────
+            // Verifies the artifact semantically (contract + leak + KB
+            // forbidden-imports) before the expensive sandbox compile.
+            // Stage 3: report-only — returns the artifact unchanged; later
+            // stages let it apply auto-repair.  Session context stays set
+            // so any future repair can read the blueprint / decision registry.
+            progressNotifierPort.notify(jobId, "Semantic Validator", "RUNNING", attemptLabel);
+            if (sessionIdForContext != null) SandboxContext.setSessionId(sessionIdForContext);
+            try {
+                artifact = semanticValidator.execute(artifact);
+            } finally {
+                if (sessionIdForContext != null) SandboxContext.clear();
+            }
+            progressNotifierPort.notify(jobId, "Semantic Validator", "DONE", attemptLabel);
 
             // ── Validator ───────────────────────────────────────────────
             progressNotifierPort.notify(jobId, "Sandbox Validator", "RUNNING", attemptLabel);

@@ -23,6 +23,161 @@ class ContractValidatorTest {
 
     private final ContractValidator validator = new ContractValidator();
 
+    // ── Contract-lock: type-aware interface conformance ─────────────────────
+
+    /**
+     * The real failure: interface migrated {@code publish(PubsubTopic,…)} to
+     * {@code publish(String,…)} but the impl kept {@code PubsubTopic} — same
+     * name, drifted types → "not abstract, does not override".
+     */
+    @Test
+    void interfaceConformance_flagsParamTypeDrift() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("p/PubsubService.java",
+                "package p;\npublic interface PubsubService {\n"
+                        + "    void publish(String topic, byte[] message);\n"
+                        + "}");
+        files.put("p/PubsubServiceImpl.java",
+                "package p;\npublic class PubsubServiceImpl implements PubsubService {\n"
+                        + "    public void publish(PubsubTopic topic, byte[] message) {}\n"
+                        + "}");
+        // PubsubTopic exists so it's not flagged as an unresolved type.
+        files.put("p/PubsubTopic.java", "package p;\npublic class PubsubTopic {}");
+
+        List<ContractViolation> v = validator.validate(files);
+        ContractViolation m = validator.firstByKind(v, ContractViolationKind.INTERFACE_SIGNATURE_MISMATCH).orElseThrow();
+        assertThat(m.message()).contains("publish(String, byte[])");   // the required exact signature
+        assertThat(m.message()).contains("interface is the contract");
+    }
+
+    @Test
+    void interfaceConformance_quietWhenImplMatchesExactly() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("p/Port.java",
+                "package p;\npublic interface Port {\n    void send(String topic, String msg);\n}");
+        files.put("p/PortImpl.java",
+                "package p;\npublic class PortImpl implements Port {\n"
+                        + "    public void send(String topic, String msg) {}\n}");
+        List<ContractViolation> v = validator.validate(files);
+        assertThat(validator.kinds(v)).doesNotContain(ContractViolationKind.INTERFACE_SIGNATURE_MISMATCH);
+    }
+
+    @Test
+    void interfaceConformance_doesNotDoubleReportWhenMethodMissingEntirely() {
+        // No method named 'send' at all on the impl → name+arity check owns it,
+        // the typed check must stay silent.
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("p/Port.java",
+                "package p;\npublic interface Port {\n    void send(String topic);\n}");
+        files.put("p/PortImpl.java",
+                "package p;\npublic class PortImpl implements Port {\n    public void other() {}\n}");
+        List<ContractViolation> v = validator.validate(files);
+        assertThat(validator.kinds(v)).doesNotContain(ContractViolationKind.INTERFACE_SIGNATURE_MISMATCH);
+        assertThat(validator.kinds(v)).contains(ContractViolationKind.MISSING_INTERFACE_METHOD);
+    }
+
+    // ── Cross-package intra-project type used without import ────────────────
+
+    /**
+     * Real failure: {@code PublishMessagesTask} (package {@code …pubsub.tasks})
+     * does {@code extends RetryTask<Void>} but {@code RetryTask} lives in
+     * {@code …pubsub}; the migrator dropped the import.  javac: "cannot find
+     * symbol class RetryTask".  The type IS a project type, just unimported —
+     * so this must surface a MISSING_IMPORT that names the exact FQN to add.
+     */
+    @Test
+    void crossPackageReference_flagsMissingIntraProjectImport() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("src/main/java/p/pubsub/RetryTask.java",
+                "package p.pubsub;\npublic abstract class RetryTask<T> {}");
+        files.put("src/main/java/p/pubsub/tasks/PublishMessagesTask.java",
+                "package p.pubsub.tasks;\n"
+                        + "public class PublishMessagesTask extends RetryTask<Void> {}");
+        List<ContractViolation> v = validator.validate(files);
+
+        ContractViolation miss = validator.firstByKind(v, ContractViolationKind.MISSING_IMPORT).orElseThrow();
+        assertThat(miss.symbol()).isEqualTo("RetryTask");
+        assertThat(miss.message()).contains("import p.pubsub.RetryTask;");
+    }
+
+    /** Same-package use needs no import — must stay quiet. */
+    @Test
+    void crossPackageReference_quietForSamePackageUse() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("src/main/java/p/pubsub/RetryTask.java",
+                "package p.pubsub;\npublic abstract class RetryTask<T> {}");
+        files.put("src/main/java/p/pubsub/PublishMessagesTask.java",
+                "package p.pubsub;\npublic class PublishMessagesTask extends RetryTask<Void> {}");
+        List<ContractViolation> v = validator.validate(files);
+        assertThat(validator.kinds(v)).doesNotContain(ContractViolationKind.MISSING_IMPORT);
+    }
+
+    /** Cross-package type that IS imported must stay quiet. */
+    @Test
+    void crossPackageReference_quietWhenImported() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("src/main/java/p/pubsub/RetryTask.java",
+                "package p.pubsub;\npublic abstract class RetryTask<T> {}");
+        files.put("src/main/java/p/pubsub/tasks/PublishMessagesTask.java",
+                "package p.pubsub.tasks;\nimport p.pubsub.RetryTask;\n"
+                        + "public class PublishMessagesTask extends RetryTask<Void> {}");
+        List<ContractViolation> v = validator.validate(files);
+        assertThat(validator.kinds(v)).doesNotContain(ContractViolationKind.MISSING_IMPORT);
+    }
+
+    // ── Orphaned (same-package) type reference ──────────────────────────────
+
+    /**
+     * Real failure: the migrator renamed {@code AltrixPubsubMessage →
+     * AltrixKafkaMessage} in the interface only.  Because the reference is
+     * same-package it needs no import, so {@code checkImports} can't see it —
+     * javac aborts with "cannot find symbol class AltrixKafkaMessage".
+     */
+    @Test
+    void unresolvedTypeReference_flagsInconsistentSamePackageRename() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("src/main/java/p/AltrixPubsubMessage.java",
+                "package p;\npublic class AltrixPubsubMessage {}");
+        files.put("src/main/java/p/PubsubService.java",
+                "package p;\nimport java.util.List;\n"
+                        + "public interface PubsubService {\n"
+                        + "    void publish(String topic, AltrixKafkaMessage message);\n"
+                        + "    void publish(String topic, List<AltrixKafkaMessage> messages);\n"
+                        + "}");
+        List<ContractViolation> v = validator.validate(files);
+
+        assertThat(validator.kinds(v)).contains(ContractViolationKind.MISSING_IMPORT);
+        ContractViolation miss = validator.firstByKind(v, ContractViolationKind.MISSING_IMPORT).orElseThrow();
+        assertThat(miss.symbol()).isEqualTo("AltrixKafkaMessage");
+        // The repairer needs the existing sibling named so it can re-point.
+        assertThat(miss.message()).contains("AltrixPubsubMessage");
+    }
+
+    /** A type that DOES exist in the project (same package, no import) must not be flagged. */
+    @Test
+    void unresolvedTypeReference_quietWhenSamePackageTypeExists() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("src/main/java/p/AltrixPubsubMessage.java",
+                "package p;\npublic class AltrixPubsubMessage {}");
+        files.put("src/main/java/p/PubsubService.java",
+                "package p;\npublic interface PubsubService {\n"
+                        + "    void publish(String topic, AltrixPubsubMessage message);\n"
+                        + "}");
+        List<ContractViolation> v = validator.validate(files);
+        assertThat(validator.kinds(v)).doesNotContain(ContractViolationKind.MISSING_IMPORT);
+    }
+
+    /** An imported external type (Kafka) must never be flagged as unresolved. */
+    @Test
+    void unresolvedTypeReference_ignoresImportedExternalTypes() {
+        Map<String, String> files = Map.of(
+                "src/main/java/p/S.java",
+                "package p;\nimport org.apache.kafka.clients.producer.ProducerRecord;\n"
+                        + "public class S { ProducerRecord<String,String> r; }");
+        List<ContractViolation> v = validator.validate(files);
+        assertThat(validator.kinds(v)).doesNotContain(ContractViolationKind.MISSING_IMPORT);
+    }
+
     // ── File / class name mismatch ──────────────────────────────────────────
 
     /**

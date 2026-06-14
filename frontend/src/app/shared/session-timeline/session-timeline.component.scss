@@ -418,11 +418,20 @@
 // #1 — per-file RAG provenance panel: two-column layout, files on the
 // left, doc chunks on the right.  Lives inside the same .rag-manifest
 // shell as the indexed-files list so it inherits padding + border.
+//
+// CSS Grid gotcha: grid items default to `min-height: auto`, which means
+// they grow with their content and ignore parent height caps.  Without
+// `min-height: 0` on the children, the left file list and the right doc
+// list overflow the panel vertically and visually bleed into the next
+// timeline step below (Analyse / Plan / Migrate).  Setting `min-height: 0`
+// is what makes `overflow-y: auto` actually scroll.
 .provenance-layout {
   display: grid;
   grid-template-columns: minmax(140px, 35%) 1fr;
   gap: 10px;
   max-height: 320px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .provenance-files {
@@ -431,6 +440,8 @@
   padding: 0 6px 0 0;
   overflow-y: auto;
   border-right: 1px solid var(--border, #e5e5e5);
+  min-height: 0;       // ← break the grid-item min-height: auto default
+  max-height: 100%;    // ← keep it inside the .provenance-layout cap
 }
 
 .provenance-file {
@@ -473,6 +484,8 @@
 .provenance-docs {
   overflow-y: auto;
   min-width: 0;
+  min-height: 0;       // same grid-item fix — independent scrolling on the right
+  max-height: 100%;
 }
 
 .provenance-doc-list {

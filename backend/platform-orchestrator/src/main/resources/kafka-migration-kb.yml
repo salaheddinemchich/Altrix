@@ -1,0 +1,181 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Kafka Migration Knowledge Base
+#
+# Structured Pub/Sub → Kafka catalog.  Loaded via `spring.config.import` in
+# application.yml and bound to KafkaMigrationKnowledgeBase.
+#
+# Single source of truth for: what Kafka API replaces each Pub/Sub feature,
+# which symbols are forbidden (known hallucinations), and which Maven
+# dependency provides each Kafka class.
+#
+# Direction is strictly GCP Pub/Sub → Apache Kafka.  Extend `mappings` as
+# new features are catalogued; no recompile needed.
+# ──────────────────────────────────────────────────────────────────────────
+kafka-migration:
+
+  # Imports/symbols that are ALWAYS wrong in migrated output, regardless of
+  # feature.  Migrated from MigrationConfig.source.deniedImports.  Trailing
+  # ".*" is a package wildcard.
+  global-forbidden-imports:
+    - org.apache.kafka.clients.consumer.OffsetCommitResult        # invented; no such class
+    - org.apache.kafka.clients.consumer.ConsumerException         # invented; use RuntimeException / errors.*
+    - org.apache.kafka.common.errors.KafkaException               # wrong pkg; real one is org.apache.kafka.common.KafkaException
+    - org.apache.kafka.common.security.auth.permission.*          # invented package; use org.apache.kafka.common.acl.*
+    - jakarta.inject.Produces                                     # wrong CDI pkg; real one is jakarta.enterprise.inject.Produces
+    # GCP Pub/Sub REST + Google API client stack — removed on cutover to Kafka.
+    # NOTE: com.google.common.* (Guava) is deliberately NOT here — it's a
+    # legitimate utility dependency many projects keep post-migration.
+    - com.google.api.services.pubsub.*                            # Pub/Sub REST v1 client
+    - com.google.api.client.*                                     # Google HTTP/JSON transport (GoogleJsonResponseException, HttpStatusCodes, …)
+    - com.google.api.gax.*                                        # Google API extensions (retry/paging) — no Kafka equivalent
+    - com.google.cloud.pubsub.*                                   # Cloud Pub/Sub client library
+    - com.google.pubsub.*                                         # Pub/Sub v1 proto types
+
+  # FQN → Maven coordinate (group:artifact).  Lets the dependency validator
+  # detect "code references this class but the pom lacks the dependency".
+  # ".*" entries cover a whole package.
+  class-dependencies:
+    - class-fqn: org.apache.kafka.clients.producer.*
+      dependency: org.apache.kafka:kafka-clients
+    - class-fqn: org.apache.kafka.clients.consumer.*
+      dependency: org.apache.kafka:kafka-clients
+    - class-fqn: org.apache.kafka.clients.admin.*
+      dependency: org.apache.kafka:kafka-clients
+    - class-fqn: org.apache.kafka.common.*
+      dependency: org.apache.kafka:kafka-clients
+    - class-fqn: org.springframework.kafka.*
+      dependency: org.springframework.kafka:spring-kafka
+
+  # The feature catalog.  pubsub-feature ids match BlueprintFeature.id.
+  mappings:
+
+    - pubsub-feature: pubsub.publish-single
+      kafka-equivalent: "producer.send(new ProducerRecord<>(topic, key, value)).get()"
+      required-classes:
+        - org.apache.kafka.clients.producer.KafkaProducer
+        - org.apache.kafka.clients.producer.ProducerRecord
+      required-imports:
+        - org.apache.kafka.clients.producer.KafkaProducer
+        - org.apache.kafka.clients.producer.ProducerRecord
+      required-dependencies:
+        - org.apache.kafka:kafka-clients
+      forbidden-symbols:
+        - PublishRequest
+        - PublishResponse
+        - PubsubMessage
+      notes: >-
+        Pub/Sub publish becomes KafkaProducer.send(ProducerRecord). No request/response
+        wrapper types exist. Message attributes map to ProducerRecord headers; the body
+        becomes the record value (String with StringSerializer).
+
+    - pubsub-feature: pubsub.publish-batch
+      kafka-equivalent: "loop producer.send(record) then producer.flush()"
+      required-classes:
+        - org.apache.kafka.clients.producer.KafkaProducer
+        - org.apache.kafka.clients.producer.ProducerRecord
+      required-imports:
+        - org.apache.kafka.clients.producer.KafkaProducer
+        - org.apache.kafka.clients.producer.ProducerRecord
+      required-dependencies:
+        - org.apache.kafka:kafka-clients
+      forbidden-symbols:
+        - PublishRequest
+      notes: >-
+        Batch publish: iterate and send each record, then flush. Kafka batches
+        internally via linger.ms; no manual splitter like the Pub/Sub request size
+        limiter is needed.
+
+    - pubsub-feature: pubsub.pull
+      kafka-equivalent: "consumer.poll(Duration.ofSeconds(N))"
+      required-classes:
+        - org.apache.kafka.clients.consumer.KafkaConsumer
+        - org.apache.kafka.clients.consumer.ConsumerRecords
+        - org.apache.kafka.clients.consumer.ConsumerRecord
+      required-imports:
+        - org.apache.kafka.clients.consumer.KafkaConsumer
+        - org.apache.kafka.clients.consumer.ConsumerRecord
+        - org.apache.kafka.clients.consumer.ConsumerRecords
+        - java.time.Duration
+      required-dependencies:
+        - org.apache.kafka:kafka-clients
+      forbidden-symbols:
+        - PullRequest
+        - PullResponse
+        - ReceivedMessage
+      notes: >-
+        Pub/Sub pull becomes KafkaConsumer.poll(Duration) returning
+        ConsumerRecords<String,String>. ReceivedMessage becomes ConsumerRecord.
+        Remember to import java.time.Duration.
+
+    - pubsub-feature: pubsub.ack
+      kafka-equivalent: "consumer.commitSync()"
+      required-classes:
+        - org.apache.kafka.clients.consumer.KafkaConsumer
+        - org.apache.kafka.clients.consumer.OffsetAndMetadata
+      required-imports:
+        - org.apache.kafka.clients.consumer.KafkaConsumer
+      required-dependencies:
+        - org.apache.kafka:kafka-clients
+      forbidden-symbols:
+        - AcknowledgeRequest
+        - OffsetCommitResult
+      notes: >-
+        Kafka commits offsets, not per-message acks. Replace acknowledge(ackIds)
+        with consumer.commitSync() (or commitAsync(callback)). There is no
+        AcknowledgeRequest and no OffsetCommitResult type.
+
+    - pubsub-feature: pubsub.get-or-create-topic
+      kafka-equivalent: "adminClient.createTopics(List.of(new NewTopic(name, partitions, replicas)))"
+      required-classes:
+        - org.apache.kafka.clients.admin.AdminClient
+        - org.apache.kafka.clients.admin.NewTopic
+      required-imports:
+        - org.apache.kafka.clients.admin.AdminClient
+        - org.apache.kafka.clients.admin.NewTopic
+      required-dependencies:
+        - org.apache.kafka:kafka-clients
+      notes: >-
+        Topic provisioning uses AdminClient.createTopics. Catch TopicExistsException
+        for the get-or-create semantics. Or rely on auto.create.topics.enable.
+
+    - pubsub-feature: pubsub.subscription
+      kafka-equivalent: "consumer group via group.id; consumer.subscribe(List.of(topic))"
+      required-classes:
+        - org.apache.kafka.clients.consumer.KafkaConsumer
+      required-imports:
+        - org.apache.kafka.clients.consumer.KafkaConsumer
+      required-dependencies:
+        - org.apache.kafka:kafka-clients
+      forbidden-symbols:
+        - Subscription
+        - getOrCreateSubscription
+      notes: >-
+        Kafka subscriptions are consumer groups, declared client-side via the
+        group.id config property — there is no named Subscription resource on the
+        broker and no getOrCreateSubscription call.
+
+    - pubsub-feature: pubsub.ordering-key
+      kafka-equivalent: "ProducerRecord key (records with same key land on same partition)"
+      required-classes:
+        - org.apache.kafka.clients.producer.ProducerRecord
+      required-imports:
+        - org.apache.kafka.clients.producer.ProducerRecord
+      required-dependencies:
+        - org.apache.kafka:kafka-clients
+      notes: >-
+        Pub/Sub orderingKey becomes the Kafka record key. Same-key records go to
+        the same partition, preserving per-key ordering. No setOrderingKey method.
+
+    - pubsub-feature: pubsub.test-iam
+      kafka-equivalent: "// TODO altrix: no direct Kafka equivalent — use AdminClient ACLs or external IAM"
+      required-classes: []
+      required-imports: []
+      required-dependencies: []
+      forbidden-symbols:
+        - testIamPermissions
+        - AdminPermission
+      notes: >-
+        IAM permission testing has no clean Kafka equivalent. For ACLs use
+        org.apache.kafka.common.acl.AclBinding + AclOperation via AdminClient, or
+        leave the original method shape and add a // TODO altrix comment. Do NOT
+        invent placeholder types like AdminPermission.

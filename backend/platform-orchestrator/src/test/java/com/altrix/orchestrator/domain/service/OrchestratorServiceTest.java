@@ -55,7 +55,7 @@ class OrchestratorServiceTest {
         return new OrchestratorService(
                 workflowExecution, jobStatusUpdatePort, migratedFileStoragePort,
                 progressNotifierPort, codeIndexingPort, migrationPlanCachePort,
-                sessionRepository, ragIndexManifestRepository, 3);
+                sessionRepository, ragIndexManifestRepository, 3, null);
     }
 
     // ── happy path ────────────────────────────────────────────────────────────

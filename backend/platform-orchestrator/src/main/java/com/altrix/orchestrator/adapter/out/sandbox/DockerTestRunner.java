@@ -165,8 +165,11 @@ public class DockerTestRunner implements SandboxRunnerPort {
         try {
             workspace = stageWorkspace(artifact);
             containerId = createContainer(workspace);
-            String logs = runAndCollect(containerId);
+            // Wait for completion FIRST, then read the full buffered log — a
+            // follow-stream attached at start races a short-lived container
+            // and can capture nothing (empty sandbox logs).
             int exitCode = waitForExit(containerId);
+            String logs = collectLogs(containerId);
             // #105 — persist captured output for post-run review.
             String sessionId = SandboxContext.currentSessionId();
             if (sessionId != null && sandboxLogRepository != null) {
@@ -235,13 +238,16 @@ public class DockerTestRunner implements SandboxRunnerPort {
         return created.getId();
     }
 
-    private String runAndCollect(String containerId) throws InterruptedException {
+    /** Reads the full buffered log AFTER the container has exited (no follow-stream race). */
+    private String collectLogs(String containerId) throws InterruptedException {
         StringBuilder sb = new StringBuilder();
         client.logContainerCmd(containerId)
                 .withStdOut(true).withStdErr(true)
-                .withFollowStream(true).withTailAll()
+                .withTailAll()
                 .exec(new LogContainerResultCallback() {
-                    @Override public void onNext(Frame frame) { sb.append(new String(frame.getPayload())); }
+                    @Override public void onNext(Frame frame) {
+                        sb.append(new String(frame.getPayload(), java.nio.charset.StandardCharsets.UTF_8));
+                    }
                 })
                 .awaitCompletion(config.timeout().toMillis(), TimeUnit.MILLISECONDS);
         return sb.toString();

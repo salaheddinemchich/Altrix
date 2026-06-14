@@ -29,7 +29,8 @@ import java.util.concurrent.Executor;
 @EnableConfigurationProperties({AiProvidersConfig.class, AiRoutingConfig.class, AiPricingConfig.class,
         EncryptionConfig.class, McpConfig.class, ApprovalConfig.class, AutoPauseConfig.class,
         ApprovalNotificationConfig.class, JwtConfig.class, RateLimitConfig.class, CacheConfig.class,
-        SandboxDockerConfig.class, MigrationConfig.class, MigrationApplyConfig.class})
+        SandboxDockerConfig.class, MigrationConfig.class, MigrationApplyConfig.class,
+        DocumentationCorpusConfig.class, KafkaMigrationKnowledgeBase.class})
 public class BeanConfig {
 
     @Bean
@@ -37,6 +38,7 @@ public class BeanConfig {
             @Qualifier("contextAnalyzerAgent") MigrationAgent<ProjectContext, AnalysisReport> contextAnalyzer,
             @Qualifier("migrationPlannerAgent") MigrationAgent<AnalysisReport, MigrationPlan> planner,
             @Qualifier("typedCoreMigratorAgent") MigrationAgent<ApprovedPlan, MigrationArtifact> migrator,
+            @Qualifier("semanticValidatorAgent") MigrationAgent<MigrationArtifact, MigrationArtifact> semanticValidator,
             @Qualifier("sandboxValidatorAgent") MigrationAgent<MigrationArtifact, ValidationReport> validator,
             @Qualifier("reportGeneratorAgent") MigrationAgent<WorkflowOutcome, MigrationReport> reporter,
             ProgressNotifierPort progressNotifier,
@@ -45,7 +47,7 @@ public class BeanConfig {
             @Value("${workflow.require-approval.enabled:true}") boolean requireApproval
     ) {
         return new MigrationWorkflowGraph(
-                contextAnalyzer, planner, migrator, validator, reporter,
+                contextAnalyzer, planner, migrator, semanticValidator, validator, reporter,
                 progressNotifier, checkpointSaver, retryContextBuilder, requireApproval);
     }
 
@@ -59,7 +61,9 @@ public class BeanConfig {
             MigrationPlanCachePort migrationPlanCachePort,
             WorkflowSessionRepository workflowSessionRepository,
             com.altrix.orchestrator.domain.port.out.RagIndexManifestRepository ragIndexManifestRepository,
-            AutoPauseConfig autoPauseConfig
+            AutoPauseConfig autoPauseConfig,
+            @Qualifier("projectMapperAgent")
+            MigrationAgent<ProjectContext, com.altrix.orchestrator.domain.model.blueprint.ProjectBlueprint> projectMapper
     ) {
         return new OrchestratorService(
                 workflowExecution,
@@ -70,16 +74,19 @@ public class BeanConfig {
                 migrationPlanCachePort,
                 workflowSessionRepository,
                 ragIndexManifestRepository,
-                autoPauseConfig.threshold()
+                autoPauseConfig.threshold(),
+                projectMapper
         );
     }
 
     @Bean
     public DocumentationIngestionService documentationIngestionService(
             EmbeddingStorePort embeddingStore,
-            DocumentationFetchPort docFetch
+            DocumentationFetchPort docFetch,
+            com.altrix.orchestrator.infrastructure.rag.DomainAllowListValidator allowList,
+            DocumentationCorpusConfig corpus
     ) {
-        return new DocumentationIngestionService(embeddingStore, docFetch);
+        return new DocumentationIngestionService(embeddingStore, docFetch, allowList, corpus);
     }
 
     @Bean
@@ -134,6 +141,7 @@ public class BeanConfig {
     public ResumeMigrationUseCase resumeMigrationService(
             WorkflowSessionRepository workflowSessionRepository,
             @Qualifier("typedCoreMigratorAgent") MigrationAgent<ApprovedPlan, MigrationArtifact> migrator,
+            @Qualifier("semanticValidatorAgent") MigrationAgent<MigrationArtifact, MigrationArtifact> semanticValidator,
             @Qualifier("sandboxValidatorAgent") MigrationAgent<MigrationArtifact, ValidationReport> validator,
             @Qualifier("reportGeneratorAgent") MigrationAgent<WorkflowOutcome, MigrationReport> reporter,
             MigratedFileStoragePort migratedFileStoragePort,
@@ -147,7 +155,7 @@ public class BeanConfig {
     ) {
         return new ResumeMigrationService(
                 workflowSessionRepository,
-                migrator, validator, reporter,
+                migrator, semanticValidator, validator, reporter,
                 migratedFileStoragePort, jobStatusUpdatePort, progressNotifierPort,
                 migrationReportRepository,
                 maxValidationRetries);

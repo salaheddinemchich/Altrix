@@ -110,6 +110,31 @@ public class PgVectorEmbeddingStoreAdapter implements EmbeddingStorePort {
         return count != null && count > 0;
     }
 
+    @Override
+    public int deleteDocumentationNotIn(java.util.Collection<String> keepLogicalPaths) {
+        // Defensive: never wipe the corpus on a misconfiguration.  An empty
+        // or null "keep" set means "we have no idea what to keep" — better
+        // to leave the table alone than to delete everything.
+        if (keepLogicalPaths == null || keepLogicalPaths.isEmpty()) {
+            log.warn("deleteDocumentationNotIn called with empty keep-set — skipping (would have wiped corpus)");
+            return 0;
+        }
+        // Pass the keep-set as a varchar[] so we can use the array NOT IN
+        // (= ALL) form regardless of size.  PostgreSQL-specific but
+        // pgvector already pins us to PG, so this is fine.
+        String[] keep = keepLogicalPaths.toArray(new String[0]);
+        int deleted = jdbc.update(
+                "DELETE FROM code_embeddings "
+                        + "WHERE document_type = 'DOCUMENTATION' "
+                        + "  AND project_id IS NULL "
+                        + "  AND file_path <> ALL (?)",
+                (Object) keep);
+        if (deleted > 0) {
+            log.info("Pruned {} stale DOCUMENTATION row(s) no longer in the configured corpus", deleted);
+        }
+        return deleted;
+    }
+
     private boolean chunkExists(DocumentChunk chunk) {
         if (chunk.projectId() == null) return false;
         Integer count = jdbc.queryForObject(

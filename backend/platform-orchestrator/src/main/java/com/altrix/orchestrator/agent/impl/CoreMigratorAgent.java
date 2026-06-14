@@ -9,6 +9,9 @@ import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.model.PrunedContext;
+import com.altrix.orchestrator.domain.model.blueprint.BlueprintFile;
+import com.altrix.orchestrator.domain.model.blueprint.ProjectBlueprint;
+import com.altrix.orchestrator.domain.port.out.ProjectBlueprintPort;
 import com.altrix.orchestrator.domain.model.rag.FileProvenance;
 import com.altrix.orchestrator.domain.model.rag.FileProvenance.DocReference;
 import com.altrix.orchestrator.domain.model.sandbox.SandboxContext;
@@ -384,6 +387,16 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      *  using the validator's pre-computed Kafka replacement suggestions
      *  to constrain the model's design freedom to zero. */
     private final PubSubLeakRepairer pubSubLeakRepairer;
+    /** Read-side access to the project-wide semantic map produced by the
+     *  ProjectMapper phase.  Optional: when no blueprint exists for the
+     *  session (mapper disabled, parse failed, or unit tests), every lookup
+     *  returns empty and the migrator falls back to its file-by-file
+     *  behaviour — the blueprint only ever ENRICHES the per-file prompt. */
+    private final ProjectBlueprintPort projectBlueprintPort;
+    /** Groups coupled files (interface + implementors) so they can be migrated
+     *  in one LLM call — keeping the shared contract consistent by construction
+     *  instead of letting independent per-file rewrites diverge. */
+    private final com.altrix.orchestrator.infrastructure.migration.MigrationClusterPlanner clusterPlanner;
 
     /** How many doc chunks to retrieve per file.  Small on purpose so the
      *  prompt doesn't balloon; the AI gets enough to anchor on without
@@ -444,7 +457,15 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // it concurrently when MAX_CONCURRENT_FILE_MIGRATIONS > 1.
             Map<String, List<DocReference>> perFileProvenance =
                     java.util.Collections.synchronizedMap(new LinkedHashMap<>());
-            List<MigratedFile> migrated = migrateFiles(pruned.files(), effectiveSystemPrompt, perFileProvenance, isJakarta);
+            // Resolve the project blueprint ONCE here, on the calling thread,
+            // where the SandboxContext sessionId ThreadLocal is still valid.
+            // The per-file workers run on a pool thread that can't see the
+            // ThreadLocal, so we pass the resolved (immutable) blueprint down
+            // rather than re-reading the context inside each worker.  Null when
+            // no blueprint exists → migrator falls back to file-by-file.
+            ProjectBlueprint blueprint = resolveBlueprint();
+            List<MigratedFile> migrated = migrateFiles(pruned.files(), effectiveSystemPrompt,
+                    perFileProvenance, isJakarta, blueprint);
 
             // Include unchanged versions of files excluded by the pruner
             List<MigratedFile> result = new ArrayList<>(migrated);
@@ -513,7 +534,7 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      */
     private List<MigratedFile> migrateFiles(Map<String, String> sourceFiles, String systemPrompt,
                                             Map<String, List<DocReference>> perFileProvenance,
-                                            boolean isJakarta) {
+                                            boolean isJakarta, ProjectBlueprint blueprint) {
         // Pre-classify: files that don't need an AI call drop straight into
         // the result list as UNCHANGED.  Only the genuine migration targets
         // are submitted to the executor — saves us from spinning up threads
@@ -532,7 +553,39 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             }
         }
 
-        if (toMigrate.isEmpty()) return new ArrayList<>(straightThrough);
+        // ── Cluster-coherent migration ───────────────────────────────────
+        // Coupled files (an interface + its implementors) are rewritten in a
+        // single LLM call so the shared contract stays consistent, instead of
+        // diverging across independent per-file rewrites.  Best-effort: a
+        // cluster that fails or returns malformed output falls back to the
+        // per-file path below.  Cluster results join the result set; the
+        // artifact-level contract/leak passes still run on the merged output.
+        List<MigratedFile> clusterResults = new ArrayList<>();
+        if (blueprint != null && !toMigrate.isEmpty()) {
+            java.util.Set<String> migratable = new java.util.HashSet<>();
+            for (Map.Entry<String, String> e : toMigrate) migratable.add(e.getKey());
+            java.util.Set<String> handled = new java.util.HashSet<>();
+            for (List<String> cluster : clusterPlanner.plan(blueprint)) {
+                if (cluster.size() < 2 || !migratable.containsAll(cluster)
+                        || cluster.stream().anyMatch(handled::contains)) {
+                    continue;
+                }
+                List<MigratedFile> res = migrateCluster(cluster, sourceFiles, systemPrompt, isJakarta, blueprint);
+                if (res != null) {
+                    clusterResults.addAll(res);
+                    handled.addAll(cluster);
+                    log.info("[{}] migrated cluster of {} file(s) coherently: {}",
+                            getName(), cluster.size(), cluster);
+                }
+            }
+            toMigrate.removeIf(e -> handled.contains(e.getKey()));
+        }
+
+        if (toMigrate.isEmpty()) {
+            List<MigratedFile> only = new ArrayList<>(straightThrough);
+            only.addAll(clusterResults);
+            return only;
+        }
 
         int poolSize = Math.min(MAX_CONCURRENT_FILE_MIGRATIONS, toMigrate.size());
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(
@@ -547,10 +600,11 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         try {
             for (Map.Entry<String, String> entry : toMigrate) {
                 futures.add(pool.submit(() ->
-                        migrateOneFile(entry.getKey(), entry.getValue(), systemPrompt, perFileProvenance, isJakarta)));
+                        migrateOneFile(entry.getKey(), entry.getValue(), systemPrompt, perFileProvenance, isJakarta, blueprint)));
             }
 
             List<MigratedFile> result = new ArrayList<>(straightThrough);
+            result.addAll(clusterResults);
             for (java.util.concurrent.Future<MigratedFile> f : futures) {
                 try {
                     result.add(f.get());
@@ -568,6 +622,83 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         }
     }
 
+    /** Appended to the system prompt for a cluster call — enforces one consistent contract. */
+    private static final String CLUSTER_RULES = """
+
+            MULTI-FILE CONTRACT RULES — these files share ONE contract and are migrated together:
+            * The `=== FILE: <path> ===` lines are FILE PATHS, not packages.  Preserve each
+              file's ORIGINAL `package` declaration EXACTLY (dotted, e.g. `package com.example.altrix.pubsub.tasks;`).
+              NEVER derive the package from the path or use '/' in a package statement.
+            * Treat the interface (or abstract base) as the single source of truth.  Every
+              implementation MUST match it EXACTLY: identical method names, parameter types,
+              parameter order, and return types.  If you change a signature, change it in the
+              interface AND every implementation in the same way.
+            * Keep shared type names and shared constant names identical across all files
+              (if one file calls a constant ORDERS_CREATED, every file uses ORDERS_CREATED).
+            * Every constructor call must match the migrated constructor's parameter list.
+            * Output format: return EVERY input file, each one preceded by a line of the EXACT
+              form `=== FILE: <path> ===` (same path you were given), followed by the complete
+              file content.  No commentary before, between, or after the files.
+            """;
+
+    /**
+     * Migrate a cluster of coupled files (interface + implementors) in a SINGLE
+     * LLM call so their shared contract is consistent by construction.  Returns
+     * one {@link MigratedFile} per input path, or {@code null} to signal the
+     * caller should fall back to per-file migration (AI failure / malformed or
+     * incomplete response).  Runs on the calling thread (clusters are few).
+     */
+    private List<MigratedFile> migrateCluster(List<String> paths, Map<String, String> sourceFiles,
+                                              String systemPrompt, boolean isJakarta,
+                                              ProjectBlueprint blueprint) {
+        StringBuilder user = new StringBuilder();
+        user.append("Migrate the following ").append(paths.size())
+            .append(" RELATED files TOGETHER as one coherent unit. They share a contract")
+            .append(" (an interface / abstract base and its implementors). Keep that contract")
+            .append(" identical across every file.\n\n");
+        for (String p : paths) {
+            user.append("=== FILE: ").append(p).append(" ===\n")
+                .append(sourceFiles.get(p)).append("\n\n");
+        }
+        try {
+            String raw = aiPort.chat(systemPrompt + CLUSTER_RULES, user.toString());
+            Map<String, String> migrated =
+                    com.altrix.orchestrator.infrastructure.migration.MigrationClusterPlanner.parseResponse(raw);
+            if (migrated.isEmpty()) {
+                log.warn("[{}] cluster response had no parseable files — falling back to per-file", getName());
+                return null;
+            }
+            List<MigratedFile> out = new ArrayList<>(paths.size());
+            for (String p : paths) {
+                String content = sourceFiles.get(p);
+                String m = migrated.get(p);
+                if (m == null || m.isBlank()) {
+                    out.add(unchanged(p, content, "Cluster migration: file missing from response"));
+                    continue;
+                }
+                m = stripLeadingProse(stripMarkdownFences(m), p);
+                if (isPom(p) && pomSanitizer != null) {
+                    m = pomSanitizer.stripHallucinatedDependencies(content, m);
+                }
+                if (looksTruncated(m, content)) {
+                    out.add(unchanged(p, content, "Cluster migration: output truncated"));
+                    continue;
+                }
+                FileChangeType changeType = m.equals(content) ? FileChangeType.UNCHANGED : FileChangeType.MODIFIED;
+                out.add(MigratedFile.builder()
+                        .originalPath(p).newPath(p).content(m)
+                        .changeType(changeType)
+                        .diffSummary("Migrated Pub/Sub → Kafka (cluster-coherent)")
+                        .build());
+            }
+            return out;
+        } catch (Exception e) {
+            log.warn("[{}] cluster migration failed for {} ({}) — falling back to per-file",
+                    getName(), paths, e.getMessage());
+            return null;
+        }
+    }
+
     /**
      * Migrate a single file.  Runs on a worker thread — must be reentrant
      * and not depend on caller-thread state.  Provenance map is shared but
@@ -576,13 +707,18 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      */
     private MigratedFile migrateOneFile(String path, String content, String systemPrompt,
                                         Map<String, List<DocReference>> perFileProvenance,
-                                        boolean isJakarta) {
+                                        boolean isJakarta, ProjectBlueprint blueprint) {
         // #1 — pull the most-relevant doc chunks for this file BEFORE the
         // cache check so the prompt is RAG-augmented on every call.
         // Including chunk-content hashes in the cache key means a doc
         // update invalidates the cache automatically.
         List<DocumentChunk> ragChunks = retrieveDocs(content, isJakarta);
         String ragSection = buildRagSection(ragChunks);
+        // Project-wide understanding for THIS file (role, neighbours,
+        // detected features → Kafka targets).  Empty string when no
+        // blueprint slice exists — the migrator then behaves exactly as
+        // before.
+        String blueprintSection = buildBlueprintSection(path, blueprint);
         // Record provenance per file regardless of cache outcome — the
         // user wants to see which docs informed THIS file's migration,
         // even when the rewrite came from cache.  Persisting after EACH
@@ -599,7 +735,7 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         // #28 — content-addressed cache.  Key includes the system prompt so
         // a prompt tweak forces a fresh AI call.  Cuts iterative-dev cost to
         // zero when nothing in the source changed.
-        String cacheKey = computeCacheKey(systemPrompt + ragSection, path, content);
+        String cacheKey = computeCacheKey(systemPrompt + ragSection + blueprintSection, path, content);
         Optional<String> cached = migrationCache.get(cacheKey);
         if (cached.isPresent()) {
             String migrated = cached.get();
@@ -612,7 +748,7 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         }
 
         try {
-            String userMessage = "File: " + path + "\n\n" + content + ragSection;
+            String userMessage = "File: " + path + "\n\n" + content + ragSection + blueprintSection;
             String raw = aiPort.chat(systemPrompt, userMessage);
             String migrated = stripLeadingProse(stripMarkdownFences(raw), path);
 
@@ -978,6 +1114,102 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
               .append('\n');
         }
         return sb.toString();
+    }
+
+    /**
+     * Resolves the {@link ProjectBlueprint} for the current workflow
+     * session, or null when none is available.  MUST be called on the
+     * thread that holds the {@link SandboxContext} sessionId (the migrator's
+     * calling thread) — the per-file workers run on a pool that can't see
+     * the ThreadLocal, so {@link #execute} resolves once here and passes the
+     * result down.  Null-safe + never throws: a missing context / row /
+     * port just means file-by-file fallback.
+     */
+    private ProjectBlueprint resolveBlueprint() {
+        if (projectBlueprintPort == null) return null;
+        String sessionId = SandboxContext.currentSessionId();
+        if (sessionId == null || sessionId.isBlank()) return null;
+        try {
+            WorkflowSessionId id = new WorkflowSessionId(UUID.fromString(sessionId));
+            ProjectBlueprint bp = projectBlueprintPort.findForSession(id).orElse(null);
+            if (bp != null) {
+                log.info("[{}] project blueprint loaded for session '{}' — {} file slice(s)",
+                        getName(), sessionId, bp.files().size());
+            }
+            return bp;
+        } catch (Exception e) {
+            log.debug("[{}] no project blueprint for session '{}' ({}): {}",
+                    getName(), sessionId, e.getClass().getSimpleName(), e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Builds the "PROJECT MAP (this file)" prompt section from the
+     * {@code blueprint} slice for {@code path}, or "" when no blueprint /
+     * slice is available.  Gives the per-file LLM call the project-wide
+     * understanding the ProjectMapper phase computed — the file's role, its
+     * type-graph neighbours, and each detected Pub/Sub feature mapped to its
+     * concrete Kafka target.
+     *
+     * <p>Pure + null-safe: takes the already-resolved blueprint (so it's
+     * safe to call from a worker thread) and returns "" on any miss, so the
+     * migrator behaves exactly as it did before the blueprint existed.
+     * Never throws.
+     */
+    private String buildBlueprintSection(String path, ProjectBlueprint blueprint) {
+        if (blueprint == null || path == null) return "";
+        try {
+            Optional<BlueprintFile> sliceOpt = blueprint.fileSlice(path);
+            if (sliceOpt.isEmpty()) return "";
+            var slice = sliceOpt.get();
+
+            StringBuilder sb = new StringBuilder(
+                    "\n\n--- PROJECT MAP (this file — derived from a project-wide semantic analysis) ---\n");
+            if (slice.role() != null && !slice.role().isBlank()) {
+                sb.append("Role: ").append(slice.role()).append('\n');
+            }
+            var rel = slice.relationships();
+            if (rel != null) {
+                if (rel.extendsType() != null && !rel.extendsType().isBlank()) {
+                    sb.append("Extends: ").append(rel.extendsType()).append('\n');
+                }
+                if (!rel.implementsTypes().isEmpty()) {
+                    sb.append("Implements: ").append(String.join(", ", rel.implementsTypes())).append('\n');
+                }
+                if (!rel.dependsOn().isEmpty()) {
+                    sb.append("Depends on (project types — keep these names stable): ")
+                      .append(String.join(", ", rel.dependsOn())).append('\n');
+                }
+                if (!rel.calledBy().isEmpty()) {
+                    sb.append("Called by (renaming this class breaks them): ")
+                      .append(String.join(", ", rel.calledBy())).append('\n');
+                }
+            }
+            if (!slice.features().isEmpty()) {
+                sb.append("Detected Pub/Sub features → Kafka target:\n");
+                for (var f : slice.features()) {
+                    sb.append("  - ").append(f.id());
+                    if (f.description() != null && !f.description().isBlank()) {
+                        sb.append(" (").append(f.description()).append(')');
+                    }
+                    if (f.kafkaTarget() != null && !f.kafkaTarget().isBlank()) {
+                        sb.append(" → ").append(f.kafkaTarget());
+                    } else {
+                        sb.append(" → no clean Kafka equivalent; leave in place with a // TODO altrix: note");
+                    }
+                    sb.append('\n');
+                }
+            }
+            if (slice.migrationNotes() != null && !slice.migrationNotes().isBlank()) {
+                sb.append("Migration notes: ").append(slice.migrationNotes()).append('\n');
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.debug("[{}] no blueprint slice for '{}' ({}): {}",
+                    getName(), path, e.getClass().getSimpleName(), e.getMessage());
+            return "";
+        }
     }
 
     /** Map domain chunks to lightweight UI-facing references. */

@@ -26,4 +26,20 @@ public interface EmbeddingStorePort {
      * Returns true if documentation chunks for the given logicalPath already exist.
      */
     boolean documentationExists(String logicalPath);
+
+    /**
+     * Removes every DOCUMENTATION-type row whose {@code file_path} is NOT in
+     * {@code keepLogicalPaths}.  Used by the documentation-ingestion startup
+     * hook to drop pages that have been removed from the corpus YAML —
+     * otherwise stale embeddings (e.g. the removed
+     * {@code migration/kafka-to-pubsub} page) would keep surfacing in
+     * similarity search.
+     *
+     * <p>Implementations must be a no-op when {@code keepLogicalPaths} is
+     * null or empty (defensive — never wipe the entire DOCUMENTATION corpus
+     * on a misconfiguration).
+     *
+     * @return the number of rows deleted.
+     */
+    int deleteDocumentationNotIn(java.util.Collection<String> keepLogicalPaths);
 }

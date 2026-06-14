@@ -28,6 +28,16 @@ public enum ContractViolationKind {
     MISSING_INTERFACE_METHOD,
 
     /**
+     * A class implements an interface method by NAME but with different
+     * parameter/return types than the interface declares — "contract drift".
+     * The migrator transformed the same API differently in the interface and
+     * the implementation (e.g. {@code publish(String,…)} vs
+     * {@code publish(PubsubTopic,…)}).  The interface is authoritative; the
+     * implementation must conform.
+     */
+    INTERFACE_SIGNATURE_MISMATCH,
+
+    /**
      * Call site invokes a method on an intra-project type but no method
      * of that name exists on the receiver.  Catches "caller still uses
      * the old method name after the interface changed".

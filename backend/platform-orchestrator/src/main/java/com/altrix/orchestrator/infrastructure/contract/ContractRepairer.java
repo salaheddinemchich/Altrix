@@ -154,11 +154,41 @@ public class ContractRepairer {
                     implementation: signature matches the interface, body either
                     delegates sensibly or throws UnsupportedOperationException with
                     a comment explaining the migration TODO.
+                  * If a violation says "does not match the interface contract.
+                    Required EXACT signature: ..." — the interface is the CONTRACT.
+                    Rewrite THIS method's parameter and return types to match the
+                    required signature EXACTLY (character for character), and adjust
+                    the body to the new types (e.g. if a `PubsubTopic topic` param
+                    became `String topic`, use the String directly instead of
+                    `topic.getName()`). Do NOT change the interface, do NOT add an
+                    overload — change the existing method in place so it overrides.
                   * If a violation says "file/class mismatch" — rename the public
                     type back to match the filename.  The filename cannot change.
                   * If a violation says "imported but no type" — drop the bogus
                     import (the model invented it) and leave the rest of the file
                     intact.
+                  * If a violation says "referenced but is not imported and is not
+                    declared anywhere" — first try a rename: re-point EVERY use of
+                    the dangling name in this file to the correct existing type from
+                    the suggested list when one is a clear match (e.g.
+                    AltrixKafkaMessage -> AltrixPubsubMessage). Do NOT invent a new
+                    class and do NOT add an import for a type that does not exist.
+                    If NO listed type is a sensible match, the name is an obsolete
+                    SOURCE-PLATFORM concept with no target equivalent (e.g. a Pub/Sub
+                    `Subscription` or `Topic` management type). In that case replace
+                    its uses with `Object` (or remove the member entirely) — be
+                    CONSISTENT with how sibling no-equivalent methods in the same file
+                    were already handled (if `getOrCreateTopic` returns `Object`, make
+                    `getOrCreateSubscription` return `Object` too). Apply the exact
+                    same change to the interface AND its implementation so they stay
+                    in sync. This `-> Object` rule applies ONLY to return/parameter/field
+                    types — NEVER to an `implements`/`extends` clause. `implements Object`
+                    is a compile error; if an implemented interface is obsolete, drop the
+                    `implements` clause entirely, do not replace it with Object.
+                  * If a violation says "used but not imported; it is declared in
+                    package X" — add EXACTLY the import line it names (e.g.
+                    `import com.example.altrix.pubsub.RetryTask;`) and change nothing
+                    else. Do not move, rename, or redefine the type.
                   * If a violation says "constructor arity" — fix the new-expression
                     arguments OR add a constructor overload of that arity.  Do
                     not change the existing constructor signature.

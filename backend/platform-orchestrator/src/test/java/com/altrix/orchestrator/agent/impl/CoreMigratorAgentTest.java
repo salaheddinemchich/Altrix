@@ -55,6 +55,10 @@ class CoreMigratorAgentTest {
     com.altrix.orchestrator.infrastructure.leak.PubSubLeakValidator pubSubLeakValidator;
     @Mock
     com.altrix.orchestrator.infrastructure.leak.PubSubLeakRepairer pubSubLeakRepairer;
+    @Mock
+    com.altrix.orchestrator.domain.port.out.ProjectBlueprintPort projectBlueprintPort;
+    @Mock
+    com.altrix.orchestrator.infrastructure.migration.MigrationClusterPlanner clusterPlanner;
     @InjectMocks
     CoreMigratorAgent agent;
 

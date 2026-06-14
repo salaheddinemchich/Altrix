@@ -66,6 +66,7 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
     static final String NODE_CONTEXT_ANALYZER = "context-analyzer";
     static final String NODE_MIGRATION_PLANNER = "migration-planner";
     static final String NODE_CORE_MIGRATOR = "core-migrator";
+    static final String NODE_SEMANTIC_VALIDATOR = "semantic-validator";
     static final String NODE_SANDBOX_VALIDATOR = "sandbox-validator";
     static final String NODE_REPORT_GENERATOR = "report-generator";
 
@@ -74,6 +75,8 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
     private final MigrationAgent<ProjectContext, AnalysisReport> contextAnalyzer;
     private final MigrationAgent<AnalysisReport, MigrationPlan> planner;
     private final MigrationAgent<ApprovedPlan, MigrationArtifact> migrator;
+    /** Verifies the artifact semantically between migrator and sandbox. */
+    private final MigrationAgent<MigrationArtifact, MigrationArtifact> semanticValidator;
     private final MigrationAgent<MigrationArtifact, ValidationReport> validator;
     private final MigrationAgent<WorkflowOutcome, MigrationReport> reporter;
     private final ProgressNotifierPort progressNotifier;
@@ -133,6 +136,7 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
             graph.addNode(NODE_CONTEXT_ANALYZER, nodeAction(this::runContextAnalyzer))
                     .addNode(NODE_MIGRATION_PLANNER, nodeAction(this::runMigrationPlanner))
                     .addNode(NODE_CORE_MIGRATOR, nodeAction(this::runCoreMigrator))
+                    .addNode(NODE_SEMANTIC_VALIDATOR, nodeAction(this::runSemanticValidator))
                     .addNode(NODE_SANDBOX_VALIDATOR, nodeAction(this::runSandboxValidator))
                     .addNode(NODE_REPORT_GENERATOR, nodeAction(this::runReportGenerator));
 
@@ -145,11 +149,15 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
                             NODE_MIGRATION_PLANNER,
                             edgeAction(this::routeAfterPlanning),
                             Map.of(NODE_CORE_MIGRATOR, NODE_CORE_MIGRATOR, END, END))
+                    // Migrator routes to the SEMANTIC validator (not sandbox)
+                    // on success; still retries itself on an empty artifact.
                     .addConditionalEdges(
                             NODE_CORE_MIGRATOR,
                             edgeAction(this::routeAfterMigration),
                             Map.of(NODE_CORE_MIGRATOR, NODE_CORE_MIGRATOR,
-                                    NODE_SANDBOX_VALIDATOR, NODE_SANDBOX_VALIDATOR))
+                                    NODE_SEMANTIC_VALIDATOR, NODE_SEMANTIC_VALIDATOR))
+                    // Semantic validator always feeds the sandbox compile next.
+                    .addEdge(NODE_SEMANTIC_VALIDATOR, NODE_SANDBOX_VALIDATOR)
                     .addConditionalEdges(
                             NODE_SANDBOX_VALIDATOR,
                             edgeAction(this::routeAfterValidation),
@@ -245,6 +253,22 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
         }
     }
 
+    private Map<String, Object> runSemanticValidator(MigrationState state) {
+        ProjectContext ctx = requireContext(state, NODE_SEMANTIC_VALIDATOR);
+        MigrationArtifact artifact = state.migrationArtifact()
+                .orElseThrow(() -> new AgentFailureException(NODE_SEMANTIC_VALIDATOR,
+                        "MigrationArtifact missing from state"));
+
+        notifyRunning(ctx.jobId(), "Semantic Validator");
+        // Stage 3: report-only — returns the artifact unchanged.  Later
+        // stages return a repaired artifact, which is why we write it back
+        // into MIGRATION_ARTIFACT so the sandbox sees the latest version.
+        MigrationArtifact validated = semanticValidator.execute(artifact);
+        notifyDone(ctx.jobId(), "Semantic Validator");
+
+        return Map.of(MIGRATION_ARTIFACT, validated);
+    }
+
     private Map<String, Object> runSandboxValidator(MigrationState state) {
         ProjectContext ctx = requireContext(state, NODE_SANDBOX_VALIDATOR);
         MigrationArtifact artifact = state.migrationArtifact()
@@ -308,7 +332,10 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
                 .map(a -> a.files().isEmpty())
                 .orElse(true);
         boolean canRetry = state.retryCount() < MAX_RETRIES;
-        return (artifactEmpty && canRetry) ? NODE_CORE_MIGRATOR : NODE_SANDBOX_VALIDATOR;
+        // On a non-empty artifact, route through the semantic validator
+        // (which then unconditionally feeds the sandbox); retry the
+        // migrator only when the artifact came back empty.
+        return (artifactEmpty && canRetry) ? NODE_CORE_MIGRATOR : NODE_SEMANTIC_VALIDATOR;
     }
 
     /**

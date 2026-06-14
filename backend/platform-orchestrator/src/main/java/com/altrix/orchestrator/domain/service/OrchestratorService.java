@@ -4,8 +4,11 @@ import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.domain.model.ProjectContext;
+import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
+import com.altrix.orchestrator.domain.model.blueprint.ProjectBlueprint;
+import com.altrix.orchestrator.domain.model.sandbox.SandboxContext;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.workflow.MigrationState;
 import com.altrix.orchestrator.domain.port.in.RunPipelineUseCase;
@@ -41,6 +44,13 @@ public class OrchestratorService implements RunPipelineUseCase {
     private final WorkflowSessionRepository sessionRepository;
     private final RagIndexManifestRepository ragIndexManifestRepository;
     private final int autoPauseThreshold;
+    /**
+     * Project Mapper (#blueprint) — builds the project-wide semantic map in
+     * Phase 0.  Nullable so the pipeline degrades gracefully when the
+     * blueprint subsystem is absent (e.g. in unit tests); a null mapper just
+     * means agents fall back to file-by-file migration.
+     */
+    private final MigrationAgent<ProjectContext, ProjectBlueprint> projectMapper;
 
     public OrchestratorService(
             WorkflowExecutionPort workflowExecution,
@@ -51,7 +61,8 @@ public class OrchestratorService implements RunPipelineUseCase {
             MigrationPlanCachePort planCachePort,
             WorkflowSessionRepository sessionRepository,
             RagIndexManifestRepository ragIndexManifestRepository,
-            int autoPauseThreshold
+            int autoPauseThreshold,
+            MigrationAgent<ProjectContext, ProjectBlueprint> projectMapper
     ) {
         this.workflowExecution = workflowExecution;
         this.jobStatusUpdatePort = jobStatusUpdatePort;
@@ -62,8 +73,9 @@ public class OrchestratorService implements RunPipelineUseCase {
         this.sessionRepository = sessionRepository;
         this.ragIndexManifestRepository = ragIndexManifestRepository;
         this.autoPauseThreshold = autoPauseThreshold;
-        log.info("OrchestratorService initialised — typed LangGraph4j workflow (auto-pause threshold={})",
-                autoPauseThreshold);
+        this.projectMapper = projectMapper;
+        log.info("OrchestratorService initialised — typed LangGraph4j workflow (auto-pause threshold={}, projectMapper={})",
+                autoPauseThreshold, projectMapper != null ? "enabled" : "disabled");
     }
 
     @Override
@@ -77,6 +89,15 @@ public class OrchestratorService implements RunPipelineUseCase {
                 .orElseGet(() -> WorkflowSession.create(jobId, initial.projectId()));
         session = sessionRepository.save(session);
 
+        // Make the session id visible to everything that runs on this thread
+        // for the rest of the pipeline: the Project Mapper (to persist the
+        // blueprint), the inline workflow migrator (to LOAD the blueprint +
+        // persist RAG provenance), and the Docker sandbox runners (to persist
+        // logs).  Same ThreadLocal the resume path uses.  Cleared in the
+        // finally below.  (The per-file migrator workers run on a pool that
+        // can't see this ThreadLocal — the migrator resolves the blueprint
+        // once on this thread and passes it down, see CoreMigratorAgent.)
+        SandboxContext.setSessionId(session.id().value().toString());
         try {
             // ── Phase 0: RAG indexing ────────────────────────────────────────
             // CodeIndexingAgent emits granular progress events
@@ -91,6 +112,27 @@ public class OrchestratorService implements RunPipelineUseCase {
             } catch (Exception persistErr) {
                 log.warn("Could not persist RAG manifest for session '{}' (non-fatal): {}",
                         session.id(), persistErr.getMessage());
+            }
+
+            // ── Phase 0b: Project Mapper (semantic blueprint) ────────────────
+            // Build the project-wide semantic map (classes / calls / inheritance
+            // / features → Kafka targets) and persist it under this session so
+            // the Core Migrator can enrich each per-file prompt with real
+            // project understanding instead of migrating blind.  Best-effort:
+            // any failure here must NOT abort the migration — agents fall back
+            // to file-by-file behaviour when the blueprint is absent.
+            if (projectMapper != null) {
+                try {
+                    var blueprint = projectMapper.execute(initial);
+                    log.info("Project Mapper produced blueprint for session '{}' — {} class(es), {} file(s)",
+                            session.id(),
+                            blueprint != null && blueprint.semanticGraph() != null
+                                    ? blueprint.semanticGraph().classes().size() : 0,
+                            blueprint != null ? blueprint.files().size() : 0);
+                } catch (Exception mapErr) {
+                    log.warn("Project Mapper failed for session '{}' (non-fatal, falling back to "
+                            + "file-by-file migration): {}", session.id(), mapErr.getMessage());
+                }
             }
 
             // ── Phase 1–5: typed agent workflow ─────────────────────────────
@@ -216,6 +258,10 @@ public class OrchestratorService implements RunPipelineUseCase {
                 throw new AgentFailureException("Pipeline", e.getMessage());
             }
             return initial;
+        } finally {
+            // Always release the thread-local session id so it can't leak into
+            // a pooled thread's next task.
+            SandboxContext.clear();
         }
     }
 

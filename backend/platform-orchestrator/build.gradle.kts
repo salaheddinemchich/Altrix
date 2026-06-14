@@ -7,6 +7,7 @@ plugins {
 val langchain4jVersion = "0.36.2"
 val resilience4jVersion = "2.2.0"
 val langgraph4jVersion = "1.5.12"
+val openRewriteVersion = "8.41.1"
 
 dependencies {
     implementation(project(":platform-common"))
@@ -89,6 +90,16 @@ dependencies {
     // build.  Symbol-solver flavour pulls in the same library; the plain
     // `javaparser-core` is enough for our local intra-project resolution.
     implementation("com.github.javaparser:javaparser-core:3.26.2")
+
+    // OpenRewrite — Lossless Semantic Tree (type-attributed) for the
+    // ProjectMapper phase.  Parses the project's Java sources together to
+    // build a project-wide SemanticGraph (classes/methods/calls/inheritance/
+    // imports) the migrator reads so it stops migrating files blind.
+    // rewrite-java is the language module; rewrite-java-21 supplies the
+    // Java-21 parser implementation selected at runtime.
+    implementation(platform("org.openrewrite:rewrite-bom:$openRewriteVersion"))
+    implementation("org.openrewrite:rewrite-java")
+    runtimeOnly("org.openrewrite:rewrite-java-21")
 
     // Lombok
     compileOnly("org.projectlombok:lombok")

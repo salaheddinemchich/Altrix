@@ -179,8 +179,12 @@ public class DockerSandboxRunner implements SandboxRunnerPort {
         try {
             workspace = stageWorkspace(artifact);
             containerId = createContainer(workspace);
-            String logs = runAndCollect(containerId);
+            // Wait for the compile to FINISH, then read the full buffered log.
+            // A follow-stream attached right after start races a short-lived
+            // container and can capture nothing (the bug behind empty sandbox
+            // logs — which also starved the retry loop of compile errors).
             int exitCode = waitForExit(containerId);
+            String logs = collectLogs(containerId);
             // #105 — persist the captured output so reviewers can read it
             // from the JobDetail log viewer after the run.  Best-effort —
             // the SandboxLogRepository swallows persistence errors so the
@@ -282,17 +286,21 @@ public class DockerSandboxRunner implements SandboxRunnerPort {
         return created.getId();
     }
 
-    private String runAndCollect(String containerId) throws InterruptedException {
+    /**
+     * Reads the container's full buffered stdout+stderr.  Called AFTER the
+     * container has exited, so there is no follow-stream race — all logs are
+     * present and the read returns promptly.
+     */
+    private String collectLogs(String containerId) throws InterruptedException {
         StringBuilder sb = new StringBuilder();
         client.logContainerCmd(containerId)
                 .withStdOut(true)
                 .withStdErr(true)
-                .withFollowStream(true)
                 .withTailAll()
                 .exec(new LogContainerResultCallback() {
                     @Override
                     public void onNext(Frame frame) {
-                        sb.append(new String(frame.getPayload()));
+                        sb.append(new String(frame.getPayload(), java.nio.charset.StandardCharsets.UTF_8));
                     }
                 })
                 .awaitCompletion(config.timeout().toMillis(), TimeUnit.MILLISECONDS);

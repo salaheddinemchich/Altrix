@@ -115,7 +115,9 @@ public class ContractValidator {
             CompilationUnit cu = entry.getValue();
             checkFileClassMismatch(path, cu, all);
             checkImports(path, cu, index, all);
+            checkUnresolvedTypeReferences(path, cu, index, all);
             checkInterfaceImplementations(path, cu, index, all);
+            checkInterfaceConformanceTyped(path, cu, index, all);
             checkConstructorArity(path, cu, index, all);
             checkMethodCalls(path, cu, index, all);
             checkOverrides(path, cu, index, all);
@@ -140,6 +142,8 @@ public class ContractValidator {
         final Map<String, String> fqnByName = new HashMap<>();
         /** {@code simpleName → declared method (name, arity) pairs}. */
         final Map<String, Set<MethodSig>> methodsByType = new HashMap<>();
+        /** {@code simpleName → declared methods with full parameter + return types} (contract-lock check). */
+        final Map<String, Set<MethodFull>> methodsFullByType = new HashMap<>();
         /** {@code simpleName → declared constructor arities}. */
         final Map<String, Set<Integer>> ctorAritiesByType = new HashMap<>();
         /** {@code simpleName → true iff the top-level type is public}. */
@@ -158,6 +162,19 @@ public class ContractValidator {
      * doesn't exist", which are the dominant patterns.
      */
     private record MethodSig(String name, int arity) {}
+
+    /**
+     * Full method signature — name + ordered parameter types + return type,
+     * all reduced to simple names (generics/array/package stripped).  Used by
+     * the contract-lock conformance check to compare an implementation's
+     * methods against the interface contract by TYPE, not just name+arity.
+     */
+    private record MethodFull(String name, List<String> paramTypes, String returnType) {
+        /** Identity for "is this method present?" — name + parameter types (return type excluded; Java forbids overload-by-return). */
+        String key() { return name + "(" + String.join(",", paramTypes) + ")"; }
+        /** Human-readable signature for the violation message. */
+        String render() { return name + "(" + String.join(", ", paramTypes) + "): " + returnType; }
+    }
 
     private ProjectIndex buildIndex(Map<String, CompilationUnit> parsed) {
         ProjectIndex idx = new ProjectIndex();
@@ -179,8 +196,14 @@ public class ContractValidator {
     private void indexMembers(TypeDeclaration<?> td, ProjectIndex idx) {
         String simple = td.getNameAsString();
         Set<MethodSig> sigs = idx.methodsByType.computeIfAbsent(simple, k -> new HashSet<>());
+        Set<MethodFull> fullSigs = idx.methodsFullByType.computeIfAbsent(simple, k -> new HashSet<>());
         Set<Integer> arities = idx.ctorAritiesByType.computeIfAbsent(simple, k -> new HashSet<>());
-        td.getMethods().forEach(m -> sigs.add(new MethodSig(m.getNameAsString(), m.getParameters().size())));
+        td.getMethods().forEach(m -> {
+            sigs.add(new MethodSig(m.getNameAsString(), m.getParameters().size()));
+            List<String> params = new ArrayList<>();
+            m.getParameters().forEach(p -> params.add(contractTypeName(p.getType().toString())));
+            fullSigs.add(new MethodFull(m.getNameAsString(), params, contractTypeName(m.getType().toString())));
+        });
         td.getConstructors().forEach(c -> arities.add(c.getParameters().size()));
         // For records: synthetic accessors named after components.  JavaParser
         // does not synthesise them; we add them so callers of `rec.foo()`
@@ -268,6 +291,136 @@ public class ContractValidator {
         });
     }
 
+    /**
+     * Common {@code java.lang} types usable WITHOUT an import — the
+     * allow-list that keeps {@link #checkUnresolvedTypeReferences} from
+     * flagging {@code String}, {@code Object}, … as unresolved.
+     */
+    private static final Set<String> JAVA_LANG_TYPES = Set.of(
+            "String", "Object", "Integer", "Long", "Double", "Float", "Short", "Byte",
+            "Boolean", "Character", "Number", "Math", "System", "Thread", "Runnable",
+            "Void", "Class", "Enum", "Iterable", "Comparable", "CharSequence",
+            "StringBuilder", "StringBuffer", "Exception", "RuntimeException", "Throwable",
+            "Error", "Override", "Deprecated", "SuppressWarnings", "FunctionalInterface",
+            "SafeVarargs", "Cloneable", "AutoCloseable", "Record", "Process", "Appendable");
+
+    /**
+     * Orphaned-type-reference check — catches a type used in a type position
+     * (parameter, return, field, generic arg, {@code extends}/{@code
+     * implements}, {@code new X()}) by simple name that resolves to NOTHING:
+     * not imported, not {@code java.lang}, not a generic type variable, and
+     * not declared anywhere in the project.
+     *
+     * <p>This is the failure mode {@link #checkImports} misses: a
+     * <b>same-package</b> reference needs no import, so when the migrator
+     * renames a type in one file only (e.g. {@code AltrixPubsubMessage →
+     * AltrixKafkaMessage} in an interface but not the class), the dangling
+     * reference compiles to "cannot find symbol" — invisible to the import
+     * check because there's no import line to flag.
+     *
+     * <p>Conservative to avoid false positives: skips files with any
+     * wildcard import (can't know what they bring in), qualified references
+     * ({@code com.foo.Bar}, {@code Map.Entry}), single-letter generics, and
+     * lowercase names.  Reports each missing type once per file and lists
+     * same-package project types as rename candidates so the repairer can
+     * re-point the reference at the type that actually exists.
+     */
+    private void checkUnresolvedTypeReferences(String path, CompilationUnit cu,
+                                               ProjectIndex idx,
+                                               List<ContractViolation> out) {
+        // A wildcard import could legitimately bring in any of these names —
+        // bail rather than risk a false positive.
+        boolean hasWildcard = cu.getImports().stream()
+                .anyMatch(com.github.javaparser.ast.ImportDeclaration::isAsterisk);
+        if (hasWildcard) return;
+
+        Set<String> imported = new HashSet<>();
+        cu.getImports().forEach(imp -> {
+            if (imp.isAsterisk() || imp.isStatic()) return;
+            String n = imp.getNameAsString();
+            imported.add(n.substring(n.lastIndexOf('.') + 1));
+        });
+
+        Set<String> typeParams = new HashSet<>();
+        cu.findAll(com.github.javaparser.ast.type.TypeParameter.class)
+                .forEach(tp -> typeParams.add(tp.getNameAsString()));
+
+        Set<String> declaredHere = new HashSet<>();
+        cu.findAll(TypeDeclaration.class).forEach(td -> declaredHere.add(td.getNameAsString()));
+
+        String pkg = cu.getPackageDeclaration().map(p -> p.getName().toString()).orElse("");
+
+        Set<String> reported = new HashSet<>();
+        cu.findAll(ClassOrInterfaceType.class).forEach(t -> {
+            if (t.getScope().isPresent()) return;                 // qualified — out of scope
+            String simple = t.getNameAsString();
+            if (simple.isEmpty() || reported.contains(simple)) return;
+            if (typeParams.contains(simple)) return;              // generic type variable
+            if (simple.length() == 1 && Character.isUpperCase(simple.charAt(0))) return; // T, E, K…
+            if (!Character.isUpperCase(simple.charAt(0))) return; // not a class-shaped name
+            if (JAVA_LANG_TYPES.contains(simple)) return;
+            if (imported.contains(simple)) return;
+            if (declaredHere.contains(simple)) return;
+
+            // Does the type exist somewhere in the project?
+            if (idx.typeByName.containsKey(simple)) {
+                String declaredPkg = idx.packageByType.get(simple);
+                // Same package (or a nested type we can't place) needs no import — fine.
+                if (declaredPkg == null || declaredPkg.equals(pkg)) return;
+                // Different package + not imported → missing intra-project import.
+                // This is the failure mode `checkImports` can't see: the type
+                // IS a real project type, it's just used without the import
+                // that brings it across the package boundary (e.g. a `tasks`
+                // class extending `pubsub.RetryTask` after the migrator
+                // dropped the import).
+                reported.add(simple);
+                String fqn = idx.fqnByName.getOrDefault(simple, declaredPkg + "." + simple);
+                out.add(new ContractViolation(
+                        ContractViolationKind.MISSING_IMPORT,
+                        path,
+                        t.getBegin().map(p -> p.line).orElse(-1),
+                        simple,
+                        "Type '" + simple + "' is used but not imported; it is declared in "
+                                + "package '" + declaredPkg + "'. Add 'import " + fqn + ";' "
+                                + "(do not move or rename the type)."));
+                return;
+            }
+
+            // Not declared anywhere in the project — orphaned reference
+            // (typically an inconsistent rename).
+            reported.add(simple);
+            String candidates = samePackageCandidates(pkg, declaredHere, idx);
+            out.add(new ContractViolation(
+                    ContractViolationKind.MISSING_IMPORT,
+                    path,
+                    t.getBegin().map(p -> p.line).orElse(-1),
+                    simple,
+                    "Type '" + simple + "' is referenced but is not imported and is not "
+                            + "declared anywhere in the project (likely an inconsistent rename). "
+                            + (candidates.isEmpty()
+                                ? "Re-point it at an existing project type"
+                                : "Existing types in package '" + pkg + "': " + candidates
+                                  + ". Re-point the reference at the correct existing type")
+                            + ". If none matches, it is likely an obsolete source-platform "
+                            + "concept with no target equivalent — replace its uses with "
+                            + "Object or remove the member (consistent with sibling methods); "
+                            + "do not invent the type."));
+        });
+    }
+
+    /** Up to 8 project types declared in {@code pkg}, excluding this file's own types. */
+    private static String samePackageCandidates(String pkg, Set<String> exclude, ProjectIndex idx) {
+        List<String> names = new ArrayList<>();
+        for (Map.Entry<String, String> e : idx.packageByType.entrySet()) {
+            if (pkg.equals(e.getValue()) && !exclude.contains(e.getKey())) {
+                names.add(e.getKey());
+                if (names.size() >= 8) break;
+            }
+        }
+        Collections.sort(names);
+        return String.join(", ", names);
+    }
+
     private void checkInterfaceImplementations(String path, CompilationUnit cu,
                                                ProjectIndex idx,
                                                List<ContractViolation> out) {
@@ -334,6 +487,99 @@ public class ContractValidator {
             if (td instanceof ClassOrInterfaceDeclaration c) {
                 c.getExtendedTypes().forEach(t -> all.addAll(effectiveMethods(t.getNameAsString(), idx)));
                 c.getImplementedTypes().forEach(t -> all.addAll(effectiveMethods(t.getNameAsString(), idx)));
+            }
+        }
+        return all;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    //  Contract-lock: type-aware interface conformance
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * Type-aware interface conformance — the enforcement half of
+     * "contract-locked migration".  Where {@link #checkInterfaceImplementations}
+     * only checks name+arity, this compares the implementation's methods
+     * against the interface contract by FULL parameter types.
+     *
+     * <p>Catches the dominant cross-file drift the per-file migrator produces:
+     * the interface migrates {@code publish(PubsubTopic,…)} to
+     * {@code publish(String,…)} but the implementation keeps
+     * {@code publish(PubsubTopic,…)} — same name, different types, so it
+     * implements NONE of the interface methods ("not abstract, does not
+     * override").  We emit one violation per drifted method naming the EXACT
+     * required signature, and the repairer is told the interface is the
+     * contract: conform the implementation to it.
+     *
+     * <p>Only fires when a same-NAME method exists on the class but with
+     * different parameter types (true drift).  A method missing entirely is
+     * left to {@link #checkInterfaceImplementations} (name+arity), so the two
+     * checks don't double-report.
+     */
+    private void checkInterfaceConformanceTyped(String path, CompilationUnit cu,
+                                                ProjectIndex idx,
+                                                List<ContractViolation> out) {
+        for (TypeDeclaration<?> td : cu.getTypes()) {
+            if (!(td instanceof ClassOrInterfaceDeclaration cls)) continue;
+            if (cls.isInterface() || cls.isAbstract()) continue;
+
+            Set<MethodFull> provided = classOwnAndExtendedMethodsFull(cls.getNameAsString(), idx);
+            Set<String> providedKeys  = new HashSet<>();
+            Set<String> providedNames = new HashSet<>();
+            for (MethodFull mf : provided) { providedKeys.add(mf.key()); providedNames.add(mf.name()); }
+
+            for (ClassOrInterfaceType impl : cls.getImplementedTypes()) {
+                String iface = impl.getNameAsString();
+                Set<MethodFull> required = effectiveMethodsFull(iface, idx);
+                if (required.isEmpty()) continue; // external or empty interface
+                for (MethodFull m : required) {
+                    if (providedKeys.contains(m.key())) continue;     // satisfied exactly
+                    if (!providedNames.contains(m.name())) continue;  // missing → name+arity check owns it
+                    out.add(new ContractViolation(
+                            ContractViolationKind.INTERFACE_SIGNATURE_MISMATCH,
+                            path,
+                            cls.getBegin().map(p -> p.line).orElse(-1),
+                            cls.getNameAsString() + "." + m.key(),
+                            "Class '" + cls.getNameAsString() + "' implements '" + iface
+                                    + "' but its '" + m.name() + "' does not match the interface "
+                                    + "contract. Required EXACT signature: " + m.render()
+                                    + ". The interface is the contract — change THIS implementation's "
+                                    + "parameter/return types to match it exactly and adjust the body "
+                                    + "accordingly (do NOT change the interface)."));
+                }
+            }
+        }
+    }
+
+    /** Full-signature analogue of {@link #classOwnAndExtendedMethods}. */
+    private Set<MethodFull> classOwnAndExtendedMethodsFull(String typeName, ProjectIndex idx) {
+        Set<MethodFull> all = new HashSet<>();
+        Set<MethodFull> own = idx.methodsFullByType.get(typeName);
+        if (own != null) all.addAll(own);
+        CompilationUnit cu = idx.typeByName.get(typeName);
+        if (cu == null) return all;
+        for (TypeDeclaration<?> td : cu.getTypes()) {
+            if (!td.getNameAsString().equals(typeName)) continue;
+            if (td instanceof ClassOrInterfaceDeclaration c) {
+                c.getExtendedTypes().forEach(t ->
+                        all.addAll(classOwnAndExtendedMethodsFull(t.getNameAsString(), idx)));
+            }
+        }
+        return all;
+    }
+
+    /** Full-signature analogue of {@link #effectiveMethods} (walks extends + implements). */
+    private Set<MethodFull> effectiveMethodsFull(String typeName, ProjectIndex idx) {
+        Set<MethodFull> all = new HashSet<>();
+        Set<MethodFull> own = idx.methodsFullByType.get(typeName);
+        if (own != null) all.addAll(own);
+        CompilationUnit cu = idx.typeByName.get(typeName);
+        if (cu == null) return all;
+        for (TypeDeclaration<?> td : cu.getTypes()) {
+            if (!td.getNameAsString().equals(typeName)) continue;
+            if (td instanceof ClassOrInterfaceDeclaration c) {
+                c.getExtendedTypes().forEach(t -> all.addAll(effectiveMethodsFull(t.getNameAsString(), idx)));
+                c.getImplementedTypes().forEach(t -> all.addAll(effectiveMethodsFull(t.getNameAsString(), idx)));
             }
         }
         return all;
@@ -409,6 +655,28 @@ public class ContractValidator {
         cu.findAll(com.github.javaparser.ast.body.VariableDeclarator.class).forEach(v ->
                 out.put(v.getNameAsString(), simpleTypeName(v.getType().toString())));
         return out;
+    }
+
+    /**
+     * Normalises a type for contract comparison + display: strips package and
+     * generic parameters but PRESERVES array-ness ({@code byte[]} stays
+     * {@code byte[]}, distinct from {@code byte}).  Used by the typed
+     * conformance check so {@code publish(String,byte[])} reads accurately in
+     * the violation message and compares correctly.
+     */
+    private static String contractTypeName(String typeText) {
+        String t = typeText.trim();
+        boolean array = false;
+        int lt = t.indexOf('<');
+        if (lt > 0) {                       // strip generics, but note a trailing [] after them
+            int close = t.lastIndexOf('>');
+            if (close >= 0 && t.substring(close + 1).contains("[")) array = true;
+            t = t.substring(0, lt);
+        }
+        if (t.contains("[")) { array = true; t = t.substring(0, t.indexOf('[')); }
+        int dot = t.lastIndexOf('.');
+        if (dot > 0) t = t.substring(dot + 1);
+        return t.trim() + (array ? "[]" : "");
     }
 
     private static String simpleTypeName(String typeText) {

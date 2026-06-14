@@ -52,6 +52,7 @@ class ResumeMigrationServiceTest {
 
     @Mock WorkflowSessionRepository sessionRepository;
     @Mock MigrationAgent<ApprovedPlan, MigrationArtifact> migrator;
+    @Mock MigrationAgent<MigrationArtifact, MigrationArtifact> semanticValidator;
     @Mock MigrationAgent<MigrationArtifact, ValidationReport> validator;
     @Mock MigrationAgent<WorkflowOutcome, MigrationReport> reporter;
     @Mock MigratedFileStoragePort migratedFileStoragePort;
@@ -81,6 +82,8 @@ class ResumeMigrationServiceTest {
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(migratedFileStoragePort.storeMigratedZip(any(), any())).thenReturn("output-key");
         when(reporter.execute(any())).thenReturn(mock(MigrationReport.class));
+        // Semantic validator is a pass-through in Stage 3 — return the artifact it receives.
+        when(semanticValidator.execute(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
@@ -182,7 +185,7 @@ class ResumeMigrationServiceTest {
 
     private ResumeMigrationService service(int maxRetries) {
         return new ResumeMigrationService(
-                sessionRepository, migrator, validator, reporter,
+                sessionRepository, migrator, semanticValidator, validator, reporter,
                 migratedFileStoragePort, jobStatusUpdatePort, progressNotifier,
                 migrationReportRepository, maxRetries);
     }
