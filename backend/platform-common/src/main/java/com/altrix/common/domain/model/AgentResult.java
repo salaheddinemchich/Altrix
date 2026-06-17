@@ -16,16 +16,31 @@ public sealed interface AgentResult<T> extends Serializable
 
     boolean isSuccess();
 
-    /** Successful execution carrying the agent's typed output. */
+    /**
+     * Successful execution carrying the agent's typed output.
+     */
     record Success<T>(T value) implements AgentResult<T> {
-        @Override public boolean isSuccess() { return true; }
+        @Override
+        public boolean isSuccess() {
+            return true;
+        }
     }
 
-    /** Non-recoverable failure with a human-readable reason. */
+    /**
+     * Non-recoverable failure with a human-readable reason.
+     */
     record Failure<T>(String reason) implements AgentResult<T> {
-        @Override public boolean isSuccess() { return false; }
+        @Override
+        public boolean isSuccess() {
+            return false;
+        }
     }
 
-    static <T> Success<T> success(T value)        { return new Success<>(value); }
-    static <T> Failure<T> failure(String reason)  { return new Failure<>(reason); }
+    static <T> Success<T> success(T value) {
+        return new Success<>(value);
+    }
+
+    static <T> Failure<T> failure(String reason) {
+        return new Failure<>(reason);
+    }
 }

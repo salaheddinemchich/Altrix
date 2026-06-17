@@ -42,9 +42,9 @@ public class BranchStrategyService implements ChooseBranchStrategyUseCase {
                           String prTitle,
                           String prBody,
                           String actorUserId) {
-        if (sessionId == null)        throw new IllegalArgumentException("sessionId required");
-        if (strategy == null)         throw new IllegalArgumentException("strategy required");
-        if (actorUserId == null)      throw new IllegalArgumentException("actorUserId required");
+        if (sessionId == null) throw new IllegalArgumentException("sessionId required");
+        if (strategy == null) throw new IllegalArgumentException("strategy required");
+        if (actorUserId == null) throw new IllegalArgumentException("actorUserId required");
 
         State state = applyState.find(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
@@ -60,7 +60,7 @@ public class BranchStrategyService implements ChooseBranchStrategyUseCase {
         if (!access.availableStrategies().contains(strategy)) {
             throw new IllegalStateException(
                     "Strategy " + strategy + " not permitted for this user on " + access.fullName()
-                    + " (permission=" + access.permission() + ")");
+                            + " (permission=" + access.permission() + ")");
         }
 
         String resolvedBranchName = resolveBranchName(strategy, targetBranchName, sessionId);
@@ -73,8 +73,7 @@ public class BranchStrategyService implements ChooseBranchStrategyUseCase {
                     + access.defaultBranch() + "'.");
         }
 
-        String resolvedCommit = nonBlankOr(commitMessage,
-                config.renderTemplate(config.commitMessageTemplate(), sessionId.value().toString()));
+        String resolvedCommit = nonBlankOr(commitMessage, config.renderTemplate(config.commitMessageTemplate(), sessionId.value().toString()));
         String resolvedPrTitle = strategy == BranchStrategy.PULL_REQUEST
                 ? nonBlankOr(prTitle, config.renderTemplate(config.prTitleTemplate(), sessionId.value().toString()))
                 : null;
@@ -93,9 +92,9 @@ public class BranchStrategyService implements ChooseBranchStrategyUseCase {
         auditLog.save(new MigrationApplyAuditEntry(
                 sessionId, actorUserId, EventType.STRATEGY_CHOSEN,
                 Map.of(
-                        "strategy",     strategy.name(),
-                        "branchName",   resolvedBranchName == null ? "" : resolvedBranchName,
-                        "baseBranch",   access.defaultBranch(),
+                        "strategy", strategy.name(),
+                        "branchName", resolvedBranchName == null ? "" : resolvedBranchName,
+                        "baseBranch", access.defaultBranch(),
                         "repoFullName", access.fullName()
                 ),
                 Instant.now()));

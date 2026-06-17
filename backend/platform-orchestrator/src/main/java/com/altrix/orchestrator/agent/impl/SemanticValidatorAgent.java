@@ -17,6 +17,9 @@ import com.altrix.orchestrator.infrastructure.semantic.DependencyValidator;
 import com.altrix.orchestrator.infrastructure.semantic.DeterministicRepairEngine;
 import com.altrix.orchestrator.infrastructure.semantic.JavaxToJakartaRewriter;
 import com.altrix.orchestrator.infrastructure.semantic.LombokConstructorReconciler;
+import com.altrix.orchestrator.infrastructure.semantic.MessagingConfigRepairer;
+import com.altrix.orchestrator.infrastructure.semantic.SpringKafkaOverEngineeringDetector;
+import com.altrix.orchestrator.infrastructure.semantic.SpringValueConstructorInjectionFixer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -58,6 +61,9 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
     private final DependencyValidator dependencyValidator;
     private final JavaxToJakartaRewriter javaxToJakartaRewriter;
     private final LombokConstructorReconciler lombokConstructorReconciler;
+    private final SpringValueConstructorInjectionFixer springValueFixer;
+    private final MessagingConfigRepairer messagingConfigRepairer;
+    private final SpringKafkaOverEngineeringDetector overEngineeringDetector;
 
     private static final Pattern IMPORT_LINE = Pattern.compile(
             "^\\s*import\\s+(?:static\\s+)?([\\w.]+)\\s*;", Pattern.MULTILINE);
@@ -80,11 +86,30 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
         if (input == null) {
             throw new AgentFailureException(getName(), "input MigrationArtifact was null");
         }
-        Map<String, String> javaFiles = javaFiles(input.files());
-        String pomXml = pomOf(input);
+        MigrationArtifact output = input;
+
+        // ── Messaging config repair (runs on ALL files, incl. application.yml) ─
+        // Corrects the mis-filed Kafka serializer FQN
+        // (org.springframework.kafka.support.serializer.StringSerializer →
+        // org.apache.kafka.common.serialization.StringSerializer) — a
+        // compiles-but-FAILS-TO-BOOT bug (ClassNotFoundException at startup).
+        Map<String, String> allFiles = new LinkedHashMap<>();
+        for (MigratedFile f : input.files()) {
+            String p = f.newPath() != null ? f.newPath() : f.originalPath();
+            if (p != null && f.content() != null) allFiles.put(p, f.content());
+        }
+        var configFix = messagingConfigRepairer.repair(allFiles);
+        if (configFix.changedAnything()) {
+            log.info("[{}] messaging config repair applied to {} file(s): {}",
+                    getName(), configFix.changedPaths().size(), configFix.changedPaths());
+            output = rebuildWithRepairedFiles(output, configFix.repairedFiles(),
+                    "Semantic deterministic repair (Kafka serializer FQN)");
+        }
+
+        Map<String, String> javaFiles = javaFiles(output.files());
+        String pomXml = pomOf(output);
         log.info("[{}] validating {} Java file(s) for project '{}'",
                 getName(), javaFiles.size(), input.projectId());
-        MigrationArtifact output = input;
 
         // ── javax → jakarta namespace rewrite (deterministic, no AI) ─────
         // Gated on the project actually targeting Jakarta EE.  Fixes the
@@ -115,6 +140,19 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
                     "Semantic deterministic repair (Lombok constructor collision)");
         }
 
+        // ── Spring @Value-in-constructor → constructor injection ─────────
+        // Fixes a compiles-but-NPE-on-boot bug: a @Value field read in the
+        // constructor (null at construction time) → move it to a @Value
+        // constructor parameter.  Runtime correctness, not just compile.
+        var valueFix = springValueFixer.fix(javaFiles);
+        if (valueFix.changedAnything()) {
+            log.info("[{}] Spring @Value constructor-injection fix applied to {} file(s): {}",
+                    getName(), valueFix.changedPaths().size(), valueFix.changedPaths());
+            javaFiles = valueFix.fixedFiles();
+            output = rebuildWithRepairedFiles(output, javaFiles,
+                    "Semantic deterministic repair (Spring @Value constructor injection)");
+        }
+
         // ── Deterministic repair (no AI) ─────────────────────────────────
         // Apply mechanically-certain fixes from the knowledge base (import
         // hygiene) BEFORE reporting, so the report reflects what actually
@@ -134,12 +172,13 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
         if (report.clean()) {
             log.info("[{}] {}", getName(), report.summary());
         } else {
-            log.warn("[{}] {} — contract={}, leak={}, forbidden-import={}, missing-dep={} (after {} deterministic fix(es))",
+            log.warn("[{}] {} — contract={}, leak={}, forbidden-import={}, missing-dep={}, spring-overeng={} (after {} deterministic fix(es))",
                     getName(), report.summary(),
                     report.countOf(Category.CONTRACT),
                     report.countOf(Category.PUBSUB_LEAK),
                     report.countOf(Category.FORBIDDEN_IMPORT),
                     report.countOf(Category.MISSING_DEPENDENCY),
+                    report.countOf(Category.SPRING_OVERENGINEERING),
                     repair.actions().size());
             if (log.isDebugEnabled()) {
                 report.findings().forEach(f -> log.debug("[{}]   {}:{} [{}] {} {}",
@@ -231,6 +270,11 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
         findings.addAll(scanForbiddenImports(javaFiles));
         // 4 — Dependency validation (Kafka class referenced but no dep on the build).
         findings.addAll(dependencyValidator.validate(javaFiles, pomXml));
+        // 5 — Spring-Kafka over-engineering (detect-only; flagged for AI repair).
+        for (SpringKafkaOverEngineeringDetector.Detection d : overEngineeringDetector.detect(javaFiles)) {
+            findings.add(new Finding(Category.SPRING_OVERENGINEERING, d.filePath(), d.line(), d.symbol(),
+                    d.message()));
+        }
 
         if (findings.isEmpty()) {
             return SemanticValidationReport.clean(projectId, javaFiles.size());

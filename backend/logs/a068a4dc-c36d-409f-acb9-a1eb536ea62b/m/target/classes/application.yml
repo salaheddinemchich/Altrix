@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: pubsub-orders
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: pubsub-orders
+      auto-offset-reset: earliest
+    producer:
+      key-serializer: org.springframework.kafka.support.serializer.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.StringSerializer
+  cloud:
+    gcp:
+      project-id: ${GCP_PROJECT_ID:altrix-local}
+  # Removed Pub/Sub specific configuration
+  # pubsub:
+  #   emulator-host: ${PUBSUB_EMULATOR_HOST:}
+server:
+  port: 8080

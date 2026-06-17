@@ -1,10 +1,6 @@
 package com.altrix.project.infrastructure.config;
 
-import com.altrix.project.domain.port.out.FileStoragePort;
-import com.altrix.project.domain.port.out.ProjectEventPublisherPort;
-import com.altrix.project.domain.port.out.ProjectRepositoryPort;
-import com.altrix.project.domain.port.out.RepositoryIngestionPort;
-import com.altrix.project.domain.port.out.WebhookEventPublisherPort;
+import com.altrix.project.domain.port.out.*;
 import com.altrix.project.domain.service.BuildSystemDetector;
 import com.altrix.project.domain.service.ProjectService;
 import com.altrix.project.domain.service.WebhookTriggerService;
@@ -34,11 +30,11 @@ public class BeanConfig {
 
     @Bean
     public ProjectService projectService(
-            ProjectRepositoryPort     projectRepository,
-            FileStoragePort           fileStoragePort,
+            ProjectRepositoryPort projectRepository,
+            FileStoragePort fileStoragePort,
             ProjectEventPublisherPort eventPublisher,
-            BuildSystemDetector       buildSystemDetector,
-            RepositoryIngestionPort   repositoryIngestion
+            BuildSystemDetector buildSystemDetector,
+            RepositoryIngestionPort repositoryIngestion
     ) {
         return new ProjectService(
                 projectRepository,
@@ -59,7 +55,7 @@ public class BeanConfig {
 
     @Bean
     public MinioClient minioClient(
-            @Value("${minio.endpoint}")   String endpoint,
+            @Value("${minio.endpoint}") String endpoint,
             @Value("${minio.access-key}") String accessKey,
             @Value("${minio.secret-key}") String secretKey
     ) {

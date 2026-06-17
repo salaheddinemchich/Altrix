@@ -130,8 +130,7 @@ public class OrchestratorService implements RunPipelineUseCase {
                                     ? blueprint.semanticGraph().classes().size() : 0,
                             blueprint != null ? blueprint.files().size() : 0);
                 } catch (Exception mapErr) {
-                    log.warn("Project Mapper failed for session '{}' (non-fatal, falling back to "
-                            + "file-by-file migration): {}", session.id(), mapErr.getMessage());
+                    log.warn("Project Mapper failed for session '{}' (non-fatal, falling back to " + "file-by-file migration): {}", session.id(), mapErr.getMessage());
                 }
             }
 
@@ -173,8 +172,7 @@ public class OrchestratorService implements RunPipelineUseCase {
                     session.requestApproval();      // PLAN_READY → AWAITING_APPROVAL
                 }
                 sessionRepository.save(session);
-                progressNotifierPort.notify(jobId, "Pipeline", "AWAITING_APPROVAL",
-                        "Plan ready — awaiting human review.");
+                progressNotifierPort.notify(jobId, "Pipeline", "AWAITING_APPROVAL", "Plan ready — awaiting human review.");
                 log.info("Pipeline halted for approval — job '{}' session '{}'",
                         jobId, session.id());
                 return initial;
@@ -196,8 +194,8 @@ public class OrchestratorService implements RunPipelineUseCase {
             // Each transition is guarded so a retry / re-fetched state that has
             // already advanced doesn't try to repeat itself.
             var contextAnalysed = com.altrix.orchestrator.domain.model.session.SessionStatus.CONTEXT_ANALYSED;
-            var planReady       = com.altrix.orchestrator.domain.model.session.SessionStatus.PLAN_READY;
-            var migrating       = com.altrix.orchestrator.domain.model.session.SessionStatus.MIGRATING;
+            var planReady = com.altrix.orchestrator.domain.model.session.SessionStatus.PLAN_READY;
+            var migrating = com.altrix.orchestrator.domain.model.session.SessionStatus.MIGRATING;
 
             if (session.status() == contextAnalysed) {
                 result.migrationPlan().ifPresent(session::completePlan);  // → PLAN_READY
@@ -211,36 +209,29 @@ public class OrchestratorService implements RunPipelineUseCase {
                 session.complete();                                       // → DONE
             }
             sessionRepository.save(session);
-
             jobStatusUpdatePort.markDone(jobId, outputKey);
-            progressNotifierPort.notify(jobId, "Pipeline", "DONE",
-                    "Migration complete. Ready to download.");
+            progressNotifierPort.notify(jobId, "Pipeline", "DONE", "Migration complete. Ready to download.");
             log.info("Pipeline DONE for job '{}'", jobId);
-
             return files.isEmpty() ? initial : initial.withMigratedFiles(files);
 
         } catch (AiProviderUnavailableException e) {
             log.warn("All AI providers unavailable for job '{}' — attempting graceful degradation", jobId);
-            Optional<List<MigratedFile>> cached = planCachePort.loadLatest(
-                    initial.projectId(), targetStack(initial));
+            Optional<List<MigratedFile>> cached = planCachePort.loadLatest(initial.projectId(), targetStack(initial));
 
             if (cached.isPresent()) {
-                log.info("Serving cached migration plan for job '{}' ({} file(s))",
-                        jobId, cached.get().size());
+                log.info("Serving cached migration plan for job '{}' ({} file(s))", jobId, cached.get().size());
                 String outputKey = migratedFileStoragePort.storeMigratedZip(jobId, cached.get());
                 session.complete();
                 sessionRepository.save(session);
                 jobStatusUpdatePort.markDone(jobId, outputKey);
-                progressNotifierPort.notify(jobId, "Pipeline", "DONE",
-                        "Serving cached migration plan — AI providers are currently unavailable.");
+                progressNotifierPort.notify(jobId, "Pipeline", "DONE", "Serving cached migration plan — AI providers are currently unavailable.");
                 return initial.withMigratedFiles(cached.get());
             }
 
             log.error("Pipeline FAILED for job '{}' (no cached plan available): {}", jobId, e.getMessage());
             failSessionBestEffort(session, e.getMessage());
             jobStatusUpdatePort.markFailed(jobId, e.getMessage());
-            progressNotifierPort.notify(jobId, "Pipeline", "FAILED",
-                    "All AI providers unavailable. No cached plan found.");
+            progressNotifierPort.notify(jobId, "Pipeline", "FAILED", "All AI providers unavailable. No cached plan found.");
             throw e;
 
         } catch (Exception e) {
@@ -248,10 +239,8 @@ public class OrchestratorService implements RunPipelineUseCase {
             boolean autoPaused = applyAgentFailureBestEffort(session, e.getMessage());
             if (autoPaused) {
                 log.warn("Session '{}' auto-paused after {} consecutive failures", session.id(), autoPauseThreshold);
-                jobStatusUpdatePort.markFailed(jobId,
-                        "Auto-paused after " + autoPauseThreshold + " consecutive failures — awaiting manual resume");
-                progressNotifierPort.notify(jobId, "Pipeline", "PAUSED",
-                        "Session auto-paused. Use POST /sessions/{id}/resume to retry.");
+                jobStatusUpdatePort.markFailed(jobId, "Auto-paused after " + autoPauseThreshold + " consecutive failures — awaiting manual resume");
+                progressNotifierPort.notify(jobId, "Pipeline", "PAUSED", "Session auto-paused. Use POST /sessions/{id}/resume to retry.");
             } else {
                 jobStatusUpdatePort.markFailed(jobId, e.getMessage());
                 progressNotifierPort.notify(jobId, "Pipeline", "FAILED", e.getMessage());

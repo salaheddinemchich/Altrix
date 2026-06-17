@@ -18,8 +18,8 @@ public interface IngestGitRepositoryUseCase {
      * {@link Project} row, and publish the registration event.
      *
      * @throws com.altrix.common.exception.RepositoryIngestionException on
-     *         invalid URL, authentication failure, branch not found, or
-     *         repository exceeding the configured size cap
+     *                                                                  invalid URL, authentication failure, branch not found, or
+     *                                                                  repository exceeding the configured size cap
      */
     Project ingestFromGit(GitIngestionCommand command);
 

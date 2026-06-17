@@ -31,10 +31,7 @@ public class KafkaProjectEventAdapter implements ProjectEventPublisherPort {
     public void publishProjectRegistered(Project project) {
         // value = "userId|storageKey" — both needed by downstream services
         String value = project.getUserId() + "|" + project.getStorageKey();
-
-        log.info("Publishing project.registered for project '{}' storageKey='{}'",
-                project.getId(), project.getStorageKey());
-
+        log.info("Publishing project.registered for project '{}' storageKey='{}'", project.getId(), project.getStorageKey());
         kafkaTemplate.send(topic, project.getId(), value)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {

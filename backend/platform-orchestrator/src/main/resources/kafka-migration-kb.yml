@@ -30,6 +30,8 @@ kafka-migration:
     - com.google.api.gax.*                                        # Google API extensions (retry/paging) — no Kafka equivalent
     - com.google.cloud.pubsub.*                                   # Cloud Pub/Sub client library
     - com.google.pubsub.*                                         # Pub/Sub v1 proto types
+    # Spring-Kafka hallucinations (Spring Cloud GCP → Spring Kafka path).
+    - org.springframework.kafka.support.header.*                  # invented package; headers live in org.springframework.kafka.support.KafkaHeaders
 
   # FQN → Maven coordinate (group:artifact).  Lets the dependency validator
   # detect "code references this class but the pom lacks the dependency".

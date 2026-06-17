@@ -24,28 +24,22 @@ public class JobCreatedListener {
 
     @KafkaListener(
             topics = "${kafka.topics.job-created}",
-            groupId = "${spring.kafka.consumer.group-id}"
-    )
+            groupId = "${spring.kafka.consumer.group-id}")
     public void onJobCreated(ConsumerRecord<String, String> record) {
         String jobId = record.key();
         String value = record.value();
-
         if (jobId == null || value == null) return;
-
         // value = "projectId|storageKey"
         String[] parts = value.split("\\|", 2);
         String projectId = parts[0];
         String storageKey = parts.length > 1 ? parts[1] : "";
-
-        log.info("Received job.created — jobId='{}' projectId='{}' storageKey='{}'",
-                jobId, projectId, storageKey);
-
-        ProjectContext initial = ProjectContext.builder()
+        log.info("Received job.created — jobId='{}' projectId='{}' storageKey='{}'", jobId, projectId, storageKey);
+        ProjectContext initial = ProjectContext
+                .builder()
                 .jobId(jobId)
                 .projectId(projectId)
                 .storageKey(storageKey)
                 .build();
-
         try {
             runPipelineUseCase.run(initial);
         } catch (Exception e) {

@@ -38,6 +38,50 @@ class DockerBootHealthRunnerTest {
                 new SandboxDockerConfig.Reaper(true, Duration.ofMinutes(10), Duration.ofMinutes(30)));
     }
 
+    private DockerBootHealthRunner runner() {
+        return new DockerBootHealthRunner(disabledConfig(), Mockito.mock(SandboxLogRepository.class));
+    }
+
+    // ── log-based boot detection (works for apps without a /health endpoint) ─
+
+    @Test
+    void bootStarted_recognisesSpringBootMarkers() {
+        var r = runner();
+        assertThat(r.bootStarted(
+                "c.example.orders.OrdersApplication : Started OrdersApplication in 10.5 seconds")).isTrue();
+        assertThat(r.bootStarted(
+                "o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http)")).isTrue();
+    }
+
+    @Test
+    void bootFailed_recognisesStartupFailure() {
+        var r = runner();
+        assertThat(r.bootFailed(
+                "***************\nAPPLICATION FAILED TO START\n***************")).isTrue();
+        assertThat(r.bootFailed("[boot-health] no jar built under target/")).isTrue();
+    }
+
+    @Test
+    void bootFailed_recognisesUnanalysedBeanFailures() {
+        var r = runner();
+        // The real case: a @Value field read in a constructor → NPE, printed
+        // WITHOUT Spring's "APPLICATION FAILED TO START" banner.
+        assertThat(r.bootFailed(
+                "BeanInstantiationException: Failed to instantiate [OrderPublisher]: Constructor threw exception"))
+                .isTrue();
+        assertThat(r.bootFailed(
+                "UnsatisfiedDependencyException: Error creating bean with name 'orderController'")).isTrue();
+    }
+
+    @Test
+    void bootMarkers_areInconclusiveForOrdinaryLogs() {
+        var r = runner();
+        assertThat(r.bootStarted("Resolving dependencies... Downloading kafka-clients")).isFalse();
+        assertThat(r.bootFailed("WARN Error while fetching metadata UNKNOWN_TOPIC_OR_PARTITION")).isFalse();
+        assertThat(r.bootStarted(null)).isFalse();
+        assertThat(r.bootFailed(null)).isFalse();
+    }
+
     @Test
     void run_returnsEmpty_whenArtifactHasNoPom() {
         SandboxLogRepository repo = Mockito.mock(SandboxLogRepository.class);

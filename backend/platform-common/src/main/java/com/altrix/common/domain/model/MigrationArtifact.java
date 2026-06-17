@@ -23,7 +23,7 @@ public record MigrationArtifact(
 
 ) implements Serializable {
     public MigrationArtifact {
-        files   = files   != null ? List.copyOf(files) : List.of();
+        files = files != null ? List.copyOf(files) : List.of();
         summary = summary != null ? summary : "";
     }
 

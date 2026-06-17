@@ -336,9 +336,48 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             """;
 
     /** Default prefix when the project IS Spring Boot.  Keep terse — the
-     *  rest of the prompt already assumes Spring + spring-kafka. */
+     *  rest of the prompt already assumes Spring + spring-kafka.  The
+     *  consumer/producer rules below prevent the two boot-breaking shapes the
+     *  migrator otherwise emits: @Value read during construction (boot NPE) and
+     *  hand-wired listener containers that duplicate Boot auto-config. */
     private static final String SPRING_BOOT_PREFIX = """
             DETECTED STACK: Spring Boot.
+
+            SPRING-KAFKA CONSUMER — use this exact minimal shape.  Spring Boot
+            auto-configures the ConsumerFactory and the listener container factory
+            from the spring.kafka.* properties in application.yml; do NOT rebuild them.
+
+                @Service
+                public class XxxSubscriber {
+                    @KafkaListener(topics = "...", groupId = "...")
+                    public void handle(@Payload String payload) {
+                        // process
+                    }
+                }
+
+            FORBIDDEN in a @KafkaListener consumer class (these break or duplicate
+            Spring Boot auto-configuration):
+              * @Autowired / field of KafkaMessageListenerContainer,
+                ConcurrentMessageListenerContainer or MessageListenerContainer —
+                Spring exposes NO such bean for injection; it fails at startup with
+                UnsatisfiedDependencyException.  @KafkaListener manages its own
+                container — you never start/stop one manually.
+              * A @Bean ConsumerFactory / DefaultKafkaConsumerFactory /
+                KafkaListenerContainerFactory / ConcurrentKafkaListenerContainerFactory
+                declared inside the @Service — Boot already provides these.  Only add
+                a custom @Bean factory if the SOURCE explicitly required non-default
+                behaviour, and then put it in a @Configuration class, not the @Service.
+              * Hardcoded bootstrap.servers / group.id / deserializer Properties —
+                these belong in application.yml (spring.kafka.consumer.*), not in code.
+
+            SPRING-KAFKA PRODUCER — inject config via the CONSTRUCTOR, never read a
+            @Value field during construction.  Spring sets @Value FIELDS only AFTER
+            the constructor returns, so reading one in the constructor (directly OR via
+            a helper the constructor calls) yields null → NullPointerException on boot.
+              * Prefer KafkaTemplate<String,String> (Boot auto-configured) over a
+                hand-built KafkaProducer.
+              * If you must build a KafkaProducer, take the value as a constructor
+                PARAMETER: public Pub(@Value("${spring.kafka.bootstrap-servers}") String servers).
 
             """;
 

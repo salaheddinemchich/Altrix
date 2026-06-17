@@ -26,19 +26,29 @@ import java.util.UUID;
 @With
 public final class Project {
 
-    /** Unique identifier — assigned at creation, never changes. */
+    /**
+     * Unique identifier — assigned at creation, never changes.
+     */
     private final String id;
 
-    /** The user who uploaded this project. */
+    /**
+     * The user who uploaded this project.
+     */
     private final String userId;
 
-    /** Human-readable project name, derived from the uploaded filename. */
+    /**
+     * Human-readable project name, derived from the uploaded filename.
+     */
     private final String name;
 
-    /** MinIO object key where the original uploaded ZIP is stored. */
+    /**
+     * MinIO object key where the original uploaded ZIP is stored.
+     */
     private final String storageKey;
 
-    /** Current lifecycle status of this project. */
+    /**
+     * Current lifecycle status of this project.
+     */
     private final ProjectStatus status;
 
     // ── Populated after detection phase ───────────────────────────────────
@@ -47,24 +57,36 @@ public final class Project {
     private final ConfigFormat configFormat;
     private final DetectedFramework framework;
 
-    /** User's preference for the output config format. Defaults to KEEP_ORIGINAL. */
+    /**
+     * User's preference for the output config format. Defaults to KEEP_ORIGINAL.
+     */
     private final ConfigFormatPreference configFormatPreference;
 
-    /** True when the project uses GCP Pub/Sub and is eligible for migration. */
+    /**
+     * True when the project uses GCP Pub/Sub and is eligible for migration.
+     */
     private final boolean eligibleForMigration;
 
-    /** Technologies detected during analysis (e.g. GCP_PUBSUB, SPRING_BOOT). */
+    /**
+     * Technologies detected during analysis (e.g. GCP_PUBSUB, SPRING_BOOT).
+     */
     private final List<String> detectedTechnologies;
 
     // ── Issue #90 — git-ingestion provenance ──────────────────────────────
 
-    /** HTTPS clone URL when the project was ingested via git, else {@code null}. */
+    /**
+     * HTTPS clone URL when the project was ingested via git, else {@code null}.
+     */
     private final String repoUrl;
 
-    /** Branch / tag checked out at clone time, else {@code null}. */
+    /**
+     * Branch / tag checked out at clone time, else {@code null}.
+     */
     private final String trackedBranch;
 
-    /** Where this project row came from; {@code null} on rows created before #90. */
+    /**
+     * Where this project row came from; {@code null} on rows created before #90.
+     */
     private final ProjectSource source;
 
     private final Instant createdAt;
@@ -159,7 +181,7 @@ public final class Project {
      */
     public Project withError() {
         return this.withStatus(ProjectStatus.ERROR)
-                   .withUpdatedAt(Instant.now());
+                .withUpdatedAt(Instant.now());
     }
 
     // DDD Entity equality — identity only, never by field values

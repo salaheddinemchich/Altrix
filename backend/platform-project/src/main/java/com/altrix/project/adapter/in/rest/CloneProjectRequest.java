@@ -28,4 +28,5 @@ public record CloneProjectRequest(
         String accessToken,
         boolean shallow,
         ConfigFormatPreference configFormatPreference
-) {}
+) {
+}

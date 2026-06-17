@@ -23,7 +23,7 @@ public record MigrationReport(
 
 ) implements Serializable {
     public MigrationReport {
-        if (content     == null) content     = "";
+        if (content == null) content = "";
         if (generatedAt == null) generatedAt = Instant.EPOCH;
     }
 

@@ -54,7 +54,15 @@ public record SemanticValidationReport(
         /** Import/symbol on the KafkaMigrationKnowledgeBase forbidden list. */
         FORBIDDEN_IMPORT,
         /** Code references a class whose Maven dependency is absent from the build — from DependencyValidator. */
-        MISSING_DEPENDENCY
+        MISSING_DEPENDENCY,
+        /**
+         * Spring-Kafka over-engineering — a {@code @KafkaListener} class that also
+         * hand-wires manual listener containers / consumer factories Spring Boot
+         * already auto-configures.  Boot-breaking (unsatisfiable beans) or
+         * redundant; the migrator should be constrained to the minimal form.
+         * Flagged for the AI repair tier — NOT auto-deleted (too risky).
+         */
+        SPRING_OVERENGINEERING
     }
 
     public static SemanticValidationReport clean(String projectId, int fileCount) {

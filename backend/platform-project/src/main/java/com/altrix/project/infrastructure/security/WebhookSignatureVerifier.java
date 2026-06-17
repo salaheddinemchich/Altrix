@@ -44,8 +44,8 @@ public class WebhookSignatureVerifier {
      * @param signatureHeader value of {@code X-Hub-Signature-256}, e.g.
      *                        {@code "sha256=ab12..."}, or {@code null}
      * @return {@code true} when the signature is present, well-formed, and
-     *         matches; {@code false} in every other case (including when the
-     *         secret is not configured — fail closed)
+     * matches; {@code false} in every other case (including when the
+     * secret is not configured — fail closed)
      */
     public boolean verify(byte[] body, String signatureHeader) {
         if (secret == null || secret.isBlank()) {
@@ -70,7 +70,9 @@ public class WebhookSignatureVerifier {
         }
     }
 
-    /** Decode a lowercase hex string, returning {@code null} on malformed input. */
+    /**
+     * Decode a lowercase hex string, returning {@code null} on malformed input.
+     */
     private static byte[] hexDecode(String hex) {
         if (hex.length() % 2 != 0) return null;
         byte[] out = new byte[hex.length() / 2];

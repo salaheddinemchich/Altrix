@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: kafka-orders
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+    producer:
+      key-serializer: org.springframework.kafka.support.serializer.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.StringSerializer
+  cloud:
+    gcp:
+      project-id: ${GCP_PROJECT_ID:altrix-local}
+server:
+  port: 8080

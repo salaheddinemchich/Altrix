@@ -1,0 +1,6 @@
+/workspace/src/main/java/com/example/orders/Order.java
+/workspace/src/main/java/com/example/orders/OrderController.java
+/workspace/src/main/java/com/example/orders/OrderPublisher.java
+/workspace/src/main/java/com/example/orders/OrderSubscriber.java
+/workspace/src/main/java/com/example/orders/OrdersApplication.java
+/workspace/src/main/java/com/example/orders/PubSubConfig.java

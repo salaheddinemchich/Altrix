@@ -1,20 +1,6 @@
 package com.altrix.orchestrator.adapter.in.rest;
 
-import com.altrix.orchestrator.adapter.in.rest.dto.ApprovalHistoryEntryResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.EditPlanRequest;
-import com.altrix.orchestrator.adapter.in.rest.dto.FileDiffResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.MigratedFileResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.MigrationReportVersionResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.RagIndexManifestResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.SandboxLogResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.ShareTokenResponse;
-import com.altrix.orchestrator.infrastructure.security.JwtTokenProvider;
-import org.springframework.beans.factory.annotation.Value;
-import com.altrix.orchestrator.adapter.in.rest.dto.PauseRecordResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.SessionFileNode;
-import com.altrix.orchestrator.adapter.in.rest.dto.SessionPageResponse;
-import com.altrix.orchestrator.adapter.in.rest.dto.SessionStatusResponse;
+import com.altrix.orchestrator.adapter.in.rest.dto.*;
 import com.altrix.orchestrator.domain.exception.SessionNotFoundException;
 import com.altrix.orchestrator.domain.model.session.SessionStatus;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
@@ -22,14 +8,11 @@ import com.altrix.orchestrator.domain.model.session.WorkflowSessionId;
 import com.altrix.orchestrator.domain.port.in.EditPlanUseCase;
 import com.altrix.orchestrator.domain.port.in.HandleApprovalUseCase;
 import com.altrix.orchestrator.domain.port.in.PauseResumeSessionUseCase;
-import com.altrix.orchestrator.domain.port.out.FileReaderPort;
-import com.altrix.orchestrator.domain.port.out.MigrationReportRepository;
-import com.altrix.orchestrator.domain.port.out.RagIndexManifestRepository;
-import com.altrix.orchestrator.domain.port.out.SandboxLogRepository;
-import com.altrix.orchestrator.domain.port.out.SessionPauseHistoryPort;
-import com.altrix.orchestrator.domain.port.out.WorkflowSessionRepository;
+import com.altrix.orchestrator.domain.port.out.*;
+import com.altrix.orchestrator.infrastructure.security.JwtTokenProvider;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -267,10 +250,12 @@ public class SessionController {
                 .body(out.toString());
     }
 
-    /** Emits a minimal-but-valid unified diff block for one migrated file. */
+    /**
+     * Emits a minimal-but-valid unified diff block for one migrated file.
+     */
     private static void appendUnifiedDiff(StringBuilder out, com.altrix.common.domain.model.MigratedFile f) {
         String oldPath = f.originalPath() == null || f.originalPath().isBlank() ? "/dev/null" : "a/" + f.originalPath();
-        String newPath = f.newPath() == null      || f.newPath().isBlank()      ? "/dev/null" : "b/" + f.newPath();
+        String newPath = f.newPath() == null || f.newPath().isBlank() ? "/dev/null" : "b/" + f.newPath();
         boolean isDelete = "DELETED".equalsIgnoreCase(String.valueOf(f.changeType()));
         boolean isCreate = "CREATED".equalsIgnoreCase(String.valueOf(f.changeType()));
 

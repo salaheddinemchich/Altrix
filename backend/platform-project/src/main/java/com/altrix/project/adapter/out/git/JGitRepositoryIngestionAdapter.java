@@ -50,10 +50,14 @@ import java.util.stream.Stream;
 @Component
 public class JGitRepositoryIngestionAdapter implements RepositoryIngestionPort {
 
-    /** Depth used when {@code CloneRequest.shallow() == true}. */
+    /**
+     * Depth used when {@code CloneRequest.shallow() == true}.
+     */
     private static final int SHALLOW_DEPTH = 50;
 
-    /** Username sent alongside an HTTPS token (GitHub PAT convention). */
+    /**
+     * Username sent alongside an HTTPS token (GitHub PAT convention).
+     */
     private static final String TOKEN_USERNAME = "x-access-token";
 
     private final Path baseDir;
@@ -61,7 +65,7 @@ public class JGitRepositoryIngestionAdapter implements RepositoryIngestionPort {
 
     public JGitRepositoryIngestionAdapter(
             @Value("${app.workspace.base-dir:#{systemProperties['java.io.tmpdir']}/migrator-workspaces}")
-                    String baseDir,
+            String baseDir,
             @Value("${app.workspace.max-size-bytes:524288000}") long maxSizeBytes
     ) {
         this.baseDir = Path.of(baseDir);

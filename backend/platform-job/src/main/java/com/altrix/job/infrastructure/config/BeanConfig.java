@@ -15,8 +15,8 @@ public class BeanConfig {
 
     @Bean
     public JobCommandService jobCommandService(
-            JobRepositoryPort    jobRepository,
-            JobCachePort         jobCachePort,
+            JobRepositoryPort jobRepository,
+            JobCachePort jobCachePort,
             JobEventPublisherPort jobEventPublisher
     ) {
         return new JobCommandService(jobRepository, jobCachePort, jobEventPublisher);
@@ -25,14 +25,14 @@ public class BeanConfig {
     @Bean
     public JobQueryService jobQueryService(
             JobRepositoryPort jobRepository,
-            JobCachePort      jobCachePort
+            JobCachePort jobCachePort
     ) {
         return new JobQueryService(jobRepository, jobCachePort);
     }
 
     @Bean
     public MinioClient minioClient(
-            @Value("${minio.endpoint}")   String endpoint,
+            @Value("${minio.endpoint}") String endpoint,
             @Value("${minio.access-key}") String accessKey,
             @Value("${minio.secret-key}") String secretKey
     ) {

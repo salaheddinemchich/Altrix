@@ -29,10 +29,10 @@ public record AnalysisReport(
 
 ) implements Serializable {
     public AnalysisReport {
-        storageKey           = storageKey           != null ? storageKey           : "";
-        detectedComponents   = detectedComponents   != null ? List.copyOf(detectedComponents)   : List.of();
+        storageKey = storageKey != null ? storageKey : "";
+        detectedComponents = detectedComponents != null ? List.copyOf(detectedComponents) : List.of();
         detectedIntegrations = detectedIntegrations != null ? List.copyOf(detectedIntegrations) : List.of();
-        summary              = summary              != null ? summary              : "";
+        summary = summary != null ? summary : "";
     }
 
     public static AnalysisReport empty(String projectId) {

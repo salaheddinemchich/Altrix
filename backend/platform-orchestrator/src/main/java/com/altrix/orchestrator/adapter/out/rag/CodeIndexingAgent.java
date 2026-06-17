@@ -61,9 +61,7 @@ public class CodeIndexingAgent implements CodeIndexingPort {
 
         progressNotifier.notify(jobId, "RAG Indexer", "RUNNING", "Reading project files…");
         Map<String, String> files = fileReader.readAllFiles(context.storageKey());
-
-        progressNotifier.notify(jobId, "RAG Indexer", "RUNNING",
-                "Chunking " + files.size() + " file(s) for embedding…");
+        progressNotifier.notify(jobId, "RAG Indexer", "RUNNING", "Chunking " + files.size() + " file(s) for embedding…");
 
         List<DocumentChunk> chunks = new ArrayList<>();
         // Sorted set so the manifest is stable across runs and renders
@@ -83,8 +81,7 @@ public class CodeIndexingAgent implements CodeIndexingPort {
             }
         }
 
-        log.info("Job '{}' — {} chunks from {} files, upserting to vector store",
-                jobId, chunks.size(), files.size());
+        log.info("Job '{}' — {} chunks from {} files, upserting to vector store", jobId, chunks.size(), files.size());
         progressNotifier.notify(jobId, "RAG Indexer", "RUNNING",
                 "Embedding " + chunks.size() + " chunk(s) from " + indexedPaths.size() + " file(s)…");
         try {

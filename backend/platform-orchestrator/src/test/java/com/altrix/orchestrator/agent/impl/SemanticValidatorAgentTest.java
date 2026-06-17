@@ -11,6 +11,9 @@ import com.altrix.orchestrator.infrastructure.semantic.DependencyValidator;
 import com.altrix.orchestrator.infrastructure.semantic.DeterministicRepairEngine;
 import com.altrix.orchestrator.infrastructure.semantic.JavaxToJakartaRewriter;
 import com.altrix.orchestrator.infrastructure.semantic.LombokConstructorReconciler;
+import com.altrix.orchestrator.infrastructure.semantic.MessagingConfigRepairer;
+import com.altrix.orchestrator.infrastructure.semantic.SpringKafkaOverEngineeringDetector;
+import com.altrix.orchestrator.infrastructure.semantic.SpringValueConstructorInjectionFixer;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -36,7 +39,9 @@ class SemanticValidatorAgentTest {
     private SemanticValidatorAgent agent(KafkaMigrationKnowledgeBase kb) {
         return new SemanticValidatorAgent(contractValidator, leakValidator, kb,
                 new DeterministicRepairEngine(kb), new DependencyValidator(kb),
-                new JavaxToJakartaRewriter(), new LombokConstructorReconciler());
+                new JavaxToJakartaRewriter(), new LombokConstructorReconciler(),
+                new SpringValueConstructorInjectionFixer(), new MessagingConfigRepairer(),
+                new SpringKafkaOverEngineeringDetector());
     }
 
     private MigratedFile java(String path, String content) {

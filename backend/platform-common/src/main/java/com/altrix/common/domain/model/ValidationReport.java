@@ -35,10 +35,12 @@ public record ValidationReport(
     public ValidationReport {
         failures = failures != null ? List.copyOf(failures) : List.of();
         findings = findings != null ? List.copyOf(findings) : List.of();
-        summary  = summary  != null ? summary : "";
+        summary = summary != null ? summary : "";
     }
 
-    /** Back-compat constructor — pre-#94 call-sites that don't carry structured findings. */
+    /**
+     * Back-compat constructor — pre-#94 call-sites that don't carry structured findings.
+     */
     public ValidationReport(String projectId, boolean passed, List<String> failures, String summary) {
         this(projectId, passed, failures, summary, List.of());
     }
@@ -71,7 +73,7 @@ public record ValidationReport(
         public Finding {
             runnerId = runnerId != null ? runnerId : "";
             severity = severity != null ? severity : "ERROR";
-            message  = message  != null ? message : "";
+            message = message != null ? message : "";
         }
     }
 }

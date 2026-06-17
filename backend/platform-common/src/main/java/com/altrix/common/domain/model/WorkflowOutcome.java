@@ -12,17 +12,17 @@ import java.io.Serializable;
 public record WorkflowOutcome(
 
         String projectId,
-        AnalysisReport     analysis,
-        MigrationPlan      plan,
-        MigrationArtifact  artifact,
-        ValidationReport   validation
+        AnalysisReport analysis,
+        MigrationPlan plan,
+        MigrationArtifact artifact,
+        ValidationReport validation
 
 ) implements Serializable {
     public WorkflowOutcome {
-        if (projectId  == null) projectId  = "";
-        if (analysis   == null) analysis   = AnalysisReport.empty(projectId);
-        if (plan       == null) plan       = MigrationPlan.empty(projectId);
-        if (artifact   == null) artifact   = MigrationArtifact.empty(projectId);
+        if (projectId == null) projectId = "";
+        if (analysis == null) analysis = AnalysisReport.empty(projectId);
+        if (plan == null) plan = MigrationPlan.empty(projectId);
+        if (artifact == null) artifact = MigrationArtifact.empty(projectId);
         if (validation == null) validation = ValidationReport.pending(projectId);
     }
 }

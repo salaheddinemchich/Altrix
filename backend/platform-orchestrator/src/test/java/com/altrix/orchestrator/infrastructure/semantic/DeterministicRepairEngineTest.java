@@ -58,6 +58,72 @@ class DeterministicRepairEngineTest {
         assertThat(result.repairedFiles().get("p/S.java")).isEqualTo(src);
     }
 
+    // ── drop blocking .get() on producer.send() ────────────────────────────
+
+    @Test
+    void dropsBlockingGetOnProducerSend() {
+        var e = engine(kbWithForbidden(List.of()));
+        // Realistic layout: the send is a statement on its own line.
+        String src = "package p;\npublic class S {\n"
+                + "    public void publish(Order order) {\n"
+                + "        kafkaProducer.send(new ProducerRecord<>(topic, key, value)).get();\n"
+                + "    }\n}";
+        var result = e.repair(Map.of("p/S.java", src));
+        String out = result.repairedFiles().get("p/S.java");
+        assertThat(out).contains("kafkaProducer.send(new ProducerRecord<>(topic, key, value));");
+        assertThat(out).doesNotContain(".get()");
+        assertThat(result.actions()).anyMatch(a ->
+                a.type() == DeterministicRepairEngine.RepairAction.Type.DROP_BLOCKING_SEND_GET);
+    }
+
+    @Test
+    void leavesNonSendGetCallsAndAssignmentsUntouched() {
+        var e = engine(kbWithForbidden(List.of()));
+        // Map.get / Optional.get / List.get throw no checked exception; an
+        // assignment uses the result — none must be altered.
+        String src = "package p;\nimport java.util.Map;\npublic class S {\n"
+                + "  void f(Map<String,String> m) {\n"
+                + "    String a = m.get(\"k\");\n"
+                + "    Object o = opt.get();\n"
+                + "    var meta = producer.send(rec).get();\n"
+                + "  }\n}";
+        var result = e.repair(Map.of("p/S.java", src));
+        assertThat(result.repairedFiles().get("p/S.java")).isEqualTo(src);
+        assertThat(result.actions()).noneMatch(a ->
+                a.type() == DeterministicRepairEngine.RepairAction.Type.DROP_BLOCKING_SEND_GET);
+    }
+
+    // ── Spring-Kafka corrections (Spring Cloud GCP → Spring Kafka path) ─────
+
+    @Test
+    void correctsRenamedKafkaHeadersConstant() {
+        var e = engine(kbWithForbidden(List.of()));
+        String src = "package p;\nimport org.springframework.kafka.support.KafkaHeaders;\n"
+                + "public class S { void h(long o) { var x = KafkaHeaders.RECEIVED_OFFSET; } }";
+        var result = e.repair(Map.of("p/S.java", src));
+        String out = result.repairedFiles().get("p/S.java");
+        assertThat(out).contains("KafkaHeaders.OFFSET");
+        assertThat(out).doesNotContain("RECEIVED_OFFSET");
+    }
+
+    @Test
+    void correctsMisfiledSpringPayloadAnnotation() {
+        var e = engine(kbWithForbidden(List.of()));
+        String src = "package p;\nimport org.springframework.kafka.annotation.Payload;\npublic class S {}";
+        var result = e.repair(Map.of("p/S.java", src));
+        String out = result.repairedFiles().get("p/S.java");
+        assertThat(out).contains("import org.springframework.messaging.handler.annotation.Payload;");
+        assertThat(out).doesNotContain("kafka.annotation.Payload");
+    }
+
+    @Test
+    void removesHallucinatedSpringKafkaHeaderPackageWhenUnused() {
+        var e = engine(kbWithForbidden(List.of("org.springframework.kafka.support.header.*")));
+        String src = "package p;\nimport org.springframework.kafka.support.header.HeaderAccessor;\npublic class S {}";
+        var result = e.repair(Map.of("p/S.java", src));
+        assertThat(result.repairedFiles().get("p/S.java")).doesNotContain("support.header.HeaderAccessor");
+    }
+
     @Test
     void correctsMisplacedKafkaException() {
         var e = engine(kbWithForbidden(List.of()));

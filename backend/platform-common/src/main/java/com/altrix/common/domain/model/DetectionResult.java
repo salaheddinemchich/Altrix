@@ -1,13 +1,12 @@
 package com.altrix.common.domain.model;
 
-import java.io.Serializable;
-
 import com.altrix.common.domain.enums.BuildSystem;
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.DetectedFramework;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
@@ -42,7 +41,9 @@ public record DetectionResult(
         modules = List.copyOf(modules);
     }
 
-    /** Returns true if this is a multi-module project. */
+    /**
+     * Returns true if this is a multi-module project.
+     */
     public boolean isMultiModule() {
         return modules.size() > 1;
     }

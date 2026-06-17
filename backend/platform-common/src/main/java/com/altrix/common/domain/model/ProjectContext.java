@@ -23,11 +23,8 @@ public record ProjectContext(
 
         /** MinIO storage key of the uploaded project ZIP. */
         String storageKey,
-
         ConfigFormatPreference configFormatPreference,
-
         DetectionResult detectionResult,
-
         List<String> pubSubTopics,
         List<String> pubSubSubscriptions,
         List<String> listenerClasses,
@@ -43,10 +40,10 @@ public record ProjectContext(
 
 ) implements Serializable {
     public ProjectContext {
-        pubSubTopics        = pubSubTopics        != null ? List.copyOf(pubSubTopics)        : List.of();
-        pubSubSubscriptions = pubSubSubscriptions != null ? List.copyOf(pubSubSubscriptions)  : List.of();
-        listenerClasses     = listenerClasses     != null ? List.copyOf(listenerClasses)      : List.of();
-        publisherClasses    = publisherClasses    != null ? List.copyOf(publisherClasses)     : List.of();
-        migratedFiles       = migratedFiles       != null ? List.copyOf(migratedFiles)        : List.of();
+        pubSubTopics = pubSubTopics != null ? List.copyOf(pubSubTopics) : List.of();
+        pubSubSubscriptions = pubSubSubscriptions != null ? List.copyOf(pubSubSubscriptions) : List.of();
+        listenerClasses = listenerClasses != null ? List.copyOf(listenerClasses) : List.of();
+        publisherClasses = publisherClasses != null ? List.copyOf(publisherClasses) : List.of();
+        migratedFiles = migratedFiles != null ? List.copyOf(migratedFiles) : List.of();
     }
 }

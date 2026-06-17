@@ -11,8 +11,8 @@ public final class AgentFailureException extends BasePlatformException {
     private static final String ERROR_CODE = "AGENT_FAILURE";
 
     /**
-     * @param agentName  human-readable name of the agent that failed, e.g. "Architecture Analyzer"
-     * @param reason     short description of why it failed
+     * @param agentName human-readable name of the agent that failed, e.g. "Architecture Analyzer"
+     * @param reason    short description of why it failed
      */
     public AgentFailureException(String agentName, String reason) {
         super("Agent '" + agentName + "' failed: " + reason, ERROR_CODE);

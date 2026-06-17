@@ -1,0 +1,6 @@
+com/example/orders/Order.class
+com/example/orders/OrdersApplication.class
+com/example/orders/OrderController.class
+com/example/orders/OrderPublisher.class
+com/example/orders/OrderSubscriber.class
+com/example/orders/PubSubConfig.class

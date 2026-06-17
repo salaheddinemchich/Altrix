@@ -1,7 +1,9 @@
 package com.altrix.project.adapter.out.storage;
 
 import com.altrix.project.domain.port.out.FileStoragePort;
-import io.minio.*;
+import io.minio.GetObjectArgs;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

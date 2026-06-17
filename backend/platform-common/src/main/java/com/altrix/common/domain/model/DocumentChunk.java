@@ -1,8 +1,8 @@
 package com.altrix.common.domain.model;
 
-import java.io.Serializable;
-
 import com.altrix.common.domain.enums.DocumentType;
+
+import java.io.Serializable;
 
 /**
  * A piece of text ready to be embedded and stored in the vector store.
@@ -15,13 +15,13 @@ import com.altrix.common.domain.enums.DocumentType;
  * is the canonical URL the content was fetched from.
  */
 public record DocumentChunk(
-        String       projectId,
+        String projectId,
         DocumentType documentType,
-        String       filePath,
-        int          chunkIndex,
-        String       text,
-        String       contentHash,
-        String       sourceUrl
+        String filePath,
+        int chunkIndex,
+        String text,
+        String contentHash,
+        String sourceUrl
 ) implements Serializable {
     public static DocumentChunk sourceCode(String projectId, String filePath,
                                            int chunkIndex, String text, String hash) {

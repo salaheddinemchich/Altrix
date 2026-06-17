@@ -171,7 +171,9 @@ public class ProjectService implements UploadProjectUseCase, GetProjectQuery, In
         return out.toByteArray();
     }
 
-    /** "https://github.com/user/repo.git" -> "repo" */
+    /**
+     * "https://github.com/user/repo.git" -> "repo"
+     */
     private static String deriveProjectName(String repoUrl) {
         String tail = repoUrl.endsWith("/")
                 ? repoUrl.substring(0, repoUrl.length() - 1)

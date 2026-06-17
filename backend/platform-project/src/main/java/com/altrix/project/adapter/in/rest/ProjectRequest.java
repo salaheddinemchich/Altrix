@@ -1,7 +1,6 @@
 package com.altrix.project.adapter.in.rest;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
-import jakarta.validation.constraints.NotNull;
 
 /**
  * HTTP request DTO for the upload endpoint.

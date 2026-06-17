@@ -48,13 +48,13 @@ public record MigrationPlan(
 
 ) implements Serializable {
     public MigrationPlan {
-        storageKey      = storageKey      != null ? storageKey      : "";
-        targetStack     = targetStack     != null ? targetStack     : "";
-        steps           = steps           != null ? List.copyOf(steps) : List.of();
-        riskLevel       = riskLevel       != null ? riskLevel       : "";
+        storageKey = storageKey != null ? storageKey : "";
+        targetStack = targetStack != null ? targetStack : "";
+        steps = steps != null ? List.copyOf(steps) : List.of();
+        riskLevel = riskLevel != null ? riskLevel : "";
         estimatedEffort = estimatedEffort != null ? estimatedEffort : "";
-        summary         = summary         != null ? summary         : "";
-        targetFiles     = targetFiles     != null ? List.copyOf(targetFiles) : List.of();
+        summary = summary != null ? summary : "";
+        targetFiles = targetFiles != null ? List.copyOf(targetFiles) : List.of();
     }
 
     public static MigrationPlan empty(String projectId) {

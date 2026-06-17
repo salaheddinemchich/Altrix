@@ -62,7 +62,7 @@ public class ProjectController {
             // @RequestPart on an enum requires the part to carry application/json,
             // which most multipart clients don't set on simple text parts.
             @RequestParam(value = "configFormatPreference", required = false)
-                    ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference
     ) throws IOException {
 
         log.info("Upload request from user '{}', file='{}'", userId, file.getOriginalFilename());

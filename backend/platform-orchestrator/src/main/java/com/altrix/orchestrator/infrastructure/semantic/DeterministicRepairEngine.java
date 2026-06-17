@@ -66,15 +66,43 @@ public class DeterministicRepairEngine {
             "org.apache.kafka.producer.", "org.apache.kafka.clients.producer.",
             "org.apache.kafka.consumer.", "org.apache.kafka.clients.consumer.");
 
-    /** Specific Kafka classes the model puts in the wrong package (exact FQN → correct FQN). */
+    /** Specific classes the model puts in the wrong package (exact FQN → correct FQN). */
     private static final Map<String, String> KAFKA_CLASS_CORRECTIONS = Map.of(
             // The base exception lives in ...common, NOT ...common.errors
             // (...errors holds the *subtypes* like SerializationException).
-            "org.apache.kafka.common.errors.KafkaException", "org.apache.kafka.common.KafkaException");
+            "org.apache.kafka.common.errors.KafkaException", "org.apache.kafka.common.KafkaException",
+            // Spring messaging annotations the model mis-files under spring.kafka.
+            "org.springframework.kafka.annotation.Payload", "org.springframework.messaging.handler.annotation.Payload",
+            "org.springframework.kafka.annotation.Header",  "org.springframework.messaging.handler.annotation.Header");
+
+    /**
+     * Inline constant references the model gets wrong (exact text → replacement).
+     * Spring Kafka 3.x renamed several {@code KafkaHeaders} constants; the model
+     * still emits the old names.  Qualified with {@code KafkaHeaders.} so the
+     * replace can't hit an unrelated identifier.
+     */
+    private static final Map<String, String> CONSTANT_CORRECTIONS = Map.of(
+            "KafkaHeaders.RECEIVED_OFFSET",       "KafkaHeaders.OFFSET",
+            "KafkaHeaders.RECEIVED_MESSAGE_KEY",  "KafkaHeaders.RECEIVED_KEY",
+            "KafkaHeaders.RECEIVED_PARTITION_ID", "KafkaHeaders.RECEIVED_PARTITION");
 
     /** {@code implements Object {} / {@code extends Object {} — always invalid; remove the clause. */
     private static final Pattern IMPLEMENTS_OBJECT = Pattern.compile("\\s+implements\\s+Object(\\s*\\{)");
     private static final Pattern EXTENDS_OBJECT     = Pattern.compile("\\s+extends\\s+Object(\\s+implements|\\s*\\{)");
+
+    /**
+     * A blocking {@code <receiver>.send(...).get();} STATEMENT (result unused).
+     * The model adds {@code .get()} to wait for the send, but doesn't handle the
+     * checked {@code InterruptedException}/{@code ExecutionException}.  The
+     * original Pub/Sub publish ignored its future (fire-and-forget), so dropping
+     * {@code .get()} restores that intent and removes the checked-exception
+     * source — no try/catch needed.  Anchored at statement start so it never
+     * touches an ASSIGNMENT ({@code var m = producer.send(r).get();}) or an
+     * unrelated {@code .get()} (Map/List/Optional).
+     */
+    private static final Pattern BLOCKING_SEND_GET = Pattern.compile(
+            "(?m)^([ \\t]*)((?:[A-Za-z_$][\\w$]*\\.)*[A-Za-z_$][\\w$]*\\.send\\s*\\([^;{}]*\\))"
+                    + "\\.get\\s*\\(\\s*\\)\\s*;");
 
     /**
      * {@code java.lang} simple names that need no import.  An import of one of
@@ -199,12 +227,28 @@ public class DeterministicRepairEngine {
                     "removed invalid 'implements/extends Object'"));
         }
 
-        // ── 0f. Correct specific misplaced Kafka classes ────────────────
+        // ── 0g. Drop blocking .get() on a fire-and-forget producer.send() ─
+        Matcher sg = BLOCKING_SEND_GET.matcher(content);
+        if (sg.find()) {
+            content = BLOCKING_SEND_GET.matcher(content).replaceAll("$1$2;");
+            actions.add(new RepairAction(RepairAction.Type.DROP_BLOCKING_SEND_GET, path,
+                    "dropped blocking .get() on producer.send() (fire-and-forget — matches the "
+                            + "original publish intent, removes the unhandled checked exception)"));
+        }
+
+        // ── 0f. Correct specific misplaced classes + renamed constants ───
         for (Map.Entry<String, String> c : KAFKA_CLASS_CORRECTIONS.entrySet()) {
             if (content.contains(c.getKey())) {
                 content = content.replace(c.getKey(), c.getValue());
                 actions.add(new RepairAction(RepairAction.Type.FIX_PACKAGE_PREFIX, path,
                         "corrected class '" + c.getKey() + "' -> '" + c.getValue() + "'"));
+            }
+        }
+        for (Map.Entry<String, String> c : CONSTANT_CORRECTIONS.entrySet()) {
+            if (content.contains(c.getKey())) {
+                content = content.replace(c.getKey(), c.getValue());
+                actions.add(new RepairAction(RepairAction.Type.FIX_PACKAGE_PREFIX, path,
+                        "corrected constant '" + c.getKey() + "' -> '" + c.getValue() + "'"));
             }
         }
 
@@ -445,7 +489,7 @@ public class DeterministicRepairEngine {
         public enum Type {
             ADD_MISSING_IMPORT, REMOVE_FORBIDDEN_IMPORT, REMOVE_WRONG_PACKAGE_IMPORT,
             FIX_PACKAGE_PREFIX, REMOVE_BOGUS_JDK_IMPORT, FIX_PACKAGE_DECLARATION,
-            STRIP_REDUNDANT_SLF4J, REMOVE_INVALID_OBJECT_SUPERTYPE
+            STRIP_REDUNDANT_SLF4J, REMOVE_INVALID_OBJECT_SUPERTYPE, DROP_BLOCKING_SEND_GET
         }
     }
 }

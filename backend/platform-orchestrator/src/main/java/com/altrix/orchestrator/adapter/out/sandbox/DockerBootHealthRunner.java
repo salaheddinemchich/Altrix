@@ -342,11 +342,44 @@ public class DockerBootHealthRunner implements SandboxRunnerPort {
 
     private record HealthOutcome(boolean healthy, int exitCode, String reason, String pathUsed) {}
 
+    /** Boot-SUCCESS log markers — accept these when the app exposes no HTTP health endpoint. */
+    private static final java.util.regex.Pattern BOOT_OK = java.util.regex.Pattern.compile(
+            "Started \\S+ in \\d|Tomcat started on port|Netty started on port|"
+                    + "Payara Micro.*[Rr]eady|Instance Configuration :");
+
+    /**
+     * Boot-FAILURE log markers — fail fast instead of waiting out the full
+     * timeout.  Covers Spring's analysed banner AND the raw context/bean
+     * failures it prints WITHOUT a banner (e.g. a {@code @Value} field read in
+     * a constructor → {@code BeanInstantiationException: Constructor threw
+     * exception}, which has no FailureAnalyzer and so no banner).
+     */
+    private static final java.util.regex.Pattern BOOT_FAILED = java.util.regex.Pattern.compile(
+            "APPLICATION FAILED TO START"
+                    + "|\\[boot-health\\] no jar built"
+                    + "|Exception encountered during context initialization"
+                    + "|UnsatisfiedDependencyException"
+                    + "|BeanCreationException"
+                    + "|BeanInstantiationException"
+                    + "|Error creating bean with name");
+
+    /** Visible for tests — the migrated app printed a successful-startup marker. */
+    boolean bootStarted(String log) { return log != null && BOOT_OK.matcher(log).find(); }
+
+    /** Visible for tests — the migrated app printed an explicit startup-failure marker. */
+    boolean bootFailed(String log) { return log != null && BOOT_FAILED.matcher(log).find(); }
+
     /**
      * Polls {@code /actuator/health} then {@code /health} every {@link #POLL_INTERVAL}
      * until the deadline.  Returns the moment any path returns 2xx.  A
      * connection refused is treated as "still starting" — many seconds of
      * those are normal during Spring Boot startup.
+     *
+     * <p>Also watches the captured log so it works for apps with NO HTTP
+     * health endpoint (e.g. a Spring Boot app without Actuator): a
+     * {@code "Started …Application in"} / {@code "Tomcat started"} marker is
+     * accepted as healthy, and an {@code "APPLICATION FAILED TO START"} marker
+     * fails fast instead of waiting out the full {@link #BOOT_TIMEOUT}.
      *
      * <p>Every {@link #LIVE_LOG_FLUSH_INTERVAL} we upsert the accumulated
      * log to the repository so the frontend's auto-refresh can show
@@ -358,6 +391,14 @@ public class DockerBootHealthRunner implements SandboxRunnerPort {
         Instant nextFlush = Instant.now().plus(LIVE_LOG_FLUSH_INTERVAL);
         String lastFailureReason = "never returned 2xx";
         while (Instant.now().isBefore(deadline)) {
+            // Log-based detection first — fail fast on a crash, and succeed for
+            // apps that have no HTTP health endpoint at all.
+            String logSoFar;
+            synchronized (capture.get()) { logSoFar = capture.get().toString(); }
+            if (bootFailed(logSoFar)) {
+                return new HealthOutcome(false, 1,
+                        "Application failed to start (log marker) — see captured log", null);
+            }
             for (String path : HEALTH_PATHS) {
                 try {
                     int code = httpGetStatus("http://localhost:" + hostPort + path);
@@ -374,6 +415,11 @@ public class DockerBootHealthRunner implements SandboxRunnerPort {
                     // Connection refused while the app is still booting is expected.
                     lastFailureReason = path + ": " + e.getMessage();
                 }
+            }
+            // No health endpoint responded, but the app clearly started — accept it.
+            if (bootStarted(logSoFar)) {
+                return new HealthOutcome(true, 0,
+                        "Application started (log marker; no HTTP health endpoint exposed)", "log");
             }
             if (Instant.now().isAfter(nextFlush)) {
                 flushLiveLog(capture.get());

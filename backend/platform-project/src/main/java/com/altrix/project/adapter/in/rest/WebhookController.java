@@ -11,11 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -45,9 +41,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WebhookController {
 
-    /** Events we recognise; anything else lands in the audit log as SKIPPED. */
+    /**
+     * Events we recognise; anything else lands in the audit log as SKIPPED.
+     */
     private static final Set<String> SUPPORTED_EVENTS = Set.of("push", "pull_request", "ping");
-
     private final WebhookSignatureVerifier signatureVerifier;
     private final WebhookDeliveryRepositoryPort deliveryRepository;
     private final WebhookTriggerService triggerService;
@@ -57,8 +54,8 @@ public class WebhookController {
 
     @PostMapping(value = "/github", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> receiveGitHub(
-            @RequestHeader(value = "X-GitHub-Event",      required = false) String eventType,
-            @RequestHeader(value = "X-GitHub-Delivery",   required = false) String deliveryId,
+            @RequestHeader(value = "X-GitHub-Event", required = false) String eventType,
+            @RequestHeader(value = "X-GitHub-Delivery", required = false) String deliveryId,
             @RequestHeader(value = "X-Hub-Signature-256", required = false) String signatureHeader,
             @RequestBody byte[] rawBody
     ) {
