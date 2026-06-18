@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import { Job, JobStatus } from '../../core/models/job.model';
 import { JobService } from '../../core/services/job.service';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 
 const STATUS_FILTERS: ReadonlyArray<JobStatus | 'ALL'> = [
@@ -15,6 +16,16 @@ const STATUS_FILTERS: ReadonlyArray<JobStatus | 'ALL'> = [
   'FAILED',
 ];
 
+/** Accent + soft background per filter chip — mirrors {@link JobsComponent#statusClass}. */
+const FILTER_COLORS: Record<string, { color: string; bg: string }> = {
+  ALL:       { color: '#F5C45E', bg: 'rgba(245,196,94,0.14)' },
+  PENDING:   { color: '#FFBB33', bg: 'rgba(255,187,51,0.14)' },
+  ANALYZING: { color: '#5B8CFF', bg: 'rgba(91,140,255,0.14)' },
+  MIGRATING: { color: '#5B8CFF', bg: 'rgba(91,140,255,0.14)' },
+  DONE:      { color: '#3DDC97', bg: 'rgba(61,220,151,0.14)' },
+  FAILED:    { color: '#FF5C5C', bg: 'rgba(255,92,92,0.14)' },
+};
+
 @Component({
   selector: 'app-jobs',
   standalone: true,
@@ -25,6 +36,7 @@ const STATUS_FILTERS: ReadonlyArray<JobStatus | 'ALL'> = [
 export class JobsComponent {
   private readonly jobsApi = inject(JobService);
   private readonly router = inject(Router);
+  private readonly confirmDialog = inject(ConfirmDialogService);
 
   readonly filters = STATUS_FILTERS;
 
@@ -88,13 +100,25 @@ export class JobsComponent {
     this.activeFilter.set(filter);
   }
 
+  filterColor(f: JobStatus | 'ALL'): string {
+    return FILTER_COLORS[f]?.color ?? '#F5C45E';
+  }
+
+  filterColorBg(f: JobStatus | 'ALL'): string {
+    return FILTER_COLORS[f]?.bg ?? 'rgba(245,196,94,0.14)';
+  }
+
   goToJob(id: string): void {
     this.router.navigate(['/jobs', id]);
   }
 
-  deleteJob(j: Job, ev: Event): void {
+  async deleteJob(j: Job, ev: Event): Promise<void> {
     ev.stopPropagation();
-    if (!confirm(`Delete job ${j.id.substring(0, 8)}…? This cannot be undone.`)) return;
+    const ok = await this.confirmDialog.ask({
+      message: `Delete job ${j.id.substring(0, 8)}…? This cannot be undone.`,
+      danger: true,
+    });
+    if (!ok) return;
     this.jobsApi.delete(j.id).subscribe({
       next: () => this.refresh(),
       error: err => alert('Delete failed: ' + (err?.message ?? 'unknown')),

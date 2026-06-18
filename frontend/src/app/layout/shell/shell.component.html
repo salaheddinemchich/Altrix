@@ -23,7 +23,9 @@
              [routerLink]="item.path"
              routerLinkActive="active"
              [routerLinkActiveOptions]="{ exact: item.exact }">
-            <app-icon [name]="item.icon" [size]="17"/>
+            <span class="nav-icon" [class]="'nav-icon--' + item.color">
+              <app-icon [name]="item.icon" [size]="15"/>
+            </span>
             <span>{{ item.label }}</span>
           </a>
         }
@@ -37,7 +39,9 @@
                [routerLink]="item.path"
                routerLinkActive="active"
                [routerLinkActiveOptions]="{ exact: false }">
-              <app-icon [name]="item.icon" [size]="17"/>
+              <span class="nav-icon" [class]="'nav-icon--' + item.color">
+                <app-icon [name]="item.icon" [size]="15"/>
+              </span>
               <span>{{ item.label }}</span>
             </a>
           }
@@ -85,6 +89,80 @@
 
   <!-- ══ MAIN ═══════════════════════════════════════════════════════════════ -->
   <main class="main">
+
+    <!-- Top bar: quick-navigate search + theme toggle + profile -->
+    <header class="topbar">
+      <div class="topbar-search" [class.open]="searchOpen()">
+        <app-icon name="search" [size]="15"/>
+        <input type="text"
+               placeholder="Search pages…"
+               [value]="searchQuery()"
+               (input)="searchQuery.set($any($event.target).value)"
+               (keydown)="onSearchKeydown($event)"
+               aria-label="Quick navigate"/>
+        @if (!searchOpen()) { <kbd class="topbar-kbd">/</kbd> }
+
+        @if (searchOpen()) {
+          <div class="search-results">
+            @if (searchResults().length === 0) {
+              <div class="search-empty muted">No matching page.</div>
+            } @else {
+              @for (r of searchResults(); track r.path) {
+                <a class="search-result" [routerLink]="r.path" (click)="clearSearch()">
+                  <span class="nav-icon" [class]="'nav-icon--' + r.color">
+                    <app-icon [name]="r.icon" [size]="13"/>
+                  </span>
+                  {{ r.label }}
+                </a>
+              }
+            }
+          </div>
+        }
+      </div>
+
+      <div class="topbar-actions">
+        <a class="topbar-icon-btn" routerLink="/projects" title="New project" aria-label="New project">
+          <app-icon name="upload" [size]="16"/>
+        </a>
+        <button class="topbar-icon-btn"
+                (click)="toggleTheme()"
+                [title]="theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+                [attr.aria-label]="theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+          @if (theme() === 'dark') { <app-icon name="sun" [size]="16"/> } @else { <app-icon name="moon" [size]="16"/> }
+        </button>
+
+        @if (user(); as u) {
+          <div class="profile-menu-wrap">
+            <button class="profile-chip" (click)="toggleProfileMenu()">
+              <div class="profile-avatar">
+                @if (avatarUrl(); as url) {
+                  <img [src]="url" [alt]="u.login" width="30" height="30"/>
+                } @else {
+                  <span>{{ u.login[0].toUpperCase() }}</span>
+                }
+              </div>
+              <div class="profile-info">
+                <span class="profile-name">{{ u.login }}</span>
+                <span class="profile-role">{{ roleLabel(u.role) }}</span>
+              </div>
+              <app-icon name="chevron-down" [size]="13"/>
+            </button>
+
+            @if (profileMenuOpen()) {
+              <div class="profile-menu">
+                <button class="profile-menu-item" (click)="logout()">
+                  <app-icon name="log-out" [size]="14"/>
+                  Sign out
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </header>
+
     <router-outlet/>
   </main>
+
+  <app-confirm-dialog/>
 </div>

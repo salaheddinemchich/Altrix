@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestTemplate;
 
@@ -57,10 +58,8 @@ public class BeanConfig {
             JobStatusUpdatePort jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
             ProgressNotifierPort progressNotifierPort,
-            CodeIndexingPort codeIndexingPort,
             MigrationPlanCachePort migrationPlanCachePort,
             WorkflowSessionRepository workflowSessionRepository,
-            com.altrix.orchestrator.domain.port.out.RagIndexManifestRepository ragIndexManifestRepository,
             AutoPauseConfig autoPauseConfig,
             @Qualifier("projectMapperAgent")
             MigrationAgent<ProjectContext, com.altrix.orchestrator.domain.model.blueprint.ProjectBlueprint> projectMapper
@@ -70,10 +69,8 @@ public class BeanConfig {
                 jobStatusUpdatePort,
                 migratedFileStoragePort,
                 progressNotifierPort,
-                codeIndexingPort,
                 migrationPlanCachePort,
                 workflowSessionRepository,
-                ragIndexManifestRepository,
                 autoPauseConfig.threshold(),
                 projectMapper
         );
@@ -177,9 +174,22 @@ public class BeanConfig {
         return new TokenService(refreshTokenRepository, tokenBlacklistPort);
     }
 
+    /**
+     * The default {@link RestTemplate} request factory
+     * ({@code SimpleClientHttpRequestFactory}, backed by {@code
+     * HttpURLConnection}) cannot send PATCH requests — the JDK's
+     * {@code HttpURLConnection} only allows a fixed legacy method set
+     * (GET/POST/HEAD/OPTIONS/PUT/DELETE/TRACE) and throws {@code
+     * ProtocolException: Invalid HTTP method: PATCH}.  GitHub's "update a
+     * reference" endpoint (used to move a branch ref onto a new commit
+     * after committing files — see {@code GitHubApiClient}) requires
+     * PATCH, so every branch-strategy apply failed with that error.
+     * {@link JdkClientHttpRequestFactory} is backed by {@code
+     * java.net.http.HttpClient} (Java 11+), which supports PATCH natively.
+     */
     @Bean
     public RestTemplate restTemplate() {
-        return new RestTemplate();
+        return new RestTemplate(new JdkClientHttpRequestFactory());
     }
 
     // ── Migration Approval & Branch Strategy workflow (#PR-feature) ──────────

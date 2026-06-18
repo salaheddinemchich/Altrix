@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.adapter.out.persistence;
 
+import com.altrix.common.domain.model.ReportSummary;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -42,4 +43,9 @@ public class MigrationReportJpaEntity {
 
     @Column(name = "generated_at", nullable = false)
     private Instant generatedAt;
+
+    /** Structured companion to {@code content} — see {@link ReportSummary}. Nullable for pre-existing rows. */
+    @Convert(converter = ReportSummaryJsonConverter.class)
+    @Column(name = "structured_summary", columnDefinition = "jsonb")
+    private ReportSummary structuredSummary;
 }

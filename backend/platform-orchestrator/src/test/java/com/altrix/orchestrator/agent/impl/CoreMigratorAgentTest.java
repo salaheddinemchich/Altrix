@@ -59,6 +59,8 @@ class CoreMigratorAgentTest {
     com.altrix.orchestrator.domain.port.out.ProjectBlueprintPort projectBlueprintPort;
     @Mock
     com.altrix.orchestrator.infrastructure.migration.MigrationClusterPlanner clusterPlanner;
+    @Mock
+    com.altrix.orchestrator.infrastructure.migration.PomDependencyReconciler pomDependencyReconciler;
     @InjectMocks
     CoreMigratorAgent agent;
 

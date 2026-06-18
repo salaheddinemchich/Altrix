@@ -56,12 +56,31 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: transform 0.15s ease;
 
-  &--blue   { background: rgba(91,140,255,0.15);  color: var(--color-primary); }
-  &--gold   { background: rgba(245,196,94,0.15);  color: var(--color-gold); }
-  &--teal   { background: rgba(45,212,191,0.15);  color: var(--color-teal); }
-  &--purple { background: rgba(179,136,255,0.15); color: #b388ff; }
+  &--blue {
+    background: linear-gradient(135deg, rgba(91,140,255,0.30), rgba(91,140,255,0.06));
+    color: var(--color-primary);
+    box-shadow: inset 0 0 0 1px rgba(91,140,255,0.25), 0 4px 12px -4px rgba(91,140,255,0.5);
+  }
+  &--gold {
+    background: linear-gradient(135deg, rgba(245,196,94,0.32), rgba(245,196,94,0.06));
+    color: var(--color-gold);
+    box-shadow: inset 0 0 0 1px rgba(245,196,94,0.3), 0 4px 12px -4px rgba(245,196,94,0.5);
+  }
+  &--teal {
+    background: linear-gradient(135deg, rgba(45,212,191,0.32), rgba(45,212,191,0.06));
+    color: var(--color-teal);
+    box-shadow: inset 0 0 0 1px rgba(45,212,191,0.28), 0 4px 12px -4px rgba(45,212,191,0.5);
+  }
+  &--purple {
+    background: linear-gradient(135deg, rgba(179,136,255,0.32), rgba(179,136,255,0.06));
+    color: #b388ff;
+    box-shadow: inset 0 0 0 1px rgba(179,136,255,0.28), 0 4px 12px -4px rgba(179,136,255,0.5);
+  }
 }
+
+.stat-card:hover .stat-icon { transform: translateY(-1px) scale(1.04); }
 
 .stat-body { flex: 1; min-width: 0; }
 
@@ -104,28 +123,26 @@
 }
 
 // ── Migration insights (#130) ─────────────────────────────────────────────────
-.insights-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr) 1.4fr;
-  gap: 16px;
-  margin-bottom: 32px;
 
-  @media (max-width: 1000px) { grid-template-columns: repeat(2, 1fr); }
-  @media (max-width: 600px)  { grid-template-columns: 1fr; }
+// Compact metric strip — shared by the insights section and the Cost & Usage
+// section, three tiles wide on desktop.
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+
+  @media (max-width: 700px) { grid-template-columns: 1fr; }
 }
 
-.insight-card {
+.metric-tile {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-height: 96px;
 }
 
-.insight-label {
+.metric-label {
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -133,7 +150,7 @@
   color: var(--color-text-faint);
 }
 
-.insight-value {
+.metric-value {
   font-family: var(--font-display);
   font-size: 1.6rem;
   font-weight: 700;
@@ -141,32 +158,111 @@
   margin: 8px 0 4px;
 }
 
-.insight-sub {
-  font-size: 0.78rem;
+.metric-sub { font-size: 0.78rem; }
+
+// Charts row — donut card + bar card, side by side on wide viewports.
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 16px;
+  margin-bottom: 32px;
+
+  @media (max-width: 900px) { grid-template-columns: 1fr; }
 }
 
-// Horizontal bar chart — span 2 columns of the insights grid on wide
-// viewports so the bars get enough room to be readable.
-.chart-card { grid-column: span 1; }
-@media (min-width: 1001px) { .chart-card { grid-column: span 1; } }
+.chart-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
 
-.status-bars {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
+  &--wide { margin-bottom: 32px; }
+}
+
+.chart-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 14px;
+
+  h3 { margin: 0; font-size: 0.92rem; }
+}
+
+.chart-card-sub { font-size: 0.75rem; }
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 160px;
+}
+
+// Donut chart + legend list
+.donut-layout {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+
+  @media (max-width: 500px) { flex-direction: column; }
+}
+
+.donut-canvas {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  flex-shrink: 0;
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.donut-center-value {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.donut-center-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+}
+
+.donut-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 
   li {
-    display: grid;
-    grid-template-columns: 140px 1fr 40px;
+    display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
   }
 
-  .status-name {
+  .legend-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-name {
     color: var(--color-text-muted);
     font-weight: 500;
     overflow: hidden;
@@ -174,33 +270,25 @@
     white-space: nowrap;
   }
 
-  .status-track {
-    display: block;
-    height: 8px;
-    background: var(--color-surface-2);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  .status-fill {
-    display: block;
-    height: 100%;
-    background: var(--color-primary);
-    transition: width 0.4s ease-out;
-    border-radius: 4px;
-
-    &.bar-done    { background: var(--color-success); }
-    &.bar-failed  { background: var(--color-danger); }
-    &.bar-paused  { background: var(--color-warning); }
-    &.bar-waiting { background: var(--color-gold); }
-    &.bar-active  { background: var(--color-info); }
-  }
-
-  .status-count {
-    text-align: right;
+  .legend-count {
+    margin-left: auto;
     color: var(--color-text);
     font-weight: 600;
   }
+
+  .legend-percent {
+    font-size: 0.72rem;
+    width: 36px;
+    text-align: right;
+  }
+}
+
+// Bar charts (jobs activity + cost by provider)
+.bar-canvas {
+  height: 180px;
+  position: relative;
+
+  &--cost { height: 140px; }
 }
 
 // ── Section ───────────────────────────────────────────────────────────────────
@@ -213,7 +301,38 @@
   justify-content: space-between;
   margin-bottom: 14px;
 
-  h2 { margin: 0; }
+  h2 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+}
+
+.section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex-shrink: 0;
+
+  &--info {
+    background: linear-gradient(135deg, rgba(91,140,255,0.30), rgba(91,140,255,0.06));
+    color: var(--color-info);
+    box-shadow: inset 0 0 0 1px rgba(91,140,255,0.25);
+  }
+  &--gold {
+    background: linear-gradient(135deg, rgba(245,196,94,0.32), rgba(245,196,94,0.06));
+    color: var(--color-gold);
+    box-shadow: inset 0 0 0 1px rgba(245,196,94,0.3);
+  }
+  &--teal {
+    background: linear-gradient(135deg, rgba(45,212,191,0.32), rgba(45,212,191,0.06));
+    color: var(--color-teal);
+    box-shadow: inset 0 0 0 1px rgba(45,212,191,0.28);
+  }
 }
 
 // ── Table ─────────────────────────────────────────────────────────────────────

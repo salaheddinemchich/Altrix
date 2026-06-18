@@ -33,6 +33,19 @@ kafka-migration:
     # Spring-Kafka hallucinations (Spring Cloud GCP → Spring Kafka path).
     - org.springframework.kafka.support.header.*                  # invented package; headers live in org.springframework.kafka.support.KafkaHeaders
 
+  # Maven/Gradle <artifactId> fragments (case-insensitive substring match)
+  # that mean the build still pulls in GCP Pub/Sub libraries.  Consumed by
+  # PomDependencyReconciler to deterministically strip these from pom.xml
+  # when the migrator's own LLM rewrite of the build file failed (reverted
+  # to the original) — closing the gap where Java code correctly moves to
+  # Kafka but the classpath still has the old GCP starter and never gains
+  # spring-kafka.
+  forbidden-dependency-artifacts:
+    - google-api-services-pubsub
+    - google-cloud-pubsub
+    - spring-cloud-gcp-pubsub
+    - spring-cloud-gcp-starter-pubsub
+
   # FQN → Maven coordinate (group:artifact).  Lets the dependency validator
   # detect "code references this class but the pom lacks the dependency".
   # ".*" entries cover a whole package.

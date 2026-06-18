@@ -43,6 +43,12 @@
           Download ZIP
         </a>
       }
+      @if (session()?.status === 'DONE') {
+        <a class="btn" [routerLink]="['/sessions', session()!.sessionId, 'files']">
+          <app-icon name="layers" [size]="15"/>
+          View Diff
+        </a>
+      }
       <button class="btn" (click)="load()">
         <app-icon name="refresh" [size]="15"/>
         Refresh
@@ -61,7 +67,13 @@
     <app-session-timeline
       [jobId]="job()!.id"
       [currentStatus]="session()?.status ?? job()!.status"
-      [sessionId]="session()?.sessionId ?? null"/>
+      [sessionId]="session()?.sessionId ?? null"
+      [plan]="session()?.plan ?? null"
+      [canApprove]="true"
+      [savingPlan]="savingPlan()"
+      (planSaved)="savePlan($event)"
+      (approveClicked)="approve()"
+      (rejectClicked)="reject()"/>
   </div>
 
   <!-- ══ Migration Apply (Branch Strategy + Confirmation) ══════════════════
@@ -143,19 +155,10 @@
           }
         </dl>
 
-        <!-- Admin actions -->
+        <!-- Approve/Reject now live inline on the Plan step in the
+             Timeline card above, next to the plan itself. -->
         @if (auth.isAdmin()) {
           <div class="session-actions">
-            @if (s.status === 'AWAITING_APPROVAL') {
-              <button class="btn btn-gold" (click)="approve()">
-                <app-icon name="check" [size]="14"/>
-                Approve
-              </button>
-              <button class="btn btn-danger" (click)="reject()">
-                <app-icon name="x" [size]="14"/>
-                Reject
-              </button>
-            }
             @if (s.status !== 'PAUSED' && s.status !== 'DONE' && s.status !== 'FAILED') {
               <button class="btn" (click)="pauseSession()">
                 <app-icon name="pause" [size]="14"/>

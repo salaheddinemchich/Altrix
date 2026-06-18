@@ -168,15 +168,15 @@ public class AuthController {
 
     private void setRefreshCookie(HttpServletResponse response, String token, boolean secure) {
         String cookieValue = "refreshToken=" + token +
-                "; HttpOnly; Path=/api/v1/auth/refresh" +
+                "; HttpOnly; Path=/api/v1/auth" +
                 "; Max-Age=" + (jwtConfig.refreshTokenExpiryDays() * 86_400) +
-                "; SameSite=Strict" +
+                "; SameSite=Lax" +
                 (secure ? "; Secure" : "");
         response.addHeader("Set-Cookie", cookieValue);
     }
 
     private static void clearRefreshCookie(HttpServletResponse response) {
         response.addHeader("Set-Cookie",
-                "refreshToken=; HttpOnly; Path=/api/v1/auth/refresh; Max-Age=0; SameSite=Strict");
+                "refreshToken=; HttpOnly; Path=/api/v1/auth; Max-Age=0; SameSite=Lax");
     }
 }

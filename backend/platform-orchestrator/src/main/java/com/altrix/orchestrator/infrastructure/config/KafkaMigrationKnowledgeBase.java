@@ -54,13 +54,15 @@ import java.util.Set;
 public record KafkaMigrationKnowledgeBase(
         List<Mapping> mappings,
         List<ClassDependency> classDependencies,
-        @DefaultValue({}) List<String> globalForbiddenImports
+        @DefaultValue({}) List<String> globalForbiddenImports,
+        @DefaultValue({}) List<String> forbiddenDependencyArtifacts
 ) {
 
     public KafkaMigrationKnowledgeBase {
-        mappings               = mappings               != null ? List.copyOf(mappings)               : List.of();
-        classDependencies      = classDependencies      != null ? List.copyOf(classDependencies)      : List.of();
-        globalForbiddenImports = globalForbiddenImports != null ? List.copyOf(globalForbiddenImports) : List.of();
+        mappings                     = mappings                     != null ? List.copyOf(mappings)                     : List.of();
+        classDependencies            = classDependencies            != null ? List.copyOf(classDependencies)            : List.of();
+        globalForbiddenImports       = globalForbiddenImports       != null ? List.copyOf(globalForbiddenImports)       : List.of();
+        forbiddenDependencyArtifacts = forbiddenDependencyArtifacts != null ? List.copyOf(forbiddenDependencyArtifacts) : List.of();
     }
 
     /**
@@ -170,6 +172,17 @@ public record KafkaMigrationKnowledgeBase(
         Set<String> deps = new LinkedHashSet<>();
         for (Mapping m : mappings) deps.addAll(m.requiredDependencies());
         return deps;
+    }
+
+    /**
+     * Maven/Gradle dependency-name fragments (matched as a case-insensitive
+     * substring of {@code <artifactId>}) that mean the build still pulls in
+     * Google Pub/Sub libraries and must be removed on a Kafka migration.
+     * Used by {@code PomDependencyReconciler} to deterministically strip
+     * stale GCP dependencies pom.xml's own LLM rewrite failed to remove.
+     */
+    public Set<String> allForbiddenDependencyArtifacts() {
+        return Set.copyOf(forbiddenDependencyArtifacts);
     }
 
     /**

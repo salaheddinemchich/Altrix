@@ -46,6 +46,7 @@ public class MigrationReportPersistenceAdapter implements MigrationReportReposit
                 .projectId(report.projectId())
                 .content(report.content())
                 .generatedAt(report.generatedAt() != null ? report.generatedAt() : Instant.now())
+                .structuredSummary(report.summary())
                 .build();
         repository.save(entity);
         log.debug("Saved migration report v{} for session '{}' ({} chars)",
@@ -116,6 +117,6 @@ public class MigrationReportPersistenceAdapter implements MigrationReportReposit
     }
 
     private MigrationReport toMigrationReport(MigrationReportJpaEntity e) {
-        return new MigrationReport(e.getProjectId(), e.getContent(), e.getGeneratedAt());
+        return new MigrationReport(e.getProjectId(), e.getContent(), e.getGeneratedAt(), e.getStructuredSummary());
     }
 }

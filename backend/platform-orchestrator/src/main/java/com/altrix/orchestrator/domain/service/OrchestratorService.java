@@ -21,8 +21,9 @@ import java.util.Optional;
 /**
  * Orchestrates the full migration pipeline for a single job (#35).
  *
- * <p>Phase 0 — RAG: indexes uploaded source files into the vector store so agents
- * can retrieve semantically relevant chunks instead of receiving the entire codebase.
+ * <p>Phase 0 — Project Mapper: builds the project-wide semantic blueprint
+ * (classes / calls / inheritance / features → Kafka targets) so the Core
+ * Migrator can enrich each per-file prompt with real project understanding.
  *
  * <p>Phase 1–5 — Typed agent workflow: delegates to {@link WorkflowExecutionPort}
  * which drives the five typed {@code MigrationAgent<I,O>} implementations through
@@ -39,10 +40,8 @@ public class OrchestratorService implements RunPipelineUseCase {
     private final JobStatusUpdatePort jobStatusUpdatePort;
     private final MigratedFileStoragePort migratedFileStoragePort;
     private final ProgressNotifierPort progressNotifierPort;
-    private final CodeIndexingPort codeIndexingPort;
     private final MigrationPlanCachePort planCachePort;
     private final WorkflowSessionRepository sessionRepository;
-    private final RagIndexManifestRepository ragIndexManifestRepository;
     private final int autoPauseThreshold;
     /**
      * Project Mapper (#blueprint) — builds the project-wide semantic map in
@@ -57,10 +56,8 @@ public class OrchestratorService implements RunPipelineUseCase {
             JobStatusUpdatePort jobStatusUpdatePort,
             MigratedFileStoragePort migratedFileStoragePort,
             ProgressNotifierPort progressNotifierPort,
-            CodeIndexingPort codeIndexingPort,
             MigrationPlanCachePort planCachePort,
             WorkflowSessionRepository sessionRepository,
-            RagIndexManifestRepository ragIndexManifestRepository,
             int autoPauseThreshold,
             MigrationAgent<ProjectContext, ProjectBlueprint> projectMapper
     ) {
@@ -68,10 +65,8 @@ public class OrchestratorService implements RunPipelineUseCase {
         this.jobStatusUpdatePort = jobStatusUpdatePort;
         this.migratedFileStoragePort = migratedFileStoragePort;
         this.progressNotifierPort = progressNotifierPort;
-        this.codeIndexingPort = codeIndexingPort;
         this.planCachePort = planCachePort;
         this.sessionRepository = sessionRepository;
-        this.ragIndexManifestRepository = ragIndexManifestRepository;
         this.autoPauseThreshold = autoPauseThreshold;
         this.projectMapper = projectMapper;
         log.info("OrchestratorService initialised — typed LangGraph4j workflow (auto-pause threshold={}, projectMapper={})",
@@ -99,22 +94,7 @@ public class OrchestratorService implements RunPipelineUseCase {
         // once on this thread and passes it down, see CoreMigratorAgent.)
         SandboxContext.setSessionId(session.id().value().toString());
         try {
-            // ── Phase 0: RAG indexing ────────────────────────────────────────
-            // CodeIndexingAgent emits granular progress events
-            // (reading → chunking → embedding → done) AND returns a manifest
-            // listing exactly which files made it into the vector store.
-            // Persist the manifest so the JobDetail UI can show the reviewer
-            // which resources were considered.  Best-effort: a DB hiccup here
-            // doesn't roll back the embedding work.
-            var manifest = codeIndexingPort.index(initial);
-            try {
-                ragIndexManifestRepository.save(session.id(), manifest);
-            } catch (Exception persistErr) {
-                log.warn("Could not persist RAG manifest for session '{}' (non-fatal): {}",
-                        session.id(), persistErr.getMessage());
-            }
-
-            // ── Phase 0b: Project Mapper (semantic blueprint) ────────────────
+            // ── Phase 0: Project Mapper (semantic blueprint) ─────────────────
             // Build the project-wide semantic map (classes / calls / inheritance
             // / features → Kafka targets) and persist it under this session so
             // the Core Migrator can enrich each per-file prompt with real

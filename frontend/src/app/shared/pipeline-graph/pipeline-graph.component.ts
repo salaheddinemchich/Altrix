@@ -33,6 +33,22 @@ export class PipelineGraphComponent implements OnDestroy {
     this.nodes().findIndex(n => n.status === 'ACTIVE')
   );
 
+  /**
+   * Same "DONE counts fully, ACTIVE counts as half" formula as
+   * SessionTimeline.percentComplete, so the header chip here and the
+   * progress bar in the Timeline panel below always agree.
+   */
+  readonly progressPercent = computed(() => {
+    const list = this.nodes();
+    if (list.length === 0) return 0;
+    const score = list.reduce((sum, n) => {
+      if (n.status === 'DONE')   return sum + 1;
+      if (n.status === 'ACTIVE') return sum + 0.5;
+      return sum;
+    }, 0);
+    return Math.round((score / list.length) * 100);
+  });
+
   private sub: Subscription | null = null;
 
   constructor() {
@@ -136,21 +152,21 @@ export class PipelineGraphComponent implements OnDestroy {
       return;
     }
 
-    // Indices match DEFAULT_PIPELINE: [0] Index [1] Analyse [2] Plan [3] Migrate
-    // [4] Validate [5] Report.  See backfillSteps() in session-timeline for the
-    // full mapping rationale.
+    // Indices match DEFAULT_PIPELINE: [0] Analyse [1] Plan [2] Migrate
+    // [3] Validate [4] Report.  See backfillSteps() in session-timeline for
+    // the full mapping rationale.
     let lastDone = -1;
     let active = -1;
     switch (s) {
       case 'PENDING':           lastDone = -1; active = -1; break;
-      case 'ANALYZING':         lastDone = 0;  active = 1;  break;
-      case 'CONTEXT_ANALYSED':  lastDone = 1;  active = 2;  break;
+      case 'ANALYZING':         lastDone = -1; active = 0;  break;
+      case 'CONTEXT_ANALYSED':  lastDone = 0;  active = 1;  break;
       case 'PLAN_READY':
-      case 'AWAITING_APPROVAL': lastDone = 2;  active = -1; break;
-      case 'MIGRATING':         lastDone = 2;  active = 3;  break;
-      case 'VALIDATING':        lastDone = 3;  active = 4;  break;
+      case 'AWAITING_APPROVAL': lastDone = 1;  active = -1; break;
+      case 'MIGRATING':         lastDone = 1;  active = 2;  break;
+      case 'VALIDATING':        lastDone = 2;  active = 3;  break;
       case 'DONE':
-      case 'COMPLETED':         lastDone = 5;  active = -1; break;
+      case 'COMPLETED':         lastDone = 4;  active = -1; break;
       default: return;
     }
 

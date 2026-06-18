@@ -89,13 +89,13 @@ class PipelineValueObjectsTest {
 
     @Test
     void approvedPlan_rejectsNullPlan() {
-        assertThatThrownBy(() -> new ApprovedPlan(null, "user", Instant.now(), null))
+        assertThatThrownBy(() -> new ApprovedPlan(null, "user", Instant.now(), null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void approvedPlan_defaultsApprovedByToAuto() {
-        ApprovedPlan ap = new ApprovedPlan(MigrationPlan.empty("p1"), null, null, null);
+        ApprovedPlan ap = new ApprovedPlan(MigrationPlan.empty("p1"), null, null, null, null);
         assertThat(ap.approvedBy()).isEqualTo("auto");
         assertThat(ap.approvedAt()).isEqualTo(Instant.EPOCH);
     }
@@ -161,9 +161,10 @@ class PipelineValueObjectsTest {
 
     @Test
     void migrationReport_handlesNulls() {
-        MigrationReport r = new MigrationReport("p1", null, null);
+        MigrationReport r = new MigrationReport("p1", null, null, null);
         assertThat(r.content()).isEmpty();
         assertThat(r.generatedAt()).isEqualTo(Instant.EPOCH);
+        assertThat(r.summary()).isEqualTo(ReportSummary.empty());
     }
 
     @Test

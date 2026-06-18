@@ -15,6 +15,7 @@ import {
   BranchStrategy,
   MigrationApplyResult,
   RepositoryAccess,
+  RepositoryPermission,
 } from '../../core/models/migration-apply.model';
 import { MigrationApplyService } from '../../core/services/migration-apply.service';
 import { IconComponent } from '../../shared/icon/icon.component';
@@ -217,6 +218,24 @@ export class MigrationApplyComponent {
       case 'DIRECT_MERGE':  return 'Commit and merge straight to the default branch. Requires admin permission.';
       case 'NEW_BRANCH':    return 'Push the migration to a new branch — no PR opened.';
       case 'PULL_REQUEST':  return 'Push to a new branch and open a PR targeting the default branch.';
+    }
+  }
+
+  strategyIcon(s: BranchStrategy): string {
+    switch (s) {
+      case 'DIRECT_MERGE':  return 'git-merge';
+      case 'NEW_BRANCH':    return 'git-branch';
+      case 'PULL_REQUEST':  return 'git-pull-request';
+    }
+  }
+
+  /** Maps the repo permission level to a `.pill` colour variant (see styles.scss). */
+  permissionPillClass(p: RepositoryPermission): string {
+    switch (p) {
+      case 'ADMIN': return 'gold';
+      case 'WRITE': return 'info';
+      case 'READ':  return 'warning';
+      default:      return 'danger';
     }
   }
 

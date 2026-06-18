@@ -180,7 +180,7 @@ button, .btn {
   font-family: inherit;
   font-size: 0.85rem;
   font-weight: 500;
-  border-radius: var(--radius);
+  border-radius: 999px;
   cursor: pointer;
   transition: background 0.13s, border-color 0.13s, transform 0.05s;
   white-space: nowrap;
@@ -220,7 +220,7 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-sm {
   padding: 0.35rem 0.7rem;
   font-size: 0.78rem;
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
 }
 
 // ── Forms ────────────────────────────────────────────────────────────────────
@@ -234,7 +234,7 @@ input[type='email'], input[type='search'], select, textarea {
   background: var(--color-surface-2);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: 999px;
   outline: none;
   transition: border-color 0.13s, box-shadow 0.13s;
 

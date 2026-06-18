@@ -1,11 +1,30 @@
 <div class="pipeline">
+
+  <!-- ── Header: title + overall progress ────────────────────────────────── -->
+  <div class="pipeline-header">
+    <div class="pipeline-title">
+      <span class="pipeline-title-icon"><app-icon name="zap" [size]="13"/></span>
+      Pipeline
+    </div>
+    <div class="pipeline-progress">
+      <span class="pipeline-progress-track">
+        <span class="pipeline-progress-fill" [style.width.%]="progressPercent()"></span>
+      </span>
+      <span class="pipeline-progress-label mono">{{ progressPercent() }}%</span>
+    </div>
+  </div>
+
   <!-- ── Nodes + connecting edges ────────────────────────────────────────── -->
   <div class="rail" [attr.data-active]="activeIndex()">
     @for (node of nodes(); track node.id; let i = $index) {
       <div class="node-wrap">
         <div class="node" [class]="'status-' + node.status.toLowerCase()">
           <div class="node-icon">
-            <app-icon [name]="nodeIcon(node.status)" [size]="16"/>
+            @if (node.status === 'PENDING') {
+              <span class="node-number">{{ i + 1 }}</span>
+            } @else {
+              <app-icon [name]="nodeIcon(node.status)" [size]="16"/>
+            }
           </div>
           <div class="node-body">
             <div class="node-label">{{ node.label }}</div>
@@ -26,8 +45,11 @@
   <!-- ── Latest event ticker ─────────────────────────────────────────────── -->
   @if (lastEvent(); as e) {
     <div class="ticker">
-      <span class="ticker-dot"></span>
-      <span class="ticker-agent">{{ e.agentName }}</span>
+      <span class="ticker-live">
+        <span class="ticker-dot"></span>
+        LIVE
+      </span>
+      <span class="ticker-agent mono">{{ e.agentName }}</span>
       <span class="ticker-status">{{ e.status }}</span>
       @if (e.message) {
         <span class="ticker-msg muted">— {{ e.message }}</span>

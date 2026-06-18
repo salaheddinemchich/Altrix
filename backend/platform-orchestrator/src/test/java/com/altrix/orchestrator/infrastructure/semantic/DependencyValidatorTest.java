@@ -17,7 +17,7 @@ class DependencyValidatorTest {
                 List.of(
                         new ClassDependency("org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients"),
                         new ClassDependency("org.apache.kafka.clients.producer.*", "org.apache.kafka:kafka-clients")),
-                List.of());
+                List.of(), List.of());
     }
 
     private DependencyValidator validator() {

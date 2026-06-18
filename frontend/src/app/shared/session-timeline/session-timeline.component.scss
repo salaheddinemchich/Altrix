@@ -156,6 +156,17 @@
     margin-top: 4px;
   }
 
+  // Inline plan review on the Plan step.
+  .plan-review {
+    margin-top: 8px;
+  }
+
+  .plan-review-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
   // RAG manifest expansion on the Index step.
   .rag-toggle {
     appearance: none;
@@ -312,6 +323,99 @@
         border-color: var(--color-primary, #3b82f6);
         color: #fff;
       }
+    }
+  }
+
+  .report-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .report-summary-item {
+    font-size: 11px;
+    color: var(--muted, #888);
+  }
+
+  // Rendered HTML report (renderReportMarkdown() output) — styled like a
+  // real document, not a code dump.  max-height + overflow keeps it from
+  // pushing the rest of the timeline far down the page.
+  .report-viewer {
+    padding: 14px 18px;
+    background: #fff;
+    border: 1px solid var(--border, #e5e5e5);
+    border-radius: 4px;
+    max-height: 560px;
+    overflow: auto;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: #1a1a1a;
+
+    h1 {
+      font-size: 18px;
+      margin: 0 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #1a1a1a;
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 22px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border, #ddd);
+
+      &:first-child { margin-top: 0; }
+    }
+
+    h3, h4 {
+      font-size: 12.5px;
+      margin: 14px 0 6px;
+    }
+
+    p { margin: 0 0 10px; }
+
+    ul, ol {
+      margin: 0 0 12px;
+      padding-left: 20px;
+    }
+
+    li { margin-bottom: 3px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 14px;
+      font-size: 12px;
+    }
+
+    th, td {
+      border: 1px solid var(--border, #ddd);
+      padding: 5px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: rgba(0, 0, 0, 0.04);
+      font-weight: 600;
+    }
+
+    code {
+      background: rgba(0, 0, 0, 0.06);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: ui-monospace, monospace;
+      font-size: 11.5px;
+    }
+
+    em { color: var(--muted, #666); }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border, #ddd);
+      margin: 16px 0;
     }
   }
 

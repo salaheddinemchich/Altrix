@@ -27,7 +27,7 @@ class FeatureClassifierTest {
                 new Mapping("pubsub.test-iam", "// TODO altrix: no Kafka equivalent",
                         List.of(), List.of(), List.of(), List.of(),
                         "IAM has no clean Kafka equivalent.")),
-                List.of(), List.of());
+                List.of(), List.of(), List.of());
     }
 
     private FeatureClassifier classifier() {
@@ -113,7 +113,7 @@ class FeatureClassifierTest {
     void featureWithoutKbMappingStillEmittedWithNullTarget() {
         // A classifier whose KB lacks the mapping — feature still detected,
         // kafkaTarget is null, description falls back.
-        var bareKb = new KafkaMigrationKnowledgeBase(List.of(), List.of(), List.of());
+        var bareKb = new KafkaMigrationKnowledgeBase(List.of(), List.of(), List.of(), List.of());
         var c = new FeatureClassifier(bareKb);
         var features = c.classifyOne("class A { void m() { x.publish(a, b); } }");
         assertThat(features).extracting(BlueprintFeature::id).contains("pubsub.publish-single");

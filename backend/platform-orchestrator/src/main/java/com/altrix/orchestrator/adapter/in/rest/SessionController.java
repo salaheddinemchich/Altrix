@@ -57,7 +57,6 @@ public class SessionController {
     private final SessionPauseHistoryPort pauseHistoryPort;
     private final FileReaderPort fileReader;
     private final MigrationReportRepository migrationReportRepository;
-    private final RagIndexManifestRepository ragIndexManifestRepository;
     private final com.altrix.orchestrator.domain.port.out.FileProvenanceRepository fileProvenanceRepository;
     private final SandboxLogRepository sandboxLogRepository;
     private final JwtTokenProvider jwtTokenProvider;
@@ -386,26 +385,6 @@ public class SessionController {
         WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
         return sandboxLogRepository.findBySessionIdAndRunnerId(id, runnerId)
                 .map(SandboxLogResponse::from)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    // ── RAG index manifest ────────────────────────────────────────────────────
-
-    /**
-     * GET /api/v1/sessions/{id}/rag-index — returns the manifest of source
-     * files that were indexed for RAG retrieval during this session.
-     *
-     * <p>404 when no manifest has been persisted yet (session predates the
-     * feature, or indexing crashed before the persist call).  The Index
-     * step on the JobDetail timeline uses this to render the
-     * "view indexed files" expansion.
-     */
-    @GetMapping("/{sessionId}/rag-index")
-    public ResponseEntity<RagIndexManifestResponse> getRagIndexManifest(@PathVariable String sessionId) {
-        WorkflowSessionId id = WorkflowSessionId.of(UUID.fromString(sessionId));
-        return ragIndexManifestRepository.findBySessionId(id)
-                .map(RagIndexManifestResponse::from)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }

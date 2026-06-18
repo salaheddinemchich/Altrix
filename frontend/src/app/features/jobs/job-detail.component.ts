@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, input, OnDestroy, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Job, JobStatus } from '../../core/models/job.model';
-import { Session } from '../../core/models/session.model';
+import { MigrationPlan, Session } from '../../core/models/session.model';
 import { JobService } from '../../core/services/job.service';
 import { PipelineService } from '../../core/services/pipeline.service';
 import { SessionService } from '../../core/services/session.service';
@@ -10,6 +10,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 import { PipelineGraphComponent } from '../../shared/pipeline-graph/pipeline-graph.component';
 import { SessionTimelineComponent } from '../../shared/session-timeline/session-timeline.component';
 import { AuthService } from '../../core/auth/services/auth.service';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { MigrationApplyComponent } from '../migration-apply/migration-apply.component';
 
 const STAGES: JobStatus[] = ['PENDING', 'ANALYZING', 'MIGRATING', 'DONE'];
@@ -25,6 +26,7 @@ export class JobDetailComponent implements OnInit, OnDestroy {
   private readonly jobsApi    = inject(JobService);
   private readonly sessionApi = inject(SessionService);
   private readonly pipelineApi = inject(PipelineService);
+  private readonly confirmDialog = inject(ConfirmDialogService);
   protected readonly auth     = inject(AuthService);
 
   readonly id = input.required<string>();
@@ -56,6 +58,8 @@ export class JobDetailComponent implements OnInit, OnDestroy {
 
   readonly canDownload = computed(() =>
     this.job()?.status === 'DONE' && !!this.job()?.outputStorageKey);
+
+  readonly savingPlan = signal(false);
 
   readonly stageIndex = computed(() => {
     const s = this.job()?.status;
@@ -166,28 +170,43 @@ export class JobDetailComponent implements OnInit, OnDestroy {
     });
   }
 
-  approve(): void {
+  async approve(): Promise<void> {
     const s = this.session();
     if (!s) return;
     // #125 — identity confirmation step.  Surfaces the @login the decision
     // will be recorded against so a reviewer can't be tricked into approving
     // from a session that has silently swapped users underneath them.
     const login = this.auth.user()?.login ?? this.auth.userId() ?? 'this account';
-    if (!confirm(`Approving as @${login} — proceed?`)) return;
+    const ok = await this.confirmDialog.ask(`Approving as @${login} — proceed?`);
+    if (!ok) return;
     this.sessionApi.approve(s.sessionId).subscribe({
       next: updated => this.session.set(updated),
       error: () => {},
     });
   }
 
-  reject(): void {
+  async reject(): Promise<void> {
     const s = this.session();
     if (!s) return;
     const login = this.auth.user()?.login ?? this.auth.userId() ?? 'this account';
-    if (!confirm(`Rejecting as @${login} — proceed?`)) return;
+    const ok = await this.confirmDialog.ask({
+      message: `Rejecting as @${login} — proceed?`,
+      danger: true,
+    });
+    if (!ok) return;
     this.sessionApi.reject(s.sessionId).subscribe({
       next: updated => this.session.set(updated),
       error: () => {},
+    });
+  }
+
+  savePlan(edited: MigrationPlan): void {
+    const s = this.session();
+    if (!s) return;
+    this.savingPlan.set(true);
+    this.sessionApi.editPlan(s.sessionId, edited).subscribe({
+      next: updated => { this.session.set(updated); this.savingPlan.set(false); },
+      error: () => this.savingPlan.set(false),
     });
   }
 

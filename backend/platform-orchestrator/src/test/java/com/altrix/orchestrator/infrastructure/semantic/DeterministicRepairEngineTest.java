@@ -22,11 +22,11 @@ class DeterministicRepairEngineTest {
                 List.of("org.apache.kafka:kafka-clients"),
                 List.of(),
                 null);
-        return new KafkaMigrationKnowledgeBase(List.of(pull), List.of(), List.of());
+        return new KafkaMigrationKnowledgeBase(List.of(pull), List.of(), List.of(), List.of());
     }
 
     private KafkaMigrationKnowledgeBase kbWithForbidden(List<String> forbidden) {
-        return new KafkaMigrationKnowledgeBase(List.of(), List.of(), forbidden);
+        return new KafkaMigrationKnowledgeBase(List.of(), List.of(), forbidden, List.of());
     }
 
     private DeterministicRepairEngine engine(KafkaMigrationKnowledgeBase kb) {
@@ -252,7 +252,7 @@ class DeterministicRepairEngineTest {
                 List.of("org.apache.kafka:kafka-clients"),
                 List.of(),
                 null);
-        return new KafkaMigrationKnowledgeBase(List.of(ack), List.of(), List.of());
+        return new KafkaMigrationKnowledgeBase(List.of(ack), List.of(), List.of(), List.of());
     }
 
     // ── remove wrong-package imports of known types ─────────────────────────

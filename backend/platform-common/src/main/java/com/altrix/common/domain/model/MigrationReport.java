@@ -7,27 +7,33 @@ import java.time.Instant;
 /**
  * Output of {@code ReportGeneratorAgent} (Agent 5) — the user-facing report.
  *
- * <p>Real implementation (Markdown/HTML/PDF artifacts, signed download URLs,
- * etc.) lands in issue #29. This shape is enough for the orchestrator to
- * persist a report identifier alongside the job.
+ * <p>{@code content} is the full Markdown technical report (its first section
+ * doubles as the executive summary). {@code summary} is the same data in
+ * structured form — returned as-is over REST, it IS the machine-readable
+ * JSON report. Both are produced deterministically; no AI is involved in
+ * generating either.
  */
 public record MigrationReport(
 
         String projectId,
 
-        /** Body of the report in whatever format the generator chose (md/html/json). */
+        /** Full Markdown report — see {@code MigrationReportBuilder} for section layout. */
         String content,
 
         /** When the report was produced. */
-        Instant generatedAt
+        Instant generatedAt,
+
+        /** Structured companion to {@code content} — see {@link ReportSummary}. */
+        ReportSummary summary
 
 ) implements Serializable {
     public MigrationReport {
         if (content == null) content = "";
         if (generatedAt == null) generatedAt = Instant.EPOCH;
+        if (summary == null) summary = ReportSummary.empty();
     }
 
     public static MigrationReport empty(String projectId) {
-        return new MigrationReport(projectId, "", Instant.now());
+        return new MigrationReport(projectId, "", Instant.now(), ReportSummary.empty());
     }
 }

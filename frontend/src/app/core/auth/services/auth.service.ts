@@ -74,6 +74,18 @@ export class AuthService {
     return tok ? decodeJwtSub(tok) : '';
   });
 
+  constructor() {
+    // A token surviving in sessionStorage (e.g. after a manual page reload or
+    // the browser suspending/discarding this tab) means the user is still
+    // authenticated, but the in-memory `user` profile — only ever populated
+    // once, right after the OAuth callback — is gone. Without this, the
+    // profile chip/username silently disappears on the next reload despite
+    // the session still being valid.
+    if (this._state().accessToken) {
+      this.loadProfile();
+    }
+  }
+
   // ── OAuth2 initiation ────────────────────────────────────────────────────
 
   initiateGitHubLogin(): void {

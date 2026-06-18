@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.adapter.in.rest.dto;
 
+import com.altrix.common.domain.model.ReportSummary;
 import com.altrix.orchestrator.domain.model.report.MigrationReportEntry;
 
 import java.time.Instant;
@@ -18,7 +19,8 @@ public record MigrationReportVersionResponse(
         int version,
         String projectId,
         String content,
-        Instant generatedAt
+        Instant generatedAt,
+        ReportSummary summary
 ) {
     public static MigrationReportVersionResponse from(MigrationReportEntry e) {
         return new MigrationReportVersionResponse(
@@ -27,7 +29,8 @@ public record MigrationReportVersionResponse(
                 e.version(),
                 e.projectId(),
                 e.content(),
-                e.generatedAt()
+                e.generatedAt(),
+                e.report().summary()
         );
     }
 }

@@ -37,20 +37,6 @@ export interface Session {
 }
 
 /**
- * RAG index manifest — which source files were indexed for retrieval
- * during a session.  Returned by GET /api/v1/sessions/{id}/rag-index.
- * chunkCount = 0 means the embedding model was disabled at index time
- * (filePaths still populated with what WOULD have been indexed).
- */
-export interface RagIndexManifest {
-  projectId: string;
-  filePaths: string[];
-  fileCount: number;
-  chunkCount: number;
-  indexedAt: string;
-}
-
-/**
  * One retrieved documentation chunk's identity + snippet (#1).
  * Mirrors the backend's FileProvenance.DocReference record.
  */
@@ -140,4 +126,73 @@ export interface PauseRecord {
   pausedFrom: string;
   pausedAt: string;
   resumedAt: string | null;
+}
+
+/** One per-runner result row inside {@link ReportSummary.validationStages}. */
+export interface ValidationStageResult {
+  runnerId: string;
+  label: string;
+  passed: boolean;
+  errorCount: number;
+  warningCount: number;
+}
+
+/** One detected risk inside {@link ReportSummary.risks}. */
+export interface RiskItem {
+  level: string;
+  file: string;
+  issue: string;
+  recommendation: string;
+}
+
+/** One recorded migration decision inside {@link ReportSummary.decisions}. */
+export interface DecisionLogEntry {
+  kind: string;
+  from: string;
+  to: string;
+  scope: string;
+  rationale: string;
+}
+
+/**
+ * Structured, fully deterministic companion to the Markdown report
+ * content — every field is computed from real recorded pipeline data,
+ * no AI narrative.  Mirrors the backend's ReportSummary record.
+ */
+export interface ReportSummary {
+  status: string;
+  confidenceScore: number;
+  filesAnalyzed: number;
+  filesModified: number;
+  filesCreated: number;
+  filesDeleted: number;
+  filesUnchanged: number;
+  compilePassed: boolean;
+  bootPassed: boolean;
+  testsPassed: boolean;
+  targetStack: string;
+  riskLevel: string;
+  estimatedEffort: string;
+  detectedComponents: string[];
+  detectedIntegrations: string[];
+  migrationSteps: string[];
+  addedDependencies: string[];
+  removedDependencies: string[];
+  validationStages: ValidationStageResult[];
+  risks: RiskItem[];
+  manualActions: string[];
+  decisions: DecisionLogEntry[];
+  recommendation: string;
+}
+
+/**
+ * The final migration report — returned by
+ * GET /api/v1/sessions/{id}/report.  `content` is the full Markdown
+ * document; `summary` is the same data in machine-readable form.
+ */
+export interface MigrationReport {
+  projectId: string;
+  content: string;
+  generatedAt: string;
+  summary: ReportSummary;
 }

@@ -14,7 +14,7 @@ class KafkaMigrationKnowledgeBaseTest {
     private KafkaMigrationKnowledgeBase kb(List<Mapping> mappings,
                                           List<ClassDependency> deps,
                                           List<String> globalForbidden) {
-        return new KafkaMigrationKnowledgeBase(mappings, deps, globalForbidden);
+        return new KafkaMigrationKnowledgeBase(mappings, deps, globalForbidden, List.of());
     }
 
     private Mapping ackMapping() {
@@ -29,10 +29,11 @@ class KafkaMigrationKnowledgeBaseTest {
 
     @Test
     void nullCollectionsNormaliseToEmpty() {
-        var k = new KafkaMigrationKnowledgeBase(null, null, null);
+        var k = new KafkaMigrationKnowledgeBase(null, null, null, null);
         assertThat(k.mappings()).isEmpty();
         assertThat(k.classDependencies()).isEmpty();
         assertThat(k.globalForbiddenImports()).isEmpty();
+        assertThat(k.forbiddenDependencyArtifacts()).isEmpty();
     }
 
     @Test

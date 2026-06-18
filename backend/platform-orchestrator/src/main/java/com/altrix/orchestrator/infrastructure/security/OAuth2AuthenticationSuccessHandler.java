@@ -24,7 +24,7 @@ import java.time.Instant;
  * {@link MultiProviderOAuth2UserService#ATTR_INTERNAL_USER_ID}.
  *
  * <p>Refresh token is delivered via an {@code HttpOnly}, {@code Secure},
- * {@code SameSite=Strict} cookie so it never lands in the URL or localStorage.
+ * {@code SameSite=Lax} cookie so it never lands in the URL or localStorage.
  */
 @Slf4j
 @Component
@@ -76,9 +76,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
         boolean secure = request.isSecure() || "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto"));
         String cookieValue = "refreshToken=" + rawRefreshToken +
-                "; HttpOnly; Path=/api/v1/auth/refresh" +
+                "; HttpOnly; Path=/api/v1/auth" +
                 "; Max-Age=" + (jwtConfig.refreshTokenExpiryDays() * 86_400) +
-                "; SameSite=Strict" +
+                "; SameSite=Lax" +
                 (secure ? "; Secure" : "");
         response.addHeader("Set-Cookie", cookieValue);
 

@@ -108,7 +108,7 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
         // before approving — that edited version is what we use.  approvedBy
         // is "reviewer" because we don't carry the actor through approval yet;
         // when audit is wired (#125) this becomes the JWT sub.
-        ApprovedPlan approvedPlan = new ApprovedPlan(plan, "reviewer", Instant.now(), null);
+        ApprovedPlan approvedPlan = new ApprovedPlan(plan, "reviewer", Instant.now(), null, null);
 
         try {
             // ── Migrate → validate, retrying on validation failures (#98) ───
@@ -129,7 +129,16 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
                     session.projectId(), null, plan, artifact, validation);
 
             progressNotifierPort.notify(jobId, "Report Generator", "RUNNING", null);
-            MigrationReport report = reporter.execute(outcome);
+            // migrateWithRetries() already cleared SandboxContext in its own
+            // try/finally, so it must be re-set here for the reporter to read
+            // the blueprint / decision registry / file provenance for this session.
+            SandboxContext.setSessionId(sessionId.value().toString());
+            MigrationReport report;
+            try {
+                report = reporter.execute(outcome);
+            } finally {
+                SandboxContext.clear();
+            }
             progressNotifierPort.notify(jobId, "Report Generator", "DONE", null);
 
             // #129 — persist the narrative report so it can be retrieved long
@@ -258,8 +267,11 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
             }
 
             // Build retry context for the next attempt and loop.
+            // Pass the current artifact as previousArtifact so the migrator starts from
+            // attempt N's output instead of the original source — prevents regression
+            // when AI providers are unavailable on attempt N+1.
             String retryContext = buildRetryContext(attempt, validation);
-            plan = new ApprovedPlan(plan.plan(), plan.approvedBy(), plan.approvedAt(), retryContext);
+            plan = plan.withRetryContext(retryContext, artifact);
             log.info("Validation FAILED on attempt {}/{} for job '{}' — retrying with {} issue(s) in context",
                     attempt, totalAttempts, jobId, validation.failures().size());
         }

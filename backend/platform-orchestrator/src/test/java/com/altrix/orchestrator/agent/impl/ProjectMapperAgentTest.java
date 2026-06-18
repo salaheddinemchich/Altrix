@@ -35,7 +35,7 @@ class ProjectMapperAgentTest {
                         List.of(), List.of(), List.of(), List.of(), "publish -> send"),
                 new Mapping("pubsub.pull", "consumer.poll(Duration)",
                         List.of(), List.of(), List.of(), List.of(), "pull -> poll")),
-                List.of(), List.of());
+                List.of(), List.of(), List.of());
     }
 
     private ProjectMapperAgent agent() {

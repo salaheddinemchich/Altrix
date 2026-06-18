@@ -41,6 +41,31 @@
           </div>
         }
 
+        <!-- Plan review — shown right on the Plan step once it's awaiting
+             a human decision, so the reviewer sees the plan and acts on it
+             where it was produced rather than in a separate card. -->
+        @if (step.id === 'plan' && currentStatus() === 'AWAITING_APPROVAL' && plan(); as p) {
+          <div class="plan-review">
+            <app-plan-preview
+              [plan]="p"
+              [editable]="canApprove()"
+              [saving]="savingPlan()"
+              (planSaved)="planSaved.emit($event)"/>
+            @if (canApprove()) {
+              <div class="plan-review-actions">
+                <button type="button" class="btn btn-gold" (click)="approveClicked.emit()">
+                  <app-icon name="check" [size]="14"/>
+                  Approve
+                </button>
+                <button type="button" class="btn btn-danger" (click)="rejectClicked.emit()">
+                  <app-icon name="x" [size]="14"/>
+                  Reject
+                </button>
+              </div>
+            }
+          </div>
+        }
+
         <!-- Sandbox-log expansion (#106) — visible on the Validate step
              once a sessionId is available and the step has progressed
              past PENDING.  Only the Docker runners persist logs; if none
@@ -146,11 +171,49 @@
           }
         }
 
+        <!-- Final migration report — deterministic Markdown + structured
+             summary, no AI narrative.  Visible once the Report step has
+             actually produced something (DONE; this step never goes
+             ACTIVE for long enough to show mid-flight). -->
+        @if (step.id === 'report' && sessionId() && step.status === 'DONE') {
+          <button type="button" class="rag-toggle" (click)="toggleReport()"
+                  [attr.aria-expanded]="reportExpanded()">
+            <app-icon [name]="reportExpanded() ? 'chevron-down' : 'chevron-right'" [size]="11"/>
+            {{ reportExpanded() ? 'Hide' : 'View' }} full report
+          </button>
+
+          @if (reportExpanded()) {
+            <div class="rag-manifest">
+              @if (reportLoading()) {
+                <div class="rag-manifest-state">Loading report…</div>
+              } @else if (reportMissing()) {
+                <div class="rag-manifest-state muted">
+                  No report persisted for this session yet.
+                </div>
+              } @else {
+                @if (report(); as r) {
+                  <div class="report-summary">
+                    <span class="pill" [class]="reportStatusClass(r.summary.status)">{{ r.summary.status }}</span>
+                    <span class="report-summary-item">confidence {{ r.summary.confidenceScore }}%</span>
+                    <span class="report-summary-item">{{ r.summary.recommendation }}</span>
+                    <span class="report-summary-item">{{ r.summary.filesModified }} file(s) modified</span>
+                    <button type="button" class="btn btn-sm" (click)="downloadReportPdf()">
+                      <app-icon name="download" [size]="12"/>
+                      Download PDF
+                    </button>
+                  </div>
+                  <div class="report-viewer" [innerHTML]="reportHtml()"></div>
+                }
+              }
+            </div>
+          }
+        }
+
         <!-- #1 — per-file RAG provenance.  For each migrated file shows
              which doc chunks the AI was anchored to (with snippets +
-             source URL).  Sibling of the "indexed files" toggle below;
-             both live on the Index step. -->
-        @if (step.id === 'index' && sessionId() && step.status !== 'PENDING') {
+             source URL) — computed during this step, since that's when
+             the migrator actually retrieves them. -->
+        @if (step.id === 'migrate' && sessionId() && step.status !== 'PENDING') {
           <button type="button" class="rag-toggle" (click)="toggleFileProvenance()"
                   [attr.aria-expanded]="fileProvenanceExpanded()">
             <app-icon [name]="fileProvenanceExpanded() ? 'chevron-down' : 'chevron-right'" [size]="11"/>
@@ -218,50 +281,6 @@
           }
         }
 
-        <!-- RAG manifest expansion — visible only on the Index step,
-             once a sessionId is available, and the step has progressed
-             past PENDING (no point exposing the toggle when there's
-             nothing indexed yet). -->
-        @if (step.id === 'index' && sessionId() && step.status !== 'PENDING') {
-          <button type="button" class="rag-toggle" (click)="toggleRagManifest()"
-                  [attr.aria-expanded]="ragManifestExpanded()">
-            <app-icon [name]="ragManifestExpanded() ? 'chevron-down' : 'chevron-right'" [size]="11"/>
-            {{ ragManifestExpanded() ? 'Hide' : 'View' }} indexed files
-            @if (ragManifest(); as m) {
-              <span class="rag-toggle-count">({{ m.fileCount }})</span>
-            }
-          </button>
-
-          @if (ragManifestExpanded()) {
-            <div class="rag-manifest">
-              @if (ragManifestLoading()) {
-                <div class="rag-manifest-state">Loading manifest…</div>
-              } @else if (ragManifestMissing()) {
-                <div class="rag-manifest-state muted">
-                  No indexed-file manifest persisted for this session.
-                </div>
-              } @else {
-                @if (ragManifest(); as m) {
-                  <div class="rag-manifest-summary">
-                    <strong>{{ m.fileCount }}</strong> file(s) ·
-                    <strong>{{ m.chunkCount }}</strong> chunk(s) ·
-                    indexed {{ m.indexedAt | date:'MMM d, h:mm a' }}
-                    @if (m.chunkCount === 0) {
-                      <span class="rag-skipped"> · embedding skipped (model not configured)</span>
-                    }
-                  </div>
-                  @if (m.filePaths.length > 0) {
-                    <ul class="rag-manifest-files">
-                      @for (path of m.filePaths; track path) {
-                        <li class="mono">{{ path }}</li>
-                      }
-                    </ul>
-                  }
-                }
-              }
-            </div>
-          }
-        }
       </div>
     </li>
   }

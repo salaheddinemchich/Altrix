@@ -226,10 +226,12 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
                 .orElseThrow(() -> new AgentFailureException(NODE_CORE_MIGRATOR,
                         "ApprovedPlan missing from state"));
 
-        // Inject retry context built from the last ValidationReport (#48)
+        // Inject retry context and previous artifact so the migrator starts from
+        // the last attempt's output instead of the original source (#checkpoint).
         String retryCtx = state.retryContext().orElse(null);
         if (retryCtx != null && !retryCtx.isBlank()) {
-            approved = approved.withRetryContext(retryCtx);
+            MigrationArtifact prevArtifact = state.migrationArtifact().orElse(null);
+            approved = approved.withRetryContext(retryCtx, prevArtifact);
         }
 
         notifyRunning(ctx.jobId(), "Core Migrator");

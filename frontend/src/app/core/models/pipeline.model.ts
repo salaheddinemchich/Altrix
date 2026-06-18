@@ -19,8 +19,6 @@ export interface PipelineNode {
 }
 
 export const DEFAULT_PIPELINE: PipelineNode[] = [
-  { id: 'index',    label: 'Index',    description: 'RAG: chunking + embedding source files',
-    status: 'PENDING', agents: ['RAG Indexer', 'codeIndexingAgent'] },
   { id: 'analyze',  label: 'Analyse',  description: 'Scanning project & detecting services',
     status: 'PENDING', agents: ['contextAnalyzerAgent', 'ArchitectureAnalyzerAgent', 'Context Analyzer'] },
   { id: 'plan',     label: 'Plan',     description: 'Generating migration plan',

@@ -33,7 +33,7 @@ class SemanticValidatorAgentTest {
     private final PubSubLeakValidator leakValidator = new PubSubLeakValidator();
 
     private KafkaMigrationKnowledgeBase kb(List<String> globalForbidden) {
-        return new KafkaMigrationKnowledgeBase(List.of(), List.of(), globalForbidden);
+        return new KafkaMigrationKnowledgeBase(List.of(), List.of(), globalForbidden, List.of());
     }
 
     private SemanticValidatorAgent agent(KafkaMigrationKnowledgeBase kb) {
@@ -140,7 +140,7 @@ class SemanticValidatorAgentTest {
         var kbWithDeps = new KafkaMigrationKnowledgeBase(List.of(),
                 List.of(new KafkaMigrationKnowledgeBase.ClassDependency(
                         "org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients")),
-                List.of());
+                List.of(), List.of());
         var agent = agent(kbWithDeps);
         var report = agent.validate("p1", Map.of(
                         "p/S.java",
@@ -157,7 +157,7 @@ class SemanticValidatorAgentTest {
                 List.of(),
                 List.of("org.apache.kafka.clients.consumer.KafkaConsumer"),
                 List.of(), List.of(), null);
-        var kbWithImports = new KafkaMigrationKnowledgeBase(List.of(mapping), List.of(), List.of());
+        var kbWithImports = new KafkaMigrationKnowledgeBase(List.of(mapping), List.of(), List.of(), List.of());
         var agent = agent(kbWithImports);
 
         // File uses KafkaConsumer but doesn't import it.

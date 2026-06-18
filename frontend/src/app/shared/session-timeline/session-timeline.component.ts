@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
@@ -18,8 +19,9 @@ import {
 } from '../../core/models/pipeline.model';
 import { PipelineService } from '../../core/services/pipeline.service';
 import { SessionService } from '../../core/services/session.service';
-import { FileProvenance, RagIndexManifest, SandboxLog } from '../../core/models/session.model';
+import { FileProvenance, MigrationPlan, MigrationReport, SandboxLog } from '../../core/models/session.model';
 import { IconComponent } from '../icon/icon.component';
+import { PlanPreviewComponent } from '../plan-preview/plan-preview.component';
 import { catchError, of } from 'rxjs';
 
 /**
@@ -34,7 +36,7 @@ import { catchError, of } from 'rxjs';
 @Component({
   selector: 'app-session-timeline',
   standalone: true,
-  imports: [DatePipe, IconComponent],
+  imports: [DatePipe, IconComponent, PlanPreviewComponent],
   templateUrl: './session-timeline.component.html',
   styleUrl: './session-timeline.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,24 +56,37 @@ export class SessionTimelineComponent implements OnDestroy {
   readonly currentStatus = input<string | null>(null);
 
   /**
-   * Session id — when present, the Index step renders a "view indexed
-   * files" toggle that lazy-loads the RAG manifest via SessionService.
-   * Without it, the toggle is hidden.  Optional so the timeline stays
-   * reusable in places where the session id isn't readily available.
+   * Session id — when present, the Validate and Migrate steps render
+   * expandable panels (sandbox logs, per-file doc provenance) that
+   * lazy-load via SessionService.  Without it, those toggles are hidden.
+   * Optional so the timeline stays reusable in places where the session
+   * id isn't readily available.
    */
   readonly sessionId = input<string | null>(null);
 
-  // ── RAG manifest lazy-load state ─────────────────────────────────────────
-  /** True once the user expands the panel; triggers the HTTP fetch. */
-  readonly ragManifestExpanded = signal<boolean>(false);
-  readonly ragManifest = signal<RagIndexManifest | null>(null);
-  readonly ragManifestLoading = signal<boolean>(false);
-  /** True when the manifest endpoint returned 404 / empty.  Differentiates
-   *  "still loading" from "nothing to show". */
-  readonly ragManifestMissing = signal<boolean>(false);
+  /**
+   * The migration plan awaiting review — when present and {@code
+   * currentStatus() === 'AWAITING_APPROVAL'}, the Plan step renders it
+   * inline (plus Approve/Reject when {@code canApprove()}) so a reviewer
+   * sees and acts on the plan right where it was produced, instead of in a
+   * separate generic session card.
+   */
+  readonly plan = input<MigrationPlan | null>(null);
+  /**
+   * Gates the Approve/Reject buttons + plan editing.  Matches the Sessions
+   * list page's prior behaviour: visible to any authenticated user (no
+   * admin check) since reaching this page already requires authGuard.
+   */
+  readonly canApprove = input<boolean>(false);
+  /** True while a plan edit save is in flight — passed straight to app-plan-preview. */
+  readonly savingPlan = input<boolean>(false);
+
+  readonly planSaved = output<MigrationPlan>();
+  readonly approveClicked = output<void>();
+  readonly rejectClicked = output<void>();
 
   // ── Per-file RAG provenance lazy-load state (#1) ─────────────────────────
-  /** Whether the per-file provenance panel is expanded on the Index step. */
+  /** Whether the per-file provenance panel is expanded on the Migrate step. */
   readonly fileProvenanceExpanded = signal<boolean>(false);
   readonly fileProvenance = signal<FileProvenance | null>(null);
   readonly fileProvenanceLoading = signal<boolean>(false);
@@ -93,6 +108,81 @@ export class SessionTimelineComponent implements OnDestroy {
     if (!p || !f) return [];
     return p.perFile[f] ?? [];
   });
+
+  // ── Final report lazy-load state ─────────────────────────────────────────
+  readonly reportExpanded = signal<boolean>(false);
+  readonly report = signal<MigrationReport | null>(null);
+  readonly reportLoading = signal<boolean>(false);
+  readonly reportMissing = signal<boolean>(false);
+
+  /**
+   * Rendered HTML for the report's Markdown content (see
+   * renderReportMarkdown() below).  Bound via plain [innerHTML] — NOT
+   * DomSanitizer.bypassSecurityTrustHtml — so Angular's built-in sanitizer
+   * stays in the loop as a safety net: file paths and messages embedded in
+   * the report originate from the user's uploaded project, so they're
+   * untrusted input even though renderReportMarkdown() HTML-escapes them
+   * before reintroducing any markup.
+   */
+  readonly reportHtml = computed<string>(() => {
+    const r = this.report();
+    return r ? renderReportMarkdown(r.content) : '';
+  });
+
+  /**
+   * Toggles the "view full report" panel on the Report step.  Fetches once
+   * on first open (the report is append-only / final once DONE, so there's
+   * nothing to live-refresh here unlike the sandbox logs).
+   */
+  toggleReport(): void {
+    const wasOpen = this.reportExpanded();
+    this.reportExpanded.set(!wasOpen);
+    if (wasOpen) return;
+    if (this.report() !== null || this.reportMissing()) return;
+    const id = this.sessionId();
+    if (!id) return;
+
+    this.reportLoading.set(true);
+    this.sessionApi.getReport(id)
+      .pipe(catchError(() => of<MigrationReport | null>(null)))
+      .subscribe(r => {
+        this.reportLoading.set(false);
+        if (r) this.report.set(r);
+        else   this.reportMissing.set(true);
+      });
+  }
+
+  reportStatusClass(status: string): string {
+    switch (status) {
+      case 'SUCCESS': return 'success';
+      case 'PARTIAL': return 'warning';
+      case 'FAILED':  return 'danger';
+      default:        return '';
+    }
+  }
+
+  /**
+   * Exports the report as a PDF via the browser's native print pipeline:
+   * opens the rendered report in a new tab with print-only styling, then
+   * invokes window.print() so the user picks "Save as PDF" in the print
+   * dialog.  No client-side PDF library needed — every modern browser's
+   * print dialog already does this conversion, and it's the only way to
+   * produce a PDF from the client without asking the browser to silently
+   * write a file (which print-dialog-less approaches can't do safely).
+   */
+  downloadReportPdf(): void {
+    const r = this.report();
+    if (!r) return;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(buildReportPrintDocument(r.projectId, renderReportMarkdown(r.content)));
+    win.document.close();
+    win.focus();
+    // A short delay lets the new document finish layout before the print
+    // dialog opens — calling print() synchronously right after write()
+    // sometimes renders a blank page in Chromium.
+    setTimeout(() => win.print(), 300);
+  }
 
   // ── Sandbox logs lazy-load state (#106) ──────────────────────────────────
   readonly sandboxLogsExpanded = signal<boolean>(false);
@@ -394,7 +484,7 @@ export class SessionTimelineComponent implements OnDestroy {
   }
 
   /**
-   * Toggles the "based on which docs" panel (#1) on the Index step.
+   * Toggles the "based on which docs" panel (#1) on the Migrate step.
    * Lazy-fetches once, then just flips visibility on subsequent toggles.
    * Auto-selects the first file in the trace so the right pane has
    * something to render without an extra click.
@@ -462,30 +552,6 @@ export class SessionTimelineComponent implements OnDestroy {
         // have set when the panel was opened before the migrator had
         // produced anything.
         if (this.fileProvenanceMissing()) this.fileProvenanceMissing.set(false);
-      });
-  }
-
-  /**
-   * Toggles the "view indexed files" panel on the Index step.  Fetches
-   * the manifest the first time it's opened; subsequent toggles only
-   * flip the visibility flag — no redundant HTTP calls.
-   */
-  toggleRagManifest(): void {
-    const wasOpen = this.ragManifestExpanded();
-    this.ragManifestExpanded.set(!wasOpen);
-    if (wasOpen) return; // closing — nothing to do
-
-    if (this.ragManifest() !== null || this.ragManifestMissing()) return; // already loaded
-    const id = this.sessionId();
-    if (!id) return;
-
-    this.ragManifestLoading.set(true);
-    this.sessionApi.getRagIndexManifest(id)
-      .pipe(catchError(() => of(null)))
-      .subscribe(m => {
-        this.ragManifestLoading.set(false);
-        if (m) this.ragManifest.set(m);
-        else   this.ragManifestMissing.set(true);
       });
   }
 
@@ -657,6 +723,138 @@ function extractKeywords(content: string, limit: number): string[] {
     .map(([tok]) => tok);
 }
 
+// ── Report Markdown rendering ────────────────────────────────────────────
+
+/**
+ * Minimal Markdown → HTML renderer scoped to exactly what
+ * MigrationReportBuilder (backend) emits: `#`/`##`/`###` headers, GFM
+ * tables (header row + `|---|---|` separator), `-`/`1.` lists, `**bold**`,
+ * `_italic_`, `` `code` ``.  Not a general-purpose Markdown parser — a full
+ * library is unnecessary since the input shape is fully known and
+ * self-generated.
+ *
+ * <p>Every text-bearing line passes through {@link inline} which
+ * HTML-escapes FIRST, then reintroduces markup — so file paths /
+ * messages embedded in the report (sourced from the user's uploaded
+ * project, hence untrusted) can never inject live HTML even though the
+ * caller binds the result via plain [innerHTML].
+ */
+function renderReportMarkdown(md: string): string {
+  const lines = md.split('\n');
+  const out: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    const header = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (header) {
+      const level = header[1].length;
+      out.push(`<h${level}>${inline(header[2])}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    if (line.trim().startsWith('|') && /^\s*\|[\s:-]+\|/.test(lines[i + 1] ?? '')) {
+      const headCells = splitTableRow(line);
+      i += 2;
+      const bodyRows: string[][] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        bodyRows.push(splitTableRow(lines[i]));
+        i++;
+      }
+      const thead = headCells.map(c => `<th>${inline(c)}</th>`).join('');
+      const tbody = bodyRows
+        .map(row => `<tr>${row.map(c => `<td>${inline(c)}</td>`).join('')}</tr>`)
+        .join('');
+      out.push(`<table class="report-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`);
+      continue;
+    }
+
+    if (/^\s*-\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*-\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*-\s+/, ''));
+        i++;
+      }
+      out.push(`<ul>${items.map(it => `<li>${inline(it)}</li>`).join('')}</ul>`);
+      continue;
+    }
+
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+        i++;
+      }
+      out.push(`<ol>${items.map(it => `<li>${inline(it)}</li>`).join('')}</ol>`);
+      continue;
+    }
+
+    if (/^\s*-{3,}\s*$/.test(line)) {
+      out.push('<hr/>');
+      i++;
+      continue;
+    }
+
+    if (line.trim() === '') {
+      i++;
+      continue;
+    }
+
+    out.push(`<p>${inline(line)}</p>`);
+    i++;
+  }
+
+  return out.join('\n');
+}
+
+function splitTableRow(line: string): string[] {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+}
+
+/** HTML-escapes first, then reintroduces `**bold**`, `_italic_`, `` `code` `` as real markup. */
+function inline(text: string): string {
+  let t = escapeHtml(text);
+  t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/`([^`]+?)`/g, '<code>$1</code>');
+  t = t.replace(/_(.+?)_/g, '<em>$1</em>');
+  return t;
+}
+
+/** Self-contained HTML document (own <style>, no Angular styles) used for the PDF print window. */
+function buildReportPrintDocument(projectId: string, bodyHtml: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Migration Report — ${escapeHtml(projectId)}</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; max-width: 860px; margin: 32px auto; padding: 0 24px; }
+  h1 { font-size: 22px; border-bottom: 2px solid #1a1a1a; padding-bottom: 8px; }
+  h2 { font-size: 16px; margin-top: 28px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  h3, h4 { font-size: 13px; margin-top: 18px; }
+  p { font-size: 12.5px; line-height: 1.6; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 12px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #f3f3f3; }
+  code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-family: ui-monospace, monospace; font-size: 11.5px; }
+  ul, ol { font-size: 12.5px; line-height: 1.6; padding-left: 22px; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
+  em { color: #555; }
+  @media print {
+    body { margin: 0; padding: 16px; }
+    h2 { page-break-after: avoid; }
+    table, tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+${bodyHtml}
+</body>
+</html>`;
+}
+
 function initialSteps(): TimelineStep[] {
   return DEFAULT_PIPELINE.map(node => ({
     ...node,
@@ -671,16 +869,12 @@ function initialSteps(): TimelineStep[] {
  * timeline reflects the current pipeline position even before any live
  * WebSocket event arrives.
  *
- * Steps: [0] Index  [1] Analyse  [2] Plan  [3] Migrate  [4] Validate  [5] Report
- *
- * Note: by the time the JOB status reaches ANALYZING, the orchestrator has
- * already finished RAG indexing (it runs first, then marks the job ANALYZING).
- * So ANALYZING implies Index = DONE.
+ * Steps: [0] Analyse  [1] Plan  [2] Migrate  [3] Validate  [4] Report
  *
  *   PENDING                              none
- *   ANALYZING                            Index DONE, Analyse ACTIVE
- *   CONTEXT_ANALYSED                     +Plan ACTIVE
- *   PLAN_READY / AWAITING_APPROVAL       Index + Analyse + Plan DONE (gated)
+ *   ANALYZING                            Analyse ACTIVE
+ *   CONTEXT_ANALYSED                     Analyse DONE, Plan ACTIVE
+ *   PLAN_READY / AWAITING_APPROVAL       Analyse + Plan DONE (gated)
  *   MIGRATING                            +Migrate ACTIVE
  *   VALIDATING                           +Validate ACTIVE
  *   DONE / COMPLETED                     all DONE
@@ -706,14 +900,14 @@ function backfillSteps(base: TimelineStep[], status: string | null | undefined):
   let active = -1;
   switch (s) {
     case 'PENDING':           lastDone = -1; active = -1; break;
-    case 'ANALYZING':         lastDone = 0;  active = 1;  break;
-    case 'CONTEXT_ANALYSED':  lastDone = 1;  active = 2;  break;
+    case 'ANALYZING':         lastDone = -1; active = 0;  break;
+    case 'CONTEXT_ANALYSED':  lastDone = 0;  active = 1;  break;
     case 'PLAN_READY':
-    case 'AWAITING_APPROVAL': lastDone = 2;  active = -1; break;
-    case 'MIGRATING':         lastDone = 2;  active = 3;  break;
-    case 'VALIDATING':        lastDone = 3;  active = 4;  break;
+    case 'AWAITING_APPROVAL': lastDone = 1;  active = -1; break;
+    case 'MIGRATING':         lastDone = 1;  active = 2;  break;
+    case 'VALIDATING':        lastDone = 2;  active = 3;  break;
     case 'DONE':
-    case 'COMPLETED':         lastDone = 5;  active = -1; break;
+    case 'COMPLETED':         lastDone = 4;  active = -1; break;
     default: return base;
   }
 

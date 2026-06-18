@@ -436,6 +436,13 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      *  in one LLM call — keeping the shared contract consistent by construction
      *  instead of letting independent per-file rewrites diverge. */
     private final com.altrix.orchestrator.infrastructure.migration.MigrationClusterPlanner clusterPlanner;
+    /** Deterministic (no-AI) final guarantee for the pom.xml dependency
+     *  swap.  Runs last, after every other repair pass, so it reconciles
+     *  pom.xml against whatever Kafka classes the FINAL Java files import —
+     *  closing the gap where the LLM's own pom.xml rewrite failed its
+     *  structural check and reverted to the original (still-GCP) file
+     *  while the Java side was correctly migrated to Kafka. */
+    private final com.altrix.orchestrator.infrastructure.migration.PomDependencyReconciler pomDependencyReconciler;
 
     /** How many doc chunks to retrieve per file.  Small on purpose so the
      *  prompt doesn't balloon; the AI gets enough to anchor on without
@@ -471,7 +478,25 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         }
 
         try {
-            Map<String, String> allFiles = fileReader.readSourceFiles(storageKey);
+            Map<String, String> allFiles = new LinkedHashMap<>(fileReader.readSourceFiles(storageKey));
+            // On retry: overlay the previous attempt's migrated content so we start from
+            // that checkpoint instead of the original source.  This preserves files that
+            // were correctly migrated in attempt N even when AI providers are unavailable
+            // on attempt N+1 (which would otherwise regress them to the original).
+            if (input.previousArtifact() != null) {
+                int overlaid = 0;
+                for (MigratedFile f : input.previousArtifact().files()) {
+                    if (f.content() != null && !f.content().isBlank()
+                            && allFiles.containsKey(f.originalPath())) {
+                        allFiles.put(f.originalPath(), f.content());
+                        overlaid++;
+                    }
+                }
+                if (overlaid > 0) {
+                    log.info("[{}] retry checkpoint: overlaid {}/{} file(s) from previous attempt",
+                            getName(), overlaid, allFiles.size());
+                }
+            }
             PrunedContext pruned = contextPruner.prune(allFiles, input.plan());
 
             // Detect Jakarta EE vs Spring Boot from the pom and prepend the
@@ -538,6 +563,13 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // contract repair because we need stable signatures before we
             // can swap Google method chains for Kafka calls.
             result = applyPubSubLeakRepairs(result);
+
+            // Final guarantee, deterministic — reconcile pom.xml against
+            // whatever Kafka classes the files above actually import, no
+            // matter how pom.xml got here (LLM rewrite, structural-check
+            // revert, or already-correct).  Runs last so it sees the truly
+            // final Java content.
+            result = applyPomDependencyReconciliation(result);
 
             persistProvenance(perFileProvenance);
 
@@ -1043,6 +1075,47 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
         return rewired;
     }
 
+    /**
+     * Deterministic final guarantee for pom.xml — see
+     * {@link com.altrix.orchestrator.infrastructure.migration.PomDependencyReconciler}
+     * for the full rationale.  No-op when there's no pom.xml in the
+     * artifact, or the reconciler isn't wired (tests).
+     */
+    private List<MigratedFile> applyPomDependencyReconciliation(List<MigratedFile> files) {
+        if (pomDependencyReconciler == null || files.isEmpty()) return files;
+
+        MigratedFile pom = null;
+        Map<String, String> javaFiles = new LinkedHashMap<>();
+        for (MigratedFile f : files) {
+            String path = f.newPath() != null ? f.newPath() : f.originalPath();
+            if (isPom(path)) {
+                pom = f;
+            } else if (path != null && path.toLowerCase().endsWith(".java") && f.content() != null) {
+                javaFiles.put(path, f.content());
+            }
+        }
+        if (pom == null || pom.content() == null) return files;
+
+        String reconciled = pomDependencyReconciler.reconcile(pom.content(), javaFiles);
+        if (reconciled.equals(pom.content())) return files;
+
+        List<MigratedFile> result = new ArrayList<>(files.size());
+        for (MigratedFile f : files) {
+            if (f == pom) {
+                result.add(MigratedFile.builder()
+                        .originalPath(f.originalPath())
+                        .newPath(f.newPath())
+                        .content(reconciled)
+                        .changeType(FileChangeType.MODIFIED)
+                        .diffSummary("Dependencies reconciled deterministically (Pub/Sub → Kafka)")
+                        .build());
+            } else {
+                result.add(f);
+            }
+        }
+        return result;
+    }
+
     private List<MigratedFile> revertFilesWithUnresolvedImports(List<MigratedFile> migratedFiles,
                                                                 Map<String, String> allFiles) {
         if (projectSymbolValidator == null || migratedFiles.isEmpty()) return migratedFiles;
@@ -1459,7 +1532,14 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             return !parsesAsXml(migrated);
         }
         if (lower.endsWith(".java")) {
-            return hasMarkdownContamination(migrated);
+            // A real parse catches mid-method truncation AND mid-stream token
+            // corruption that the length-ratio looksTruncated() guard misses
+            // (cutting the last method or two off a large file is still >30%
+            // of the original size, and a garbled field declaration doesn't
+            // change the file's length at all).
+            return hasMarkdownContamination(migrated)
+                    || com.altrix.orchestrator.infrastructure.migration.JavaOutputGuard
+                            .isMalformed(migrated);
         }
         return false;
     }

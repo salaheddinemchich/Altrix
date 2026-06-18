@@ -75,61 +75,87 @@
 <!-- ══ Migration insights (#130) ══════════════════════════════════════════════ -->
 <section class="section">
   <div class="section-header">
-    <h2>Migration insights</h2>
+    <h2>
+      <span class="section-icon section-icon--info"><app-icon name="zap" [size]="14"/></span>
+      Migration insights
+    </h2>
     <a class="btn btn-ghost btn-sm" routerLink="/sessions">View sessions</a>
   </div>
 
   @if (orgSummary(); as s) {
-    <div class="insights-grid">
 
-      <!-- Success-rate gauge -->
-      <div class="insight-card">
-        <div class="insight-label">Success rate</div>
-        <div class="insight-value">
+    <!-- Compact metric strip -->
+    <div class="metric-strip">
+      <div class="metric-tile">
+        <div class="metric-label">Success rate</div>
+        <div class="metric-value">
           @if (s.totalSessions === 0) { — }
           @else { {{ s.successRate | percent:'1.0-0' }} }
         </div>
-        <div class="insight-sub muted">
-          {{ s.countsByStatus['DONE'] || 0 }} of {{ s.totalSessions }} sessions DONE
+        <div class="metric-sub muted">{{ s.countsByStatus['DONE'] || 0 }} of {{ s.totalSessions }} DONE</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-label">Total sessions</div>
+        <div class="metric-value">{{ s.totalSessions | number }}</div>
+        <div class="metric-sub muted">across all projects</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-label">Average duration</div>
+        <div class="metric-value">{{ averageDurationLabel() }}</div>
+        <div class="metric-sub muted">DONE sessions only</div>
+      </div>
+    </div>
+
+    <!-- Chart row: status donut + 14-day activity bar -->
+    <div class="charts-grid">
+
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <h3>Sessions by status</h3>
         </div>
-      </div>
-
-      <!-- Total sessions -->
-      <div class="insight-card">
-        <div class="insight-label">Total sessions</div>
-        <div class="insight-value">{{ s.totalSessions | number }}</div>
-        <div class="insight-sub muted">across all projects</div>
-      </div>
-
-      <!-- Average duration -->
-      <div class="insight-card">
-        <div class="insight-label">Average duration</div>
-        <div class="insight-value">{{ averageDurationLabel() }}</div>
-        <div class="insight-sub muted">DONE sessions only</div>
-      </div>
-
-      <!-- Per-status horizontal bar chart -->
-      <div class="insight-card chart-card">
-        <div class="insight-label">By status</div>
         @if (statusBars().length === 0) {
-          <div class="muted" style="margin-top:8px">No sessions yet.</div>
+          <div class="muted chart-empty">No sessions yet.</div>
         } @else {
-          <ul class="status-bars" aria-label="Session counts by status">
-            @for (b of statusBars(); track b.status) {
-              <li>
-                <span class="status-name">{{ b.status }}</span>
-                <span class="status-track">
-                  <span class="status-fill" [class]="statusBarClass(b.status)"
-                        [style.width.%]="b.percent"></span>
-                </span>
-                <span class="status-count mono">{{ b.count }}</span>
-              </li>
-            }
-          </ul>
+          <div class="donut-layout">
+            <div class="donut-canvas">
+              <canvas baseChart
+                      [type]="'doughnut'"
+                      [data]="statusDoughnutData()"
+                      [options]="statusDoughnutOptions()"></canvas>
+              <div class="donut-center">
+                <span class="donut-center-value">{{ s.totalSessions }}</span>
+                <span class="donut-center-label">sessions</span>
+              </div>
+            </div>
+            <ul class="donut-legend">
+              @for (b of statusBars(); track b.status) {
+                <li>
+                  <span class="legend-dot" [style.background]="statusDotColor(b.status)"></span>
+                  <span class="legend-name">{{ b.status }}</span>
+                  <span class="legend-count mono">{{ b.count }}</span>
+                  <span class="legend-percent muted">{{ b.percent }}%</span>
+                </li>
+              }
+            </ul>
+          </div>
         }
       </div>
 
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <h3>Jobs created</h3>
+          <span class="muted chart-card-sub">last 14 days</span>
+        </div>
+        <div class="bar-canvas">
+          <canvas baseChart
+                  [type]="'bar'"
+                  [data]="jobsBarData()"
+                  [options]="jobsBarOptions()"></canvas>
+        </div>
+      </div>
+
     </div>
+
   } @else {
     <div class="empty">
       <app-icon name="clock" [size]="20"/>
@@ -138,10 +164,69 @@
   }
 </section>
 
+<!-- ══ Cost & Usage (admin only) ════════════════════════════════════════════ -->
+@if (canViewCost()) {
+  <section class="section">
+    <div class="section-header">
+      <h2>
+        <span class="section-icon section-icon--gold"><app-icon name="dollar" [size]="14"/></span>
+        Cost &amp; usage
+      </h2>
+      <a class="btn btn-ghost btn-sm" routerLink="/billing">View billing</a>
+    </div>
+
+    @if (costUsage() === null) {
+      <div class="empty">
+        <app-icon name="clock" [size]="20"/>
+        Loading usage…
+      </div>
+    } @else if (costUsage()!.length === 0) {
+      <div class="empty">
+        <app-icon name="dollar" [size]="24"/>
+        No AI usage recorded yet this month.
+      </div>
+    } @else {
+      <div class="metric-strip">
+        <div class="metric-tile">
+          <div class="metric-label">Total cost</div>
+          <div class="metric-value">{{ formatCost(totalCostMtd()) }}</div>
+          <div class="metric-sub muted">month to date</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">AI calls</div>
+          <div class="metric-value">{{ formatK(totalCallsMtd()) }}</div>
+          <div class="metric-sub muted">month to date</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">Tokens used</div>
+          <div class="metric-value">{{ formatK(totalTokensMtd()) }}</div>
+          <div class="metric-sub muted">input + output</div>
+        </div>
+      </div>
+
+      <div class="chart-card chart-card--wide">
+        <div class="chart-card-header">
+          <h3>Cost by provider</h3>
+          <span class="muted chart-card-sub">month to date</span>
+        </div>
+        <div class="bar-canvas bar-canvas--cost">
+          <canvas baseChart
+                  [type]="'bar'"
+                  [data]="costBarData()"
+                  [options]="costBarOptions()"></canvas>
+        </div>
+      </div>
+    }
+  </section>
+}
+
 <!-- ══ Recent jobs ═══════════════════════════════════════════════════════════ -->
 <section class="section">
   <div class="section-header">
-    <h2>Recent jobs</h2>
+    <h2>
+      <span class="section-icon section-icon--teal"><app-icon name="briefcase" [size]="14"/></span>
+      Recent jobs
+    </h2>
     <a class="btn btn-ghost btn-sm" routerLink="/jobs">View all</a>
   </div>
 

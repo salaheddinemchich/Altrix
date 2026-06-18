@@ -2,6 +2,7 @@ package com.altrix.orchestrator.infrastructure.contract;
 
 import com.altrix.orchestrator.domain.model.contract.ContractViolation;
 import com.altrix.orchestrator.domain.port.out.AiPort;
+import com.altrix.orchestrator.infrastructure.migration.JavaOutputGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -212,6 +213,14 @@ public class ContractRepairer {
                     && !cleaned.contains("enum ")
                     && !cleaned.contains("record ")
                     && !cleaned.contains("@interface ")) {
+                return null;
+            }
+            // Reject truncated or corrupted output (model hit its token limit
+            // mid-method, or glitched mid-generation) — a patch that doesn't
+            // parse is strictly worse than no patch, since it still gets
+            // written into the artifact.
+            if (path.endsWith(".java") && JavaOutputGuard.isMalformed(cleaned)) {
+                log.warn("[ContractRepairer] repair output for '{}' does not parse as valid Java — discarding", path);
                 return null;
             }
             return cleaned;

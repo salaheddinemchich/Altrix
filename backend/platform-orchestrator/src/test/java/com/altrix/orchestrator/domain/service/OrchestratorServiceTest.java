@@ -35,27 +35,18 @@ class OrchestratorServiceTest {
     @Mock
     ProgressNotifierPort progressNotifierPort;
     @Mock
-    CodeIndexingPort codeIndexingPort;
-    @Mock
     MigrationPlanCachePort migrationPlanCachePort;
     @Mock
     WorkflowSessionRepository sessionRepository;
-    @Mock
-    RagIndexManifestRepository ragIndexManifestRepository;
 
     private OrchestratorService service() {
         lenient().when(sessionRepository.save(any(WorkflowSession.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
         lenient().when(sessionRepository.findByJobId(any())).thenReturn(java.util.Optional.empty());
-        // codeIndexingPort.index() now returns a manifest; default stub to a
-        // tiny empty one so existing assertions stay focused on the pipeline.
-        lenient().when(codeIndexingPort.index(any())).thenAnswer(inv ->
-                new com.altrix.orchestrator.domain.model.rag.RagIndexManifest(
-                        "p", java.util.List.of(), 0, 0, java.time.Instant.now()));
         return new OrchestratorService(
                 workflowExecution, jobStatusUpdatePort, migratedFileStoragePort,
-                progressNotifierPort, codeIndexingPort, migrationPlanCachePort,
-                sessionRepository, ragIndexManifestRepository, 3, null);
+                progressNotifierPort, migrationPlanCachePort,
+                sessionRepository, 3, null);
     }
 
     // ── happy path ────────────────────────────────────────────────────────────

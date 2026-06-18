@@ -7,12 +7,10 @@ import java.util.Map;
 /**
  * Per-file RAG retrieval provenance for a migration session (#1).
  *
- * <p>Whereas {@link RagIndexManifest} captures <em>which source files</em>
- * were indexed for retrieval, this model captures <em>which documentation
- * chunks were used to migrate each file</em>.  Powers the JobDetail
- * timeline's Index step: instead of an opaque list of "indexed files",
- * the reviewer sees for every migrated file the exact doc URLs the AI
- * was anchored to.
+ * <p>For every migrated file, captures which documentation chunks (from
+ * the shared Kafka/Jakarta-EE reference corpus) the AI was anchored to
+ * when rewriting it.  Powers the JobDetail timeline's Migrate step: the
+ * reviewer sees the exact doc URLs that informed each file's rewrite.
  *
  * <p>One row per session.  An empty {@link #perFile} list means the
  * migrator ran without RAG context (either the embedding store is

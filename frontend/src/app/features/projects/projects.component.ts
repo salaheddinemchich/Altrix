@@ -5,6 +5,7 @@ import { Project } from '../../core/models/project.model';
 import { ConfigFormatPreference, GitHubRepo } from '../../core/models/repository.model';
 import { ProjectService } from '../../core/services/project.service';
 import { RepositoryService } from '../../core/services/repository.service';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 
 @Component({
@@ -17,6 +18,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 export class ProjectsComponent {
   private readonly projectsApi = inject(ProjectService);
   private readonly repoApi = inject(RepositoryService);
+  private readonly confirmDialog = inject(ConfirmDialogService);
 
   readonly projects = signal<Project[] | null>(null);
   readonly loadError = signal<string | null>(null);
@@ -109,9 +111,13 @@ export class ProjectsComponent {
     });
   }
 
-  deleteProject(p: Project, ev: Event): void {
+  async deleteProject(p: Project, ev: Event): Promise<void> {
     ev.stopPropagation();
-    if (!confirm(`Delete project "${p.name}"? This cannot be undone.`)) return;
+    const ok = await this.confirmDialog.ask({
+      message: `Delete project "${p.name}"? This cannot be undone.`,
+      danger: true,
+    });
+    if (!ok) return;
     this.projectsApi.delete(p.id).subscribe({
       next: () => this.refresh(),
       error: err => alert('Delete failed: ' + this.describe(err)),

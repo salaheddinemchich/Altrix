@@ -1,0 +1,23 @@
+@if (request(); as r) {
+  <div class="confirm-overlay" role="presentation" (click)="cancel()">
+    <div class="confirm-box"
+         role="alertdialog"
+         aria-modal="true"
+         [attr.aria-label]="r.title ?? r.message"
+         (click)="$event.stopPropagation()">
+      <div class="confirm-icon" [class.danger]="r.danger">
+        <app-icon [name]="r.danger ? 'alert' : 'check'" [size]="18"/>
+      </div>
+      <h4>{{ r.title ?? (r.danger ? 'Confirm deletion' : 'Confirm action') }}</h4>
+      <p>{{ r.message }}</p>
+      <div class="confirm-actions">
+        <button type="button" class="btn" (click)="cancel()">{{ r.cancelLabel ?? 'Cancel' }}</button>
+        <button type="button"
+                [class]="r.danger ? 'btn btn-danger' : 'btn btn-gold'"
+                (click)="confirm()">
+          {{ r.confirmLabel ?? 'Confirm' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
