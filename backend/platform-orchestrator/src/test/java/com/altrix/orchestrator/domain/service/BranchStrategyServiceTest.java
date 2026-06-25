@@ -58,9 +58,10 @@ class BranchStrategyServiceTest {
     void choose_persistsStrategyAndIssuesToken_forAdmin() {
         when(access.check("proj-1", "user-1")).thenReturn(new RepositoryAccess(
                 "owner/repo", "main", RepositoryPermission.ADMIN, true, true,
-                Set.of(BranchStrategy.NEW_BRANCH, BranchStrategy.PULL_REQUEST, BranchStrategy.DIRECT_MERGE)));
+                Set.of(BranchStrategy.NEW_BRANCH, BranchStrategy.PULL_REQUEST, BranchStrategy.DIRECT_MERGE),
+                List.of("main")));
 
-        Outcome out = service.choose(sid, BranchStrategy.PULL_REQUEST, "feature/x",
+        Outcome out = service.choose(sid, BranchStrategy.PULL_REQUEST, "feature/x", null,
                 null, null, null, "user-1");
 
         assertThat(out.confirmationToken()).isNotNull();
@@ -78,9 +79,9 @@ class BranchStrategyServiceTest {
     void choose_rejectsStrategyTheUserCannotPerform() {
         // Member without push rights — only READ.
         when(access.check("proj-1", "user-1")).thenReturn(new RepositoryAccess(
-                "owner/repo", "main", RepositoryPermission.READ, false, false, Set.of()));
+                "owner/repo", "main", RepositoryPermission.READ, false, false, Set.of(), List.of("main")));
 
-        assertThatThrownBy(() -> service.choose(sid, BranchStrategy.DIRECT_MERGE, "x",
+        assertThatThrownBy(() -> service.choose(sid, BranchStrategy.DIRECT_MERGE, "x", null,
                 null, null, null, "user-1"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("not permitted");
@@ -90,9 +91,9 @@ class BranchStrategyServiceTest {
     void choose_rejectsBranchNameMatchingDefault() {
         when(access.check("proj-1", "user-1")).thenReturn(new RepositoryAccess(
                 "owner/repo", "main", RepositoryPermission.WRITE, true, false,
-                Set.of(BranchStrategy.NEW_BRANCH, BranchStrategy.PULL_REQUEST)));
+                Set.of(BranchStrategy.NEW_BRANCH, BranchStrategy.PULL_REQUEST), List.of("main")));
 
-        assertThatThrownBy(() -> service.choose(sid, BranchStrategy.NEW_BRANCH, "main",
+        assertThatThrownBy(() -> service.choose(sid, BranchStrategy.NEW_BRANCH, "main", null,
                 null, null, null, "user-1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must differ from default branch");
@@ -102,9 +103,9 @@ class BranchStrategyServiceTest {
     void choose_rejectsBranchNameThatFailsPattern() {
         when(access.check("proj-1", "user-1")).thenReturn(new RepositoryAccess(
                 "owner/repo", "main", RepositoryPermission.WRITE, true, false,
-                Set.of(BranchStrategy.NEW_BRANCH, BranchStrategy.PULL_REQUEST)));
+                Set.of(BranchStrategy.NEW_BRANCH, BranchStrategy.PULL_REQUEST), List.of("main")));
 
-        assertThatThrownBy(() -> service.choose(sid, BranchStrategy.NEW_BRANCH, "bad branch with spaces",
+        assertThatThrownBy(() -> service.choose(sid, BranchStrategy.NEW_BRANCH, "bad branch with spaces", null,
                 null, null, null, "user-1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("required pattern");
@@ -116,7 +117,7 @@ class BranchStrategyServiceTest {
         when(applyState.find(other)).thenReturn(Optional.of(new State(
                 other, "p", "MIGRATING", null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, List.of(MigratedFile.builder().originalPath("a").newPath("a").content("x").changeType(FileChangeType.MODIFIED).build()))));
-        assertThatThrownBy(() -> service.choose(other, BranchStrategy.NEW_BRANCH, "x", null, null, null, "u"))
+        assertThatThrownBy(() -> service.choose(other, BranchStrategy.NEW_BRANCH, "x", null, null, null, null, "u"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("migration must finish");
     }

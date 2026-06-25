@@ -83,6 +83,27 @@
         }
       </fieldset>
 
+      <!-- Base branch — the branch DIRECT_MERGE merges into, or the branch
+           NEW_BRANCH/PULL_REQUEST is created/targeted from. Shown for any
+           selected strategy so the user can always pick something other
+           than the default branch when more than one exists. -->
+      @if (selectedStrategy()) {
+        <label class="field">
+          <span class="lbl">
+            {{ selectedStrategy() === 'DIRECT_MERGE' ? 'Merge into' : 'Base branch' }}
+            <span class="muted">({{ a.branches.length > 1 ? 'choose any branch' : 'only one branch on this repo' }})</span>
+          </span>
+          <select class="branch-select"
+                  [value]="selectedBaseBranch()"
+                  (change)="selectBaseBranch($any($event.target).value)"
+                  aria-label="Base branch">
+            @for (b of a.branches; track b) {
+              <option [value]="b">{{ b }}{{ b === a.defaultBranch ? ' (default)' : '' }}</option>
+            }
+          </select>
+        </label>
+      }
+
       <!-- Branch name (for NEW_BRANCH / PULL_REQUEST) -->
       @if (needsBranchName()) {
         <label class="field">
@@ -152,6 +173,7 @@
               <code>{{ access()?.fullName }}</code>.
               <br/>
               Strategy: <strong>{{ strategyLabel(selectedStrategy()!) }}</strong>
+              <br/>{{ selectedStrategy() === 'DIRECT_MERGE' ? 'Merge into' : 'Base branch' }}: <code>{{ selectedBaseBranch() }}</code>
               @if (needsBranchName()) {
                 <br/>Branch: <code>{{ branchName() || 'auto-generated' }}</code>
               }

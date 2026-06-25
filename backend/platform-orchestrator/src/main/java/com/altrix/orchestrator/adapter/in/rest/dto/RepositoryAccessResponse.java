@@ -17,7 +17,8 @@ public record RepositoryAccessResponse(
         RepositoryPermission permission,
         boolean canCreateBranch,
         boolean canMergeDefault,
-        List<BranchStrategy> availableStrategies
+        List<BranchStrategy> availableStrategies,
+        List<String> branches
 ) {
     public static RepositoryAccessResponse from(RepositoryAccess a) {
         // List preserves a stable order for the UI (NEW_BRANCH first, then PR, then DIRECT_MERGE).
@@ -29,6 +30,7 @@ public record RepositoryAccessResponse(
                 a.permission(),
                 a.canCreateBranch(),
                 a.canMergeDefault(),
-                ordered);
+                ordered,
+                a.branches());
     }
 }

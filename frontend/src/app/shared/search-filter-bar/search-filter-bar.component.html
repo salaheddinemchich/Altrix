@@ -1,0 +1,47 @@
+<div class="sfb">
+  <app-icon name="search" [size]="15" class="sfb-search-icon"/>
+
+  <input type="text"
+         class="sfb-input"
+         [placeholder]="searchPlaceholder()"
+         [value]="searchValue()"
+         (input)="onSearchInput($event)"
+         aria-label="Search"/>
+
+  @if (searchValue()) {
+    <button type="button" class="sfb-clear" (click)="clearSearch()" aria-label="Clear search">
+      <app-icon name="x" [size]="13"/>
+    </button>
+  }
+
+  <div class="sfb-divider"></div>
+
+  <div class="sfb-filter-wrap">
+    <button type="button" class="sfb-filter-trigger" (click)="toggleFilterMenu()"
+            [attr.aria-expanded]="filterMenuOpen()">
+      @if (activeOption(); as opt) {
+        <span class="sfb-dot" [style.background]="opt.color || 'var(--color-text-faint)'"></span>
+        <span class="sfb-filter-label">{{ opt.label }}</span>
+      }
+      <app-icon name="chevron-down" [size]="12"/>
+    </button>
+
+    @if (filterMenuOpen()) {
+      <div class="sfb-menu" role="menu">
+        @for (f of filters(); track f.value) {
+          <button type="button" class="sfb-menu-item" [class.active]="activeFilter() === f.value"
+                  (click)="selectFilter(f.value)" role="menuitem">
+            <span class="sfb-dot" [style.background]="f.color || 'var(--color-text-faint)'"></span>
+            <span class="sfb-menu-label">{{ f.label }}</span>
+            @if (f.count !== undefined) {
+              <span class="sfb-menu-count">{{ f.count }}</span>
+            }
+            @if (activeFilter() === f.value) {
+              <app-icon name="check" [size]="12" class="sfb-menu-check"/>
+            }
+          </button>
+        }
+      </div>
+    }
+  </div>
+</div>

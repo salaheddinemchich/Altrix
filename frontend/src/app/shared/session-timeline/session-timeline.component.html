@@ -176,35 +176,63 @@
              actually produced something (DONE; this step never goes
              ACTIVE for long enough to show mid-flight). -->
         @if (step.id === 'report' && sessionId() && step.status === 'DONE') {
-          <button type="button" class="rag-toggle" (click)="toggleReport()"
-                  [attr.aria-expanded]="reportExpanded()">
-            <app-icon [name]="reportExpanded() ? 'chevron-down' : 'chevron-right'" [size]="11"/>
-            {{ reportExpanded() ? 'Hide' : 'View' }} full report
+          <button type="button" class="rag-toggle" (click)="toggleReport()">
+            <app-icon name="file" [size]="11"/>
+            View report
           </button>
 
           @if (reportExpanded()) {
-            <div class="rag-manifest">
-              @if (reportLoading()) {
-                <div class="rag-manifest-state">Loading report…</div>
-              } @else if (reportMissing()) {
-                <div class="rag-manifest-state muted">
-                  No report persisted for this session yet.
-                </div>
-              } @else {
-                @if (report(); as r) {
-                  <div class="report-summary">
-                    <span class="pill" [class]="reportStatusClass(r.summary.status)">{{ r.summary.status }}</span>
-                    <span class="report-summary-item">confidence {{ r.summary.confidenceScore }}%</span>
-                    <span class="report-summary-item">{{ r.summary.recommendation }}</span>
-                    <span class="report-summary-item">{{ r.summary.filesModified }} file(s) modified</span>
-                    <button type="button" class="btn btn-sm" (click)="downloadReportPdf()">
-                      <app-icon name="download" [size]="12"/>
-                      Download PDF
+            <div class="report-modal-backdrop" (click)="closeReportModal()">
+              <div class="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title"
+                   (click)="$event.stopPropagation()">
+                <header class="report-modal-header">
+                  <div class="report-modal-title">
+                    <app-icon name="file" [size]="16"/>
+                    <h3 id="report-modal-title">Migration Report</h3>
+                    @if (report(); as r) {
+                      <span class="pill" [class]="reportStatusClass(r.summary.status)">{{ r.summary.status }}</span>
+                    }
+                  </div>
+                  <div class="report-modal-actions">
+                    @if (report()) {
+                      <button type="button" class="btn btn-sm" (click)="downloadReportPdf()">
+                        <app-icon name="download" [size]="12"/>
+                        Download PDF
+                      </button>
+                    }
+                    <button type="button" class="report-modal-close" (click)="closeReportModal()" aria-label="Close report">
+                      <app-icon name="x" [size]="16"/>
                     </button>
                   </div>
-                  <div class="report-viewer" [innerHTML]="reportHtml()"></div>
-                }
-              }
+                </header>
+
+                <div class="report-modal-body">
+                  @if (reportLoading()) {
+                    <div class="rag-manifest-state">Loading report…</div>
+                  } @else if (reportMissing()) {
+                    <div class="rag-manifest-state muted">
+                      No report persisted for this session yet.
+                    </div>
+                  } @else if (report()) {
+                    @let r = report()!;
+                    <div class="report-meta-strip">
+                      <div class="report-meta-tile">
+                        <span class="report-meta-label">Confidence</span>
+                        <span class="report-meta-value">{{ r.summary.confidenceScore }}%</span>
+                      </div>
+                      <div class="report-meta-tile">
+                        <span class="report-meta-label">Recommendation</span>
+                        <span class="report-meta-value report-meta-value--sm">{{ r.summary.recommendation }}</span>
+                      </div>
+                      <div class="report-meta-tile">
+                        <span class="report-meta-label">Files modified</span>
+                        <span class="report-meta-value">{{ r.summary.filesModified }}</span>
+                      </div>
+                    </div>
+                    <div class="report-viewer" [innerHTML]="reportHtml()"></div>
+                  }
+                </div>
+              </div>
             </div>
           }
         }

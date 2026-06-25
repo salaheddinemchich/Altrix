@@ -13,6 +13,7 @@ import jakarta.validation.constraints.Size;
 public record BranchStrategyRequest(
         @NotNull BranchStrategy strategy,
         @Size(max = 255) String branchName,
+        @Size(max = 255) String baseBranch,
         @Size(max = 1024) String commitMessage,
         @Size(max = 255)  String prTitle,
         @Size(max = 4096) String prBody

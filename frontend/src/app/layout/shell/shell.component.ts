@@ -30,12 +30,11 @@ export class ShellComponent {
     return null;
   });
 
-  /** `color` selects the `.nav-icon--*` badge variant (shell.component.scss). */
   protected readonly mainNav = [
-    { path: '/',         icon: 'home',      label: 'Dashboard', exact: true,  color: 'gold'   },
-    { path: '/projects', icon: 'folder',    label: 'Projects',  exact: false, color: 'blue'   },
-    { path: '/jobs',     icon: 'briefcase', label: 'Jobs',      exact: false, color: 'teal'   },
-    { path: '/sessions', icon: 'layers',    label: 'Sessions',  exact: false, color: 'purple' },
+    { path: '/',         icon: 'home',      label: 'Dashboard', exact: true  },
+    { path: '/projects', icon: 'folder',    label: 'Projects',  exact: false },
+    { path: '/jobs',     icon: 'briefcase', label: 'Jobs',      exact: false },
+    { path: '/sessions', icon: 'layers',    label: 'Sessions',  exact: false },
   ];
 
   /**
@@ -45,11 +44,23 @@ export class ShellComponent {
    * one boolean, not by editing the markup.
    */
   protected readonly configNav: ReadonlyArray<{
-    path: string; icon: string; label: string; color: string; adminOnly?: boolean;
+    path: string; icon: string; label: string; adminOnly?: boolean;
   }> = [
-    { path: '/providers', icon: 'cpu',         label: 'AI Providers', color: 'purple' },
-    { path: '/billing',   icon: 'credit-card', label: 'Billing',      color: 'green', adminOnly: true },
+    { path: '/providers', icon: 'cpu',         label: 'AI Providers' },
+    { path: '/billing',   icon: 'credit-card', label: 'Billing', adminOnly: true },
   ];
+
+  // ── Sidebar: collapsible nav sections ───────────────────────────────────
+  protected readonly workspaceExpanded = signal(true);
+  protected readonly configExpanded = signal(true);
+
+  protected toggleWorkspaceSection(): void {
+    this.workspaceExpanded.set(!this.workspaceExpanded());
+  }
+
+  protected toggleConfigSection(): void {
+    this.configExpanded.set(!this.configExpanded());
+  }
 
   // ── Top bar: quick-navigate search ──────────────────────────────────────
   protected readonly searchQuery = signal('');

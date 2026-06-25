@@ -16,6 +16,7 @@ public interface ChooseBranchStrategyUseCase {
     Outcome choose(WorkflowSessionId sessionId,
                    BranchStrategy strategy,
                    String targetBranchName,
+                   String baseBranch,
                    String commitMessage,
                    String prTitle,
                    String prBody,

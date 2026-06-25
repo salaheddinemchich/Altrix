@@ -17,33 +17,45 @@
     <nav class="nav" aria-label="Main navigation">
 
       <div class="nav-section">
-        <span class="nav-label">Workspace</span>
-        @for (item of mainNav; track item.path) {
-          <a class="nav-link"
-             [routerLink]="item.path"
-             routerLinkActive="active"
-             [routerLinkActiveOptions]="{ exact: item.exact }">
-            <span class="nav-icon" [class]="'nav-icon--' + item.color">
-              <app-icon [name]="item.icon" [size]="15"/>
-            </span>
-            <span>{{ item.label }}</span>
-          </a>
+        <button type="button" class="nav-label" (click)="toggleWorkspaceSection()"
+                [attr.aria-expanded]="workspaceExpanded()">
+          <span>Workspace</span>
+          <app-icon name="chevron-down" [size]="12" [class.collapsed]="!workspaceExpanded()"/>
+        </button>
+        @if (workspaceExpanded()) {
+          @for (item of mainNav; track item.path) {
+            <a class="nav-link"
+               [routerLink]="item.path"
+               routerLinkActive="active"
+               [routerLinkActiveOptions]="{ exact: item.exact }">
+              <span class="nav-icon">
+                <app-icon [name]="item.icon" [size]="16"/>
+              </span>
+              <span>{{ item.label }}</span>
+            </a>
+          }
         }
       </div>
 
       <div class="nav-section">
-        <span class="nav-label">Config</span>
-        @for (item of configNav; track item.path) {
-          @if (!item.adminOnly || isAdmin()) {
-            <a class="nav-link"
-               [routerLink]="item.path"
-               routerLinkActive="active"
-               [routerLinkActiveOptions]="{ exact: false }">
-              <span class="nav-icon" [class]="'nav-icon--' + item.color">
-                <app-icon [name]="item.icon" [size]="15"/>
-              </span>
-              <span>{{ item.label }}</span>
-            </a>
+        <button type="button" class="nav-label" (click)="toggleConfigSection()"
+                [attr.aria-expanded]="configExpanded()">
+          <span>Config</span>
+          <app-icon name="chevron-down" [size]="12" [class.collapsed]="!configExpanded()"/>
+        </button>
+        @if (configExpanded()) {
+          @for (item of configNav; track item.path) {
+            @if (!item.adminOnly || isAdmin()) {
+              <a class="nav-link"
+                 [routerLink]="item.path"
+                 routerLinkActive="active"
+                 [routerLinkActiveOptions]="{ exact: false }">
+                <span class="nav-icon">
+                  <app-icon [name]="item.icon" [size]="16"/>
+                </span>
+                <span>{{ item.label }}</span>
+              </a>
+            }
           }
         }
       </div>
@@ -64,24 +76,6 @@
           <span>Dark mode</span>
         }
       </button>
-      @if (user(); as u) {
-        <div class="user-row">
-          <div class="user-avatar">
-            @if (avatarUrl(); as url) {
-              <img [src]="url" [alt]="u.login" width="32" height="32"/>
-            } @else {
-              <span>{{ u.login[0].toUpperCase() }}</span>
-            }
-          </div>
-          <div class="user-info">
-            <span class="user-name">{{ u.login }}</span>
-            <span class="user-role">{{ roleLabel(u.role) }}</span>
-          </div>
-          <button class="btn-logout" (click)="logout()" title="Sign out" aria-label="Sign out">
-            <app-icon name="log-out" [size]="15"/>
-          </button>
-        </div>
-      }
       <div class="version">v0.1.0 · early access</div>
     </div>
 
@@ -109,7 +103,7 @@
             } @else {
               @for (r of searchResults(); track r.path) {
                 <a class="search-result" [routerLink]="r.path" (click)="clearSearch()">
-                  <span class="nav-icon" [class]="'nav-icon--' + r.color">
+                  <span class="nav-icon">
                     <app-icon [name]="r.icon" [size]="13"/>
                   </span>
                   {{ r.label }}

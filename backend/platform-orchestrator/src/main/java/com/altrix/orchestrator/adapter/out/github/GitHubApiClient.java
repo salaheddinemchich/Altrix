@@ -93,6 +93,20 @@ public class GitHubApiClient {
         return response.getBody();
     }
 
+    /** Returns every branch name on the repo, most-recently-pushed first as GitHub orders them. */
+    public List<String> listBranches(String accessToken, String fullName) {
+        var parts = splitFullName(fullName);
+        ResponseEntity<List<BranchJson>> response = restTemplate.exchange(
+                GITHUB_API_BASE + "/repos/{owner}/{repo}/branches?per_page=100",
+                HttpMethod.GET,
+                new HttpEntity<>(bearerHeaders(accessToken)),
+                new ParameterizedTypeReference<>() {},
+                parts[0], parts[1]);
+        List<BranchJson> body = response.getBody();
+        if (body == null) return Collections.emptyList();
+        return body.stream().map(BranchJson::name).toList();
+    }
+
     /** Returns the SHA of the branch's head commit, or {@code null} when the branch is absent. */
     public String getBranchHeadSha(String accessToken, String fullName, String branch) {
         var parts = splitFullName(fullName);
@@ -301,6 +315,9 @@ public class GitHubApiClient {
         @JsonIgnoreProperties(ignoreUnknown = true)
         public record Permissions(boolean admin, boolean maintain, boolean push, boolean triage, boolean pull) {}
     }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record BranchJson(String name) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RefJson(String ref, RefObject object) {

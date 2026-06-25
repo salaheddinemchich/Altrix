@@ -1,0 +1,847 @@
+[1m[33m
+Warning: This is a simple server for use in testing or debugging Angular applications
+locally. It hasn't been reviewed for security issues.
+
+Binding this server to an open connection can result in compromising your application or
+computer. Using a different host than the one passed to the "--host" flag might result in
+websocket connection issues. You might need to use "--disable-host-check" if that's the
+case.
+    [39m[22m
+[33m❯[39m Building...
+[32m✔[39m Building...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mpolyfills.js[39m       [2m | [22m[2mpolyfills[22m              [2m | [22m [36m90.63 kB[39m[2m | [22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m                 [2m | [22m  [36m9.38 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                   [2m | [22m  [36m6.80 kB[39m[2m | [22m
+[32mchunk-ZUN3QCCZ.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m6.07 kB[39m[2m | [22m
+[32mchunk-DQB4C4N3.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.82 kB[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m          [2m | [22m[1m114.69 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mchunk-H4BSHZBW.js[39m  [2m | [22m[2mjob-detail-component[22m   [2m | [22m[36m217.11 kB[39m[2m | [22m
+[32mchunk-GXQC6WBJ.js[39m  [2m | [22m[2mhome-component[22m         [2m | [22m [36m43.91 kB[39m[2m | [22m
+[32mchunk-D7OSJWKK.js[39m  [2m | [22m[2mshell-component[22m        [2m | [22m [36m38.52 kB[39m[2m | [22m
+[32mchunk-FX4FZV3Q.js[39m  [2m | [22m[2mprojects-component[22m     [2m | [22m [36m32.78 kB[39m[2m | [22m
+[32mchunk-4AFSY3QT.js[39m  [2m | [22m[2mdiff-viewer-component[22m  [2m | [22m [36m31.97 kB[39m[2m | [22m
+[32mchunk-ZDCGELAW.js[39m  [2m | [22m[2mlogin-component[22m        [2m | [22m [36m24.89 kB[39m[2m | [22m
+[32mchunk-FONGV57A.js[39m  [2m | [22m[2mbilling-component[22m      [2m | [22m [36m22.95 kB[39m[2m | [22m
+[32mchunk-4DFVGGAA.js[39m  [2m | [22m[2mproviders-component[22m    [2m | [22m [36m20.08 kB[39m[2m | [22m
+[32mchunk-2DSSGGXB.js[39m  [2m | [22m[2msessions-component[22m     [2m | [22m [36m17.19 kB[39m[2m | [22m
+[32mchunk-JZFBCONO.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m15.61 kB[39m[2m | [22m
+[32mchunk-UZS6M3UP.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m12.73 kB[39m[2m | [22m
+[32mchunk-2S6NKAXM.js[39m  [2m | [22m[2mjobs-component[22m         [2m | [22m [36m12.70 kB[39m[2m | [22m
+[32mchunk-IYUFXWCF.js[39m  [2m | [22m[2mauth-callback-component[22m[2m | [22m  [36m5.83 kB[39m[2m | [22m
+[32mchunk-AEJZ3JF6.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m3.76 kB[39m[2m | [22m
+[32mchunk-Q5CU3QXB.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.25 kB[39m[2m | [22m
+[2m...and 5 more lazy chunks files. Use "--verbose" to show all the files.[22m
+
+Application bundle generation complete. [16.053 seconds]
+
+Watch mode enabled. Watching for file changes...
+NOTE: Raw file sizes do not reflect development server per-request transformations.
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4200[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.19.64.1:[1m4200[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.25.48.1:[1m4200[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.99.99.27:[1m4200[22m/[39m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m          [2m | [22m [36m6.80 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mchunk-7PE6HLIA.js[39m  [2m | [22m[2mhome-component[22m[2m | [22m[36m42.96 kB[39m[2m | [22m
+
+Application bundle generation complete. [7.942 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m          [2m | [22m [36m6.80 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mchunk-RL5AOBR6.js[39m  [2m | [22m[2mhome-component[22m[2m | [22m[36m42.88 kB[39m[2m | [22m
+
+Application bundle generation complete. [4.023 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m          [2m | [22m [36m6.80 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mchunk-MK3WTWYM.js[39m  [2m | [22m[2mhome-component[22m[2m | [22m[36m42.21 kB[39m[2m | [22m
+
+Application bundle generation complete. [2.342 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m          [2m | [22m [36m6.80 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mchunk-AGZS3TIJ.js[39m  [2m | [22m[2mhome-component[22m[2m | [22m[36m41.97 kB[39m[2m | [22m
+
+Application bundle generation complete. [2.811 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m          [2m | [22m [36m6.80 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mchunk-OLY7MBXQ.js[39m  [2m | [22m[2mhome-component[22m[2m | [22m[36m41.90 kB[39m[2m | [22m
+
+Application bundle generation complete. [3.305 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m          [2m | [22m [36m6.80 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m         [2m | [22m[1mRaw size[22m
+[32mchunk-5C6HERMC.js[39m  [2m | [22m[2mhome-component[22m[2m | [22m[36m41.84 kB[39m[2m | [22m
+
+Application bundle generation complete. [1.918 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+Application bundle generation failed. [1.643 seconds]
+
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:86:67:
+[37m      86 │ ...merge-target-option" [class.selected]="[32mmergeMode[37m() === 'default'">
+         ╵                                           [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:87:64:
+[37m      87 │ ...ype="radio" name="mergeMode" [checked]="[32mmergeMode[37m() === 'default'"
+         ╵                                            [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:92:69:
+[37m      92 │ ...erge-target-option" [class.selected]="[32mmergeMode[37m() === 'specific'">
+         ╵                                          [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:93:66:
+[37m      93 │ ...pe="radio" name="mergeMode" [checked]="[32mmergeMode[37m() === 'specific'"
+         ╵                                           [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:98:19:
+[37m      98 │               @if ([32mmergeMode[37m() === 'specific') {
+         ╵                    [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.ts:102:59:
+[37m      102 │ ...!== 'DIRECT_MERGE' || this.[32mmergeMode[37m() !== 'specific' || !!thi...
+          ╵                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.ts:142:9:
+[37m      142 │     this.[32mmergeMode[37m.set('default');
+          ╵          [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.ts:150:9:
+[37m      150 │     this.[32mmergeMode[37m.set(mode);
+          ╵          [32m~~~~~~~~~[0m
+
+[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+Application bundle generation failed. [1.150 seconds]
+
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:86:67:
+[37m      86 │ ...merge-target-option" [class.selected]="[32mmergeMode[37m() === 'default'">
+         ╵                                           [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:87:64:
+[37m      87 │ ...ype="radio" name="mergeMode" [checked]="[32mmergeMode[37m() === 'default'"
+         ╵                                            [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'nonDefaultBranches' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:91:19:
+[37m      91 │               @if ([32mnonDefaultBranches[37m().length > 0) {
+         ╵                    [32m~~~~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:92:69:
+[37m      92 │ ...erge-target-option" [class.selected]="[32mmergeMode[37m() === 'specific'">
+         ╵                                          [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:93:66:
+[37m      93 │ ...pe="radio" name="mergeMode" [checked]="[32mmergeMode[37m() === 'specific'"
+         ╵                                           [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:98:19:
+[37m      98 │               @if ([32mmergeMode[37m() === 'specific') {
+         ╵                    [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'nonDefaultBranches' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:103:29:
+[37m      103 │                   @for (b of [32mnonDefaultBranches[37m(); track b) {
+          ╵                              [32m~~~~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.ts:136:9:
+[37m      136 │     this.[32mmergeMode[37m.set('default');
+          ╵          [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.ts:144:9:
+[37m      144 │     this.[32mmergeMode[37m.set(mode);
+          ╵          [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'nonDefaultBranches' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.ts:146:72:
+[37m      146 │ ...()?.defaultBranch ?? '') : (this.[32mnonDefaultBranches[37m()[0] ?? ''));
+          ╵                                     [32m~~~~~~~~~~~~~~~~~~[0m
+
+[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+Application bundle generation failed. [0.743 seconds]
+
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:86:67:
+[37m      86 │ ...merge-target-option" [class.selected]="[32mmergeMode[37m() === 'default'">
+         ╵                                           [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:87:64:
+[37m      87 │ ...ype="radio" name="mergeMode" [checked]="[32mmergeMode[37m() === 'default'"
+         ╵                                            [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'selectMergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:88:33:
+[37m      88 │                        (change)="[32mselectMergeMode[37m('default')"/>
+         ╵                                  [32m~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'nonDefaultBranches' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:91:19:
+[37m      91 │               @if ([32mnonDefaultBranches[37m().length > 0) {
+         ╵                    [32m~~~~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:92:69:
+[37m      92 │ ...erge-target-option" [class.selected]="[32mmergeMode[37m() === 'specific'">
+         ╵                                          [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:93:66:
+[37m      93 │ ...pe="radio" name="mergeMode" [checked]="[32mmergeMode[37m() === 'specific'"
+         ╵                                           [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'selectMergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:94:35:
+[37m      94 │                          (change)="[32mselectMergeMode[37m('specific')"/>
+         ╵                                    [32m~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:98:19:
+[37m      98 │               @if ([32mmergeMode[37m() === 'specific') {
+         ╵                    [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'nonDefaultBranches' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:103:29:
+[37m      103 │                   @for (b of [32mnonDefaultBranches[37m(); track b) {
+          ╵                              [32m~~~~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+Application bundle generation failed. [0.484 seconds]
+
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:86:67:
+[37m      86 │ ...merge-target-option" [class.selected]="[32mmergeMode[37m() === 'default'">
+         ╵                                           [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:87:64:
+[37m      87 │ ...ype="radio" name="mergeMode" [checked]="[32mmergeMode[37m() === 'default'"
+         ╵                                            [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'selectMergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:88:33:
+[37m      88 │                        (change)="[32mselectMergeMode[37m('default')"/>
+         ╵                                  [32m~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'nonDefaultBranches' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:91:19:
+[37m      91 │               @if ([32mnonDefaultBranches[37m().length > 0) {
+         ╵                    [32m~~~~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:92:69:
+[37m      92 │ ...erge-target-option" [class.selected]="[32mmergeMode[37m() === 'specific'">
+         ╵                                          [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:93:66:
+[37m      93 │ ...pe="radio" name="mergeMode" [checked]="[32mmergeMode[37m() === 'specific'"
+         ╵                                           [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'selectMergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:94:35:
+[37m      94 │                          (change)="[32mselectMergeMode[37m('specific')"/>
+         ╵                                    [32m~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'mergeMode' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:98:19:
+[37m      98 │               @if ([32mmergeMode[37m() === 'specific') {
+         ╵                    [32m~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'nonDefaultBranches' does not exist on type 'MigrationApplyComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/migration-apply/migration-apply.component.html:103:29:
+[37m      103 │                   @for (b of [32mnonDefaultBranches[37m(); track b) {
+          ╵                              [32m~~~~~~~~~~~~~~~~~~[0m
+
+  Error occurs in the template of component MigrationApplyComponent.
+
+    src/app/features/migration-apply/migration-apply.component.ts:43:15:
+[37m      43 │   templateUrl: [32m'./migration-apply.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mpolyfills.js[39m       [2m | [22m[2mpolyfills[22m              [2m | [22m [36m90.63 kB[39m[2m | [22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m                 [2m | [22m  [36m9.38 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                   [2m | [22m  [36m6.80 kB[39m[2m | [22m
+[32mchunk-ZUN3QCCZ.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m6.07 kB[39m[2m | [22m
+[32mchunk-DQB4C4N3.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.82 kB[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m          [2m | [22m[1m114.69 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mchunk-FMQKR4YV.js[39m  [2m | [22m[2mjob-detail-component[22m   [2m | [22m[36m214.19 kB[39m[2m | [22m
+[32mchunk-5C6HERMC.js[39m  [2m | [22m[2mhome-component[22m         [2m | [22m [36m41.84 kB[39m[2m | [22m
+[32mchunk-D7OSJWKK.js[39m  [2m | [22m[2mshell-component[22m        [2m | [22m [36m38.52 kB[39m[2m | [22m
+[32mchunk-FX4FZV3Q.js[39m  [2m | [22m[2mprojects-component[22m     [2m | [22m [36m32.78 kB[39m[2m | [22m
+[32mchunk-4AFSY3QT.js[39m  [2m | [22m[2mdiff-viewer-component[22m  [2m | [22m [36m31.97 kB[39m[2m | [22m
+[32mchunk-ZDCGELAW.js[39m  [2m | [22m[2mlogin-component[22m        [2m | [22m [36m24.89 kB[39m[2m | [22m
+[32mchunk-FONGV57A.js[39m  [2m | [22m[2mbilling-component[22m      [2m | [22m [36m22.95 kB[39m[2m | [22m
+[32mchunk-4DFVGGAA.js[39m  [2m | [22m[2mproviders-component[22m    [2m | [22m [36m20.08 kB[39m[2m | [22m
+[32mchunk-2DSSGGXB.js[39m  [2m | [22m[2msessions-component[22m     [2m | [22m [36m17.19 kB[39m[2m | [22m
+[32mchunk-JZFBCONO.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m15.61 kB[39m[2m | [22m
+[32mchunk-UZS6M3UP.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m12.73 kB[39m[2m | [22m
+[32mchunk-2S6NKAXM.js[39m  [2m | [22m[2mjobs-component[22m         [2m | [22m [36m12.70 kB[39m[2m | [22m
+[32mchunk-IYUFXWCF.js[39m  [2m | [22m[2mauth-callback-component[22m[2m | [22m  [36m5.83 kB[39m[2m | [22m
+[32mchunk-AEJZ3JF6.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m3.76 kB[39m[2m | [22m
+[32mchunk-Q5CU3QXB.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.25 kB[39m[2m | [22m
+[2m...and 5 more lazy chunks files. Use "--verbose" to show all the files.[22m
+
+Application bundle generation complete. [0.381 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m               [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                [2m | [22m  [36m6.80 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m               [2m | [22m [1mRaw size[22m
+[32mchunk-RHX3YVFI.js[39m  [2m | [22m[2mjob-detail-component[22m[2m | [22m[36m213.91 kB[39m[2m | [22m
+
+Application bundle generation complete. [0.968 seconds]
+
+Page reload sent to client(s).
+[1m[31m[2m11:07:32 AM[22m[1m [31m[1m[vite][22m[1m[31m [31mws proxy socket error:[31m
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m               [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                [2m | [22m  [36m6.80 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m               [2m | [22m [1mRaw size[22m
+[32mchunk-CI2QCBBO.js[39m  [2m | [22m[2mjob-detail-component[22m[2m | [22m[36m213.19 kB[39m[2m | [22m
+
+Application bundle generation complete. [0.681 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+Application bundle generation failed. [1.972 seconds]
+
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2304: Cannot find name 'HostListener'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.ts:160:3:
+[37m      160 │   @[32mHostListener[37m('document:keydown.escape')
+          ╵    [32m~~~~~~~~~~~~[0m
+
+[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mpolyfills.js[39m       [2m | [22m[2mpolyfills[22m              [2m | [22m [36m90.63 kB[39m[2m | [22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m                 [2m | [22m  [36m9.38 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                   [2m | [22m  [36m6.80 kB[39m[2m | [22m
+[32mchunk-ZUN3QCCZ.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m6.07 kB[39m[2m | [22m
+[32mchunk-DQB4C4N3.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.82 kB[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m          [2m | [22m[1m114.69 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mchunk-5U4HHN3D.js[39m  [2m | [22m[2mjob-detail-component[22m   [2m | [22m[36m213.73 kB[39m[2m | [22m
+[32mchunk-5C6HERMC.js[39m  [2m | [22m[2mhome-component[22m         [2m | [22m [36m41.84 kB[39m[2m | [22m
+[32mchunk-D7OSJWKK.js[39m  [2m | [22m[2mshell-component[22m        [2m | [22m [36m38.52 kB[39m[2m | [22m
+[32mchunk-FX4FZV3Q.js[39m  [2m | [22m[2mprojects-component[22m     [2m | [22m [36m32.78 kB[39m[2m | [22m
+[32mchunk-4AFSY3QT.js[39m  [2m | [22m[2mdiff-viewer-component[22m  [2m | [22m [36m31.97 kB[39m[2m | [22m
+[32mchunk-ZDCGELAW.js[39m  [2m | [22m[2mlogin-component[22m        [2m | [22m [36m24.89 kB[39m[2m | [22m
+[32mchunk-FONGV57A.js[39m  [2m | [22m[2mbilling-component[22m      [2m | [22m [36m22.95 kB[39m[2m | [22m
+[32mchunk-4DFVGGAA.js[39m  [2m | [22m[2mproviders-component[22m    [2m | [22m [36m20.08 kB[39m[2m | [22m
+[32mchunk-2DSSGGXB.js[39m  [2m | [22m[2msessions-component[22m     [2m | [22m [36m17.19 kB[39m[2m | [22m
+[32mchunk-JZFBCONO.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m15.61 kB[39m[2m | [22m
+[32mchunk-UZS6M3UP.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m12.73 kB[39m[2m | [22m
+[32mchunk-2S6NKAXM.js[39m  [2m | [22m[2mjobs-component[22m         [2m | [22m [36m12.70 kB[39m[2m | [22m
+[32mchunk-IYUFXWCF.js[39m  [2m | [22m[2mauth-callback-component[22m[2m | [22m  [36m5.83 kB[39m[2m | [22m
+[32mchunk-AEJZ3JF6.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m3.76 kB[39m[2m | [22m
+[32mchunk-Q5CU3QXB.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.25 kB[39m[2m | [22m
+[2m...and 5 more lazy chunks files. Use "--verbose" to show all the files.[22m
+
+Application bundle generation complete. [10.558 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+Application bundle generation failed. [2.411 seconds]
+
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2304: Cannot find name 'inlineCell'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.ts:779:47:
+[37m      779 │ ...`<tr>${row.map(c => `<td>${[32minlineCell[37m(c)}</td>`).join('')}</tr>`)
+          ╵                               [32m~~~~~~~~~~[0m
+
+[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mpolyfills.js[39m       [2m | [22m[2mpolyfills[22m              [2m | [22m [36m90.63 kB[39m[2m | [22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m                 [2m | [22m  [36m9.38 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                   [2m | [22m  [36m6.80 kB[39m[2m | [22m
+[32mchunk-ZUN3QCCZ.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m6.07 kB[39m[2m | [22m
+[32mchunk-DQB4C4N3.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.82 kB[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m          [2m | [22m[1m114.69 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mchunk-FOTSQVGG.js[39m  [2m | [22m[2mjob-detail-component[22m   [2m | [22m[36m214.26 kB[39m[2m | [22m
+[32mchunk-5C6HERMC.js[39m  [2m | [22m[2mhome-component[22m         [2m | [22m [36m41.84 kB[39m[2m | [22m
+[32mchunk-D7OSJWKK.js[39m  [2m | [22m[2mshell-component[22m        [2m | [22m [36m38.52 kB[39m[2m | [22m
+[32mchunk-FX4FZV3Q.js[39m  [2m | [22m[2mprojects-component[22m     [2m | [22m [36m32.78 kB[39m[2m | [22m
+[32mchunk-4AFSY3QT.js[39m  [2m | [22m[2mdiff-viewer-component[22m  [2m | [22m [36m31.97 kB[39m[2m | [22m
+[32mchunk-ZDCGELAW.js[39m  [2m | [22m[2mlogin-component[22m        [2m | [22m [36m24.89 kB[39m[2m | [22m
+[32mchunk-FONGV57A.js[39m  [2m | [22m[2mbilling-component[22m      [2m | [22m [36m22.95 kB[39m[2m | [22m
+[32mchunk-4DFVGGAA.js[39m  [2m | [22m[2mproviders-component[22m    [2m | [22m [36m20.08 kB[39m[2m | [22m
+[32mchunk-2DSSGGXB.js[39m  [2m | [22m[2msessions-component[22m     [2m | [22m [36m17.19 kB[39m[2m | [22m
+[32mchunk-JZFBCONO.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m15.61 kB[39m[2m | [22m
+[32mchunk-UZS6M3UP.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m12.73 kB[39m[2m | [22m
+[32mchunk-2S6NKAXM.js[39m  [2m | [22m[2mjobs-component[22m         [2m | [22m [36m12.70 kB[39m[2m | [22m
+[32mchunk-IYUFXWCF.js[39m  [2m | [22m[2mauth-callback-component[22m[2m | [22m  [36m5.83 kB[39m[2m | [22m
+[32mchunk-AEJZ3JF6.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m3.76 kB[39m[2m | [22m
+[32mchunk-Q5CU3QXB.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.25 kB[39m[2m | [22m
+[2m...and 5 more lazy chunks files. Use "--verbose" to show all the files.[22m
+
+Application bundle generation complete. [5.413 seconds]
+
+Page reload sent to client(s).
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+Application bundle generation failed. [1.359 seconds]
+
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG5002: "as" expression is only allowed on the primary @if block[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.html:216:40:
+[37m      216 │                   } @else if (report(); [32mas r[37m) {
+          ╵                                         [32m~~~~[0m
+
+  Error occurs in the template of component SessionTimelineComponent.
+
+    src/app/shared/session-timeline/session-timeline.component.ts:41:15:
+[37m      41 │   templateUrl: [32m'./session-timeline.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'r' does not exist on type 'SessionTimelineComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.html:220:59:
+[37m      220 │ ...n class="report-meta-value">{{ [32mr[37m.summary.confidenceScore }}%</...
+          ╵                                   [32m^[0m
+
+  Error occurs in the template of component SessionTimelineComponent.
+
+    src/app/shared/session-timeline/session-timeline.component.ts:41:15:
+[37m      41 │   templateUrl: [32m'./session-timeline.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'r' does not exist on type 'SessionTimelineComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.html:224:81:
+[37m      224 │ ...alue report-meta-value--sm">{{ [32mr[37m.summary.recommendation }}</span>
+          ╵                                   [32m^[0m
+
+  Error occurs in the template of component SessionTimelineComponent.
+
+    src/app/shared/session-timeline/session-timeline.component.ts:41:15:
+[37m      41 │   templateUrl: [32m'./session-timeline.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'r' does not exist on type 'SessionTimelineComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.html:228:59:
+[37m      228 │ ...an class="report-meta-value">{{ [32mr[37m.summary.filesModified }}</span>
+          ╵                                    [32m^[0m
+
+  Error occurs in the template of component SessionTimelineComponent.
+
+    src/app/shared/session-timeline/session-timeline.component.ts:41:15:
+[37m      41 │   templateUrl: [32m'./session-timeline.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+Application bundle generation failed. [2.847 seconds]
+
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG5002: "as" expression is only allowed on the primary @if block[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.html:216:40:
+[37m      216 │                   } @else if (report(); [32mas r[37m) {
+          ╵                                         [32m~~~~[0m
+
+  Error occurs in the template of component SessionTimelineComponent.
+
+    src/app/shared/session-timeline/session-timeline.component.ts:41:15:
+[37m      41 │   templateUrl: [32m'./session-timeline.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'r' does not exist on type 'SessionTimelineComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.html:220:59:
+[37m      220 │ ...n class="report-meta-value">{{ [32mr[37m.summary.confidenceScore }}%</...
+          ╵                                   [32m^[0m
+
+  Error occurs in the template of component SessionTimelineComponent.
+
+    src/app/shared/session-timeline/session-timeline.component.ts:41:15:
+[37m      41 │   templateUrl: [32m'./session-timeline.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'r' does not exist on type 'SessionTimelineComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.html:224:81:
+[37m      224 │ ...alue report-meta-value--sm">{{ [32mr[37m.summary.recommendation }}</span>
+          ╵                                   [32m^[0m
+
+  Error occurs in the template of component SessionTimelineComponent.
+
+    src/app/shared/session-timeline/session-timeline.component.ts:41:15:
+[37m      41 │   templateUrl: [32m'./session-timeline.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mNG9: Property 'r' does not exist on type 'SessionTimelineComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/shared/session-timeline/session-timeline.component.html:228:59:
+[37m      228 │ ...an class="report-meta-value">{{ [32mr[37m.summary.filesModified }}</span>
+          ╵                                    [32m^[0m
+
+  Error occurs in the template of component SessionTimelineComponent.
+
+    src/app/shared/session-timeline/session-timeline.component.ts:41:15:
+[37m      41 │   templateUrl: [32m'./session-timeline.component.html'[37m,
+         ╵                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[39m[22m
+[33m❯[39m Changes detected. Rebuilding...
+[32m✔[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mpolyfills.js[39m       [2m | [22m[2mpolyfills[22m              [2m | [22m [36m90.63 kB[39m[2m | [22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m                 [2m | [22m  [36m9.38 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                   [2m | [22m  [36m6.80 kB[39m[2m | [22m
+[32mchunk-ZUN3QCCZ.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m6.07 kB[39m[2m | [22m
+[32mchunk-DQB4C4N3.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.82 kB[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m          [2m | [22m[1m114.69 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m                  [2m | [22m [1mRaw size[22m
+[32mchunk-2AOWJHJS.js[39m  [2m | [22m[2mjob-detail-component[22m   [2m | [22m[36m221.31 kB[39m[2m | [22m
+[32mchunk-5C6HERMC.js[39m  [2m | [22m[2mhome-component[22m         [2m | [22m [36m41.84 kB[39m[2m | [22m
+[32mchunk-D7OSJWKK.js[39m  [2m | [22m[2mshell-component[22m        [2m | [22m [36m38.52 kB[39m[2m | [22m
+[32mchunk-FX4FZV3Q.js[39m  [2m | [22m[2mprojects-component[22m     [2m | [22m [36m32.78 kB[39m[2m | [22m
+[32mchunk-4AFSY3QT.js[39m  [2m | [22m[2mdiff-viewer-component[22m  [2m | [22m [36m31.97 kB[39m[2m | [22m
+[32mchunk-ZDCGELAW.js[39m  [2m | [22m[2mlogin-component[22m        [2m | [22m [36m24.89 kB[39m[2m | [22m
+[32mchunk-FONGV57A.js[39m  [2m | [22m[2mbilling-component[22m      [2m | [22m [36m22.95 kB[39m[2m | [22m
+[32mchunk-4DFVGGAA.js[39m  [2m | [22m[2mproviders-component[22m    [2m | [22m [36m20.08 kB[39m[2m | [22m
+[32mchunk-2DSSGGXB.js[39m  [2m | [22m[2msessions-component[22m     [2m | [22m [36m17.19 kB[39m[2m | [22m
+[32mchunk-JZFBCONO.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m15.61 kB[39m[2m | [22m
+[32mchunk-UZS6M3UP.js[39m  [2m | [22m[2m-[22m                      [2m | [22m [36m12.73 kB[39m[2m | [22m
+[32mchunk-2S6NKAXM.js[39m  [2m | [22m[2mjobs-component[22m         [2m | [22m [36m12.70 kB[39m[2m | [22m
+[32mchunk-IYUFXWCF.js[39m  [2m | [22m[2mauth-callback-component[22m[2m | [22m  [36m5.83 kB[39m[2m | [22m
+[32mchunk-AEJZ3JF6.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m3.76 kB[39m[2m | [22m
+[32mchunk-Q5CU3QXB.js[39m  [2m | [22m[2m-[22m                      [2m | [22m  [36m1.25 kB[39m[2m | [22m
+[2m...and 5 more lazy chunks files. Use "--verbose" to show all the files.[22m
+
+Application bundle generation complete. [3.314 seconds]
+
+Page reload sent to client(s).

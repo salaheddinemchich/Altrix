@@ -51,13 +51,15 @@ public class GitHubRepositoryProviderAdapter implements RepositoryProviderPort {
         // negatives only ever HIDE the DIRECT_MERGE option, which is the
         // correct safer default.
         boolean canMergeDefault = info.permissions().admin();
+        List<String> branches = client.listBranches(accessToken, repoFullName);
         return new RepositoryAccess(
                 info.fullName(),
                 info.defaultBranch(),
                 permission,
                 canCreateBranch,
                 canMergeDefault,
-                computeStrategies(canCreateBranch, canMergeDefault));
+                computeStrategies(canCreateBranch, canMergeDefault),
+                branches);
     }
 
     @Override

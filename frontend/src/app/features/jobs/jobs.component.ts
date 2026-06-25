@@ -6,6 +6,7 @@ import { Job, JobStatus } from '../../core/models/job.model';
 import { JobService } from '../../core/services/job.service';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { FilterOption, SearchFilterBarComponent } from '../../shared/search-filter-bar/search-filter-bar.component';
 
 const STATUS_FILTERS: ReadonlyArray<JobStatus | 'ALL'> = [
   'ALL',
@@ -16,20 +17,20 @@ const STATUS_FILTERS: ReadonlyArray<JobStatus | 'ALL'> = [
   'FAILED',
 ];
 
-/** Accent + soft background per filter chip — mirrors {@link JobsComponent#statusClass}. */
-const FILTER_COLORS: Record<string, { color: string; bg: string }> = {
-  ALL:       { color: '#F5C45E', bg: 'rgba(245,196,94,0.14)' },
-  PENDING:   { color: '#FFBB33', bg: 'rgba(255,187,51,0.14)' },
-  ANALYZING: { color: '#5B8CFF', bg: 'rgba(91,140,255,0.14)' },
-  MIGRATING: { color: '#5B8CFF', bg: 'rgba(91,140,255,0.14)' },
-  DONE:      { color: '#3DDC97', bg: 'rgba(61,220,151,0.14)' },
-  FAILED:    { color: '#FF5C5C', bg: 'rgba(255,92,92,0.14)' },
+/** Accent dot color per filter — mirrors {@link JobsComponent#statusClass}. */
+const FILTER_COLORS: Record<string, string> = {
+  ALL:       '#F5C45E',
+  PENDING:   '#FFBB33',
+  ANALYZING: '#5B8CFF',
+  MIGRATING: '#5B8CFF',
+  DONE:      '#3DDC97',
+  FAILED:    '#FF5C5C',
 };
 
 @Component({
   selector: 'app-jobs',
   standalone: true,
-  imports: [RouterLink, DatePipe, IconComponent],
+  imports: [RouterLink, DatePipe, IconComponent, SearchFilterBarComponent],
   templateUrl: './jobs.component.html',
   styleUrl: './jobs.component.scss',
 })
@@ -38,27 +39,12 @@ export class JobsComponent {
   private readonly router = inject(Router);
   private readonly confirmDialog = inject(ConfirmDialogService);
 
-  readonly filters = STATUS_FILTERS;
-
   readonly activeFilter = signal<JobStatus | 'ALL'>('ALL');
+  readonly searchQuery = signal('');
 
   readonly jobs = signal<Job[] | null>(null);
 
   readonly loadError = signal<string | null>(null);
-
-  readonly visibleJobs = computed(() => {
-    const all = this.jobs();
-
-    if (all === null) {
-      return null;
-    }
-
-    const filter = this.activeFilter();
-
-    return filter === 'ALL'
-      ? all
-      : all.filter(job => job.status === filter);
-  });
 
   readonly counts = computed(() => {
     const all = this.jobs() ?? [];
@@ -74,6 +60,31 @@ export class JobsComponent {
     }
 
     return result;
+  });
+
+  readonly filterOptions = computed<FilterOption[]>(() => {
+    const counts = this.counts();
+    return STATUS_FILTERS.map(f => ({
+      value: f,
+      label: f === 'ALL' ? 'All statuses' : f,
+      count: counts[f] ?? 0,
+      color: FILTER_COLORS[f],
+    }));
+  });
+
+  readonly visibleJobs = computed(() => {
+    const all = this.jobs();
+
+    if (all === null) {
+      return null;
+    }
+
+    const filter = this.activeFilter();
+    const q = this.searchQuery().trim().toLowerCase();
+
+    return all.filter(job =>
+      (filter === 'ALL' || job.status === filter)
+      && (!q || job.id.toLowerCase().includes(q) || job.projectId.toLowerCase().includes(q)));
   });
 
   constructor() {
@@ -96,16 +107,8 @@ export class JobsComponent {
     });
   }
 
-  setFilter(filter: JobStatus | 'ALL'): void {
-    this.activeFilter.set(filter);
-  }
-
-  filterColor(f: JobStatus | 'ALL'): string {
-    return FILTER_COLORS[f]?.color ?? '#F5C45E';
-  }
-
-  filterColorBg(f: JobStatus | 'ALL'): string {
-    return FILTER_COLORS[f]?.bg ?? 'rgba(245,196,94,0.14)';
+  setFilter(filter: string): void {
+    this.activeFilter.set(filter as JobStatus | 'ALL');
   }
 
   goToJob(id: string): void {

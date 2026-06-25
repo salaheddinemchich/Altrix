@@ -91,6 +91,7 @@ public class MigrationApplyController {
                 WorkflowSessionId.of(sessionId),
                 body.strategy(),
                 body.branchName(),
+                body.baseBranch(),
                 body.commitMessage(),
                 body.prTitle(),
                 body.prBody(),

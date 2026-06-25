@@ -326,96 +326,222 @@
     }
   }
 
-  .report-summary {
+  // ── Report modal — fixed overlay + blurred backdrop, opened from the
+  // "View report" toggle.  Uses the app's real theme tokens (not this
+  // file's var(--muted, #fallback) legacy pattern) so it actually follows
+  // dark/light mode instead of always rendering white-on-black.
+  .report-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .report-modal {
+    width: 100%;
+    max-width: 920px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+
+  .report-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .report-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--color-text-muted);
+
+    h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--color-text); }
+  }
+
+  .report-modal-actions {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 8px;
+    flex-shrink: 0;
   }
 
-  .report-summary-item {
-    font-size: 11px;
-    color: var(--muted, #888);
+  .report-modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.13s, color 0.13s;
+
+    &:hover { background: var(--color-surface-2); color: var(--color-text); }
   }
+
+  .report-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  .report-meta-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .report-meta-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-soft);
+    border-radius: var(--radius);
+  }
+
+  .report-meta-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-faint);
+  }
+
+  .report-meta-value {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .report-meta-value--sm { font-size: 0.85rem; }
 
   // Rendered HTML report (renderReportMarkdown() output) — styled like a
-  // real document, not a code dump.  max-height + overflow keeps it from
-  // pushing the rest of the timeline far down the page.
+  // real document, not a code dump.
   .report-viewer {
-    padding: 14px 18px;
-    background: #fff;
-    border: 1px solid var(--border, #e5e5e5);
-    border-radius: 4px;
-    max-height: 560px;
-    overflow: auto;
-    font-size: 12.5px;
-    line-height: 1.55;
-    color: #1a1a1a;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--color-text);
 
     h1 {
-      font-size: 18px;
-      margin: 0 0 12px;
-      padding-bottom: 8px;
-      border-bottom: 2px solid #1a1a1a;
+      font-size: 19px;
+      margin: 0 0 14px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--color-gold);
+      color: var(--color-text);
     }
 
     h2 {
-      font-size: 14px;
-      margin: 22px 0 8px;
-      padding-bottom: 4px;
-      border-bottom: 1px solid var(--border, #ddd);
+      font-size: 14.5px;
+      margin: 26px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--color-border);
+      color: var(--color-text);
 
       &:first-child { margin-top: 0; }
     }
 
     h3, h4 {
-      font-size: 12.5px;
-      margin: 14px 0 6px;
+      font-size: 13px;
+      margin: 16px 0 7px;
+      color: var(--color-text);
     }
 
-    p { margin: 0 0 10px; }
+    p { margin: 0 0 11px; }
 
     ul, ol {
-      margin: 0 0 12px;
+      margin: 0 0 13px;
       padding-left: 20px;
     }
 
-    li { margin-bottom: 3px; }
+    li { margin-bottom: 4px; }
 
     table {
       width: 100%;
-      border-collapse: collapse;
-      margin: 8px 0 14px;
-      font-size: 12px;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin: 10px 0 16px;
+      font-size: 12.5px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      overflow: hidden;
     }
 
     th, td {
-      border: 1px solid var(--border, #ddd);
-      padding: 5px 8px;
+      padding: 8px 12px;
       text-align: left;
       vertical-align: top;
+      border-bottom: 1px solid var(--color-border-soft);
     }
 
+    tr:last-child td { border-bottom: none; }
+
+    tbody tr:nth-child(even) td { background: var(--color-surface-2); }
+
     th {
-      background: rgba(0, 0, 0, 0.04);
+      background: var(--color-surface-3);
       font-weight: 600;
+      color: var(--color-text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      border-bottom: 1px solid var(--color-border);
     }
 
     code {
-      background: rgba(0, 0, 0, 0.06);
-      padding: 1px 4px;
-      border-radius: 3px;
-      font-family: ui-monospace, monospace;
+      background: var(--color-surface-2);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
       font-size: 11.5px;
+      color: var(--color-text);
     }
 
-    em { color: var(--muted, #666); }
+    em { color: var(--color-text-muted); }
 
     hr {
       border: none;
-      border-top: 1px solid var(--border, #ddd);
-      margin: 16px 0;
+      border-top: 1px solid var(--color-border);
+      margin: 18px 0;
+    }
+
+    // Status badges injected by inlineCell() for table values like
+    // PASSED/FAILED/PARTIAL — same visual language as the app's .pill.
+    .report-status {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+
+      &--pass { background: rgba(61,220,151,0.14); color: var(--color-success); }
+      &--warn { background: rgba(255,187,51,0.14); color: var(--color-warning); }
+      &--fail { background: rgba(255,92,92,0.14);  color: var(--color-danger); }
     }
   }
 

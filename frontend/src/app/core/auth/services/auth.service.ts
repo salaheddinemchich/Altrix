@@ -1,7 +1,7 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap, catchError, EMPTY } from 'rxjs';
+import { Observable, tap, catchError, retry, timer, EMPTY } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { AuthState, TokenResponse, UserProfile } from '../models/auth.models';
 
@@ -113,6 +113,10 @@ export class AuthService {
   loadProfile(): void {
     this._state.update(s => ({ ...s, loading: true }));
     this.http.get<UserProfile>(`${this.apiBase}/api/v1/auth/me`).pipe(
+      // A transient failure here (backend mid-restart, brief network blip on
+      // reload) must not permanently blank the profile chip for the rest of
+      // the tab's life — retry twice with backoff before giving up.
+      retry({ count: 2, delay: () => timer(1500) }),
       tap(user => this._state.update(s => ({ ...s, user, loading: false }))),
       catchError(err => {
         this._state.update(s => ({ ...s, loading: false, error: 'Failed to load profile' }));

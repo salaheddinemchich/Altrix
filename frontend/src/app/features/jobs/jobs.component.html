@@ -20,28 +20,14 @@
   </button>
 </div>
 
-<!-- Filters -->
-<div class="filters">
-  @for (f of filters; track f) {
-
-    <button
-      class="chip"
-      [class.active]="activeFilter() === f"
-      [style.--chip-color]="filterColor(f)"
-      [style.--chip-bg]="filterColorBg(f)"
-      (click)="setFilter(f)">
-
-      <span class="chip-dot"></span>
-      {{ f }}
-
-      @if (jobs() !== null) {
-        <span class="chip-count">
-          {{ counts()[f] || 0 }}
-        </span>
-      }
-    </button>
-  }
-</div>
+<!-- Search + status filter -->
+<app-search-filter-bar
+  searchPlaceholder="Search by job ID or project ID…"
+  [searchValue]="searchQuery()"
+  [filters]="filterOptions()"
+  [activeFilter]="activeFilter()"
+  (searchValueChange)="searchQuery.set($event)"
+  (activeFilterChange)="setFilter($event)"/>
 
 <!-- Error -->
 @if (loadError(); as err) {

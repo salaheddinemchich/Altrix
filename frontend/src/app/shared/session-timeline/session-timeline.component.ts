@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  HostListener,
   OnDestroy,
   computed,
   effect,
@@ -150,6 +151,16 @@ export class SessionTimelineComponent implements OnDestroy {
         if (r) this.report.set(r);
         else   this.reportMissing.set(true);
       });
+  }
+
+  /** Closes the report modal (backdrop click, X button, or Escape). */
+  closeReportModal(): void {
+    this.reportExpanded.set(false);
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.reportExpanded()) this.closeReportModal();
   }
 
   reportStatusClass(status: string): string {
@@ -765,7 +776,7 @@ function renderReportMarkdown(md: string): string {
       }
       const thead = headCells.map(c => `<th>${inline(c)}</th>`).join('');
       const tbody = bodyRows
-        .map(row => `<tr>${row.map(c => `<td>${inline(c)}</td>`).join('')}</tr>`)
+        .map(row => `<tr>${row.map(c => `<td>${inlineCell(c)}</td>`).join('')}</tr>`)
         .join('');
       out.push(`<table class="report-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`);
       continue;
@@ -820,6 +831,29 @@ function inline(text: string): string {
   t = t.replace(/`([^`]+?)`/g, '<code>$1</code>');
   t = t.replace(/_(.+?)_/g, '<em>$1</em>');
   return t;
+}
+
+/** Maps the known status/recommendation literals MigrationReportBuilder emits to a badge tone. */
+const REPORT_STATUS_BADGE: Record<string, 'pass' | 'warn' | 'fail'> = {
+  PASSED: 'pass', SUCCESS: 'pass', DONE: 'pass', APPROVE_FOR_DEPLOYMENT: 'pass',
+  PARTIAL: 'warn', MANUAL_REVIEW_REQUIRED: 'warn', WARNING: 'warn',
+  FAILED: 'fail', ERROR: 'fail', DO_NOT_DEPLOY: 'fail',
+};
+
+/**
+ * Table-cell variant of {@link inline}: when the *entire* cell is one of the
+ * report's known status/recommendation literals, renders it as a colored
+ * badge instead of plain text — same visual language as the `.pill`s used
+ * everywhere else in the app, applied to the report's PASS/FAIL/PARTIAL
+ * values so the table reads at a glance instead of as a wall of caps text.
+ */
+function inlineCell(text: string): string {
+  const trimmed = text.trim();
+  const tone = REPORT_STATUS_BADGE[trimmed.toUpperCase().replace(/\s+/g, '_')];
+  if (tone) {
+    return `<span class="report-status report-status--${tone}">${escapeHtml(trimmed)}</span>`;
+  }
+  return inline(text);
 }
 
 /** Self-contained HTML document (own <style>, no Angular styles) used for the PDF print window. */

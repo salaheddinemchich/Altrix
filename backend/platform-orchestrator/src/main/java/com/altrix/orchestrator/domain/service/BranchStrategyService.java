@@ -38,6 +38,7 @@ public class BranchStrategyService implements ChooseBranchStrategyUseCase {
     public Outcome choose(WorkflowSessionId sessionId,
                           BranchStrategy strategy,
                           String targetBranchName,
+                          String baseBranch,
                           String commitMessage,
                           String prTitle,
                           String prBody,
@@ -63,14 +64,20 @@ public class BranchStrategyService implements ChooseBranchStrategyUseCase {
                             + " (permission=" + access.permission() + ")");
         }
 
+        String resolvedBaseBranch = nonBlankOr(baseBranch, access.defaultBranch());
+        if (!access.branches().isEmpty() && !access.branches().contains(resolvedBaseBranch)) {
+            throw new IllegalArgumentException(
+                    "Base branch '" + resolvedBaseBranch + "' does not exist on " + access.fullName() + ".");
+        }
+
         String resolvedBranchName = resolveBranchName(strategy, targetBranchName, sessionId);
         if (strategy != BranchStrategy.DIRECT_MERGE && !config.isValidBranchName(resolvedBranchName)) {
             throw new IllegalArgumentException(
                     "Branch name '" + resolvedBranchName + "' does not match required pattern.");
         }
-        if (strategy != BranchStrategy.DIRECT_MERGE && resolvedBranchName.equals(access.defaultBranch())) {
+        if (strategy != BranchStrategy.DIRECT_MERGE && resolvedBranchName.equals(resolvedBaseBranch)) {
             throw new IllegalArgumentException("Branch name must differ from default branch '"
-                    + access.defaultBranch() + "'.");
+                    + resolvedBaseBranch + "'.");
         }
 
         String resolvedCommit = nonBlankOr(commitMessage, config.renderTemplate(config.commitMessageTemplate(), sessionId.value().toString()));
@@ -85,7 +92,7 @@ public class BranchStrategyService implements ChooseBranchStrategyUseCase {
         Instant expires = Instant.now().plus(config.confirmationTokenTtl());
 
         applyState.saveStrategyChoice(
-                sessionId, strategy, resolvedBranchName, access.defaultBranch(),
+                sessionId, strategy, resolvedBranchName, resolvedBaseBranch,
                 resolvedCommit, resolvedPrTitle, resolvedPrBody,
                 token, expires, actorUserId);
 
@@ -94,13 +101,13 @@ public class BranchStrategyService implements ChooseBranchStrategyUseCase {
                 Map.of(
                         "strategy", strategy.name(),
                         "branchName", resolvedBranchName == null ? "" : resolvedBranchName,
-                        "baseBranch", access.defaultBranch(),
+                        "baseBranch", resolvedBaseBranch,
                         "repoFullName", access.fullName()
                 ),
                 Instant.now()));
 
         log.info("Strategy chosen: session={} strategy={} actor={}", sessionId, strategy, actorUserId);
-        return new Outcome(token, strategy, resolvedBranchName, access.defaultBranch());
+        return new Outcome(token, strategy, resolvedBranchName, resolvedBaseBranch);
     }
 
     private String resolveBranchName(BranchStrategy strategy, String supplied, WorkflowSessionId sid) {

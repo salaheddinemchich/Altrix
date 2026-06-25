@@ -23,12 +23,15 @@ export interface RepositoryAccess {
   canMergeDefault: boolean;
   /** Strategies the user is allowed to pick; rendered in this exact order. */
   availableStrategies: BranchStrategy[];
+  /** Every branch on the repo, so the user can push to a base other than the default branch. */
+  branches: string[];
 }
 
 /** Body of POST /api/v1/sessions/{id}/branch-strategy */
 export interface BranchStrategyRequest {
   strategy: BranchStrategy;
   branchName?: string;
+  baseBranch?: string;
   commitMessage?: string;
   prTitle?: string;
   prBody?: string;

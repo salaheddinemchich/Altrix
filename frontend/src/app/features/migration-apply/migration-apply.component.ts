@@ -63,6 +63,8 @@ export class MigrationApplyComponent {
 
   // ── strategy choice ─────────────────────────────────────────────────────
   readonly selectedStrategy = signal<BranchStrategy | null>(null);
+  /** The branch this action targets: merge-into for DIRECT_MERGE, base-of for NEW_BRANCH/PULL_REQUEST. */
+  readonly selectedBaseBranch = signal<string>('');
   readonly branchName = signal<string>('');
   readonly commitMessage = signal<string>('');
   readonly prTitle = signal<string>('');
@@ -89,7 +91,9 @@ export class MigrationApplyComponent {
   });
 
   readonly readyToOpenConfirm = computed(() =>
-    this.selectedStrategy() != null && this.branchNameValid());
+    this.selectedStrategy() != null
+    && this.branchNameValid()
+    && !!this.selectedBaseBranch());
 
   readonly applyDisabled = computed(() =>
     this.applying()
@@ -117,7 +121,10 @@ export class MigrationApplyComponent {
         }))
         .subscribe(a => {
           this.accessLoading.set(false);
-          if (a) this.access.set(a);
+          if (a) {
+            this.access.set(a);
+            this.selectedBaseBranch.set(a.defaultBranch);
+          }
         });
     }, { allowSignalWrites: true });
   }
@@ -126,6 +133,14 @@ export class MigrationApplyComponent {
 
   selectStrategy(s: BranchStrategy): void {
     this.selectedStrategy.set(s);
+    this.selectedBaseBranch.set(this.access()?.defaultBranch ?? '');
+    this.confirmationToken.set(null);
+    this.approvalChecked.set(false);
+    this.errorMessage.set(null);
+  }
+
+  selectBaseBranch(branch: string): void {
+    this.selectedBaseBranch.set(branch);
     this.confirmationToken.set(null);
     this.approvalChecked.set(false);
     this.errorMessage.set(null);
@@ -139,6 +154,7 @@ export class MigrationApplyComponent {
     this.api.setStrategy(this.sessionId(), {
       strategy,
       branchName:    this.branchName().trim() || undefined,
+      baseBranch:    this.selectedBaseBranch().trim() || undefined,
       commitMessage: this.commitMessage().trim() || undefined,
       prTitle:       this.prTitle().trim() || undefined,
       prBody:        this.prBody().trim() || undefined,
@@ -207,7 +223,7 @@ export class MigrationApplyComponent {
 
   strategyLabel(s: BranchStrategy): string {
     switch (s) {
-      case 'DIRECT_MERGE':  return 'Merge directly into main';
+      case 'DIRECT_MERGE':  return 'Merge directly into a branch';
       case 'NEW_BRANCH':    return 'Create a new branch';
       case 'PULL_REQUEST':  return 'Create a Pull Request';
     }
@@ -215,9 +231,9 @@ export class MigrationApplyComponent {
 
   strategyDescription(s: BranchStrategy): string {
     switch (s) {
-      case 'DIRECT_MERGE':  return 'Commit and merge straight to the default branch. Requires admin permission.';
-      case 'NEW_BRANCH':    return 'Push the migration to a new branch — no PR opened.';
-      case 'PULL_REQUEST':  return 'Push to a new branch and open a PR targeting the default branch.';
+      case 'DIRECT_MERGE':  return 'Commit and merge straight into a branch you choose below. Requires admin permission.';
+      case 'NEW_BRANCH':    return 'Push the migration to a new branch, created off a base branch you choose below.';
+      case 'PULL_REQUEST':  return 'Push to a new branch and open a PR targeting a base branch you choose below.';
     }
   }
 

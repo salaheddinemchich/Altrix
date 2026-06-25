@@ -9,14 +9,14 @@
   </button>
 </div>
 
-<!-- Filter chips -->
-<div class="filters">
-  @for (f of filters; track f) {
-    <button class="chip" [class.active]="activeFilter() === f" (click)="setFilter(f)">
-      {{ f }}
-    </button>
-  }
-</div>
+<!-- Search + status filter -->
+<app-search-filter-bar
+  searchPlaceholder="Search by session ID or job ID…"
+  [searchValue]="searchQuery()"
+  [filters]="filterOptions()"
+  [activeFilter]="activeFilter()"
+  (searchValueChange)="searchQuery.set($event)"
+  (activeFilterChange)="setFilter($event)"/>
 
 @if (actionError(); as err) {
   <div class="error" style="margin-bottom:12px">{{ err }}</div>

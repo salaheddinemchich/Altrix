@@ -26,16 +26,6 @@
   --color-info:          #5B8CFF;
   --color-teal:          #2DD4BF;
 
-  /* Sidebar */
-  --sidebar-bg:           #0D1117;
-  --sidebar-border:       rgba(255,255,255,0.06);
-  --sidebar-text:         rgba(255,255,255,0.45);
-  --sidebar-text-strong:  rgba(255,255,255,0.85);
-  --sidebar-text-faint:   rgba(255,255,255,0.25);
-  --sidebar-hover-bg:     rgba(255,255,255,0.06);
-  --sidebar-surface:      rgba(255,255,255,0.04);
-  --sidebar-brand:        #F4F1E8;
-
   /* Radius */
   --radius-sm:  6px;
   --radius:     10px;
@@ -100,16 +90,6 @@
   --shadow-sm:  0 1px 2px rgba(15,23,42,0.06);
   --shadow:     0 4px 14px rgba(15,23,42,0.08);
   --shadow-lg:  0 8px 28px rgba(15,23,42,0.12);
-
-  /* Sidebar — light variant: keep darker neutral surface for contrast */
-  --sidebar-bg:           #1A1F2E;
-  --sidebar-border:       rgba(255,255,255,0.06);
-  --sidebar-text:         rgba(255,255,255,0.55);
-  --sidebar-text-strong:  rgba(255,255,255,0.95);
-  --sidebar-text-faint:   rgba(255,255,255,0.3);
-  --sidebar-hover-bg:     rgba(255,255,255,0.08);
-  --sidebar-surface:      rgba(255,255,255,0.05);
-  --sidebar-brand:        #F4F1E8;
 }
 
 *, *::before, *::after { box-sizing: border-box; }

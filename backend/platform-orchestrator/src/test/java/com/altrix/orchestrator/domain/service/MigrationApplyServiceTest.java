@@ -67,7 +67,7 @@ class MigrationApplyServiceTest {
         when(tokens.findAccessToken("user-1", "github")).thenReturn(Optional.of("tok"));
         when(accessUseCase.check("proj-1", "user-1")).thenReturn(new RepositoryAccess(
                 "owner/repo", "main", RepositoryPermission.WRITE, true, false,
-                Set.of(BranchStrategy.NEW_BRANCH, BranchStrategy.PULL_REQUEST)));
+                Set.of(BranchStrategy.NEW_BRANCH, BranchStrategy.PULL_REQUEST), List.of("main")));
         when(registry.handlerFor(BranchStrategy.PULL_REQUEST)).thenReturn(handler);
     }
 
@@ -136,7 +136,7 @@ class MigrationApplyServiceTest {
     void apply_returnsFailed_whenStrategyNoLongerPermitted() {
         // Revoked access between choose and apply.
         when(accessUseCase.check("proj-1", "user-1")).thenReturn(new RepositoryAccess(
-                "owner/repo", "main", RepositoryPermission.READ, false, false, Set.of()));
+                "owner/repo", "main", RepositoryPermission.READ, false, false, Set.of(), List.of("main")));
 
         var result = service.apply(new ConfirmAndApplyMigrationUseCase.Request(
                 sid, BranchStrategy.PULL_REQUEST, "feature/x",

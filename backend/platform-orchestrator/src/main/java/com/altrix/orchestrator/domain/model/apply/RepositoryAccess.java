@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.domain.model.apply;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -19,6 +20,8 @@ import java.util.Set;
  *                            (false when branch protection requires review even for admins).
  * @param availableStrategies the subset of {@link BranchStrategy} values the user is
  *                            allowed to choose, computed by the domain service.
+ * @param branches            every branch on the repo, so the user can push the
+ *                            migration to a base other than the default branch.
  */
 public record RepositoryAccess(
         String fullName,
@@ -26,7 +29,8 @@ public record RepositoryAccess(
         RepositoryPermission permission,
         boolean canCreateBranch,
         boolean canMergeDefault,
-        Set<BranchStrategy> availableStrategies
+        Set<BranchStrategy> availableStrategies,
+        List<String> branches
 ) {
     public RepositoryAccess {
         if (fullName == null || fullName.isBlank()) {
@@ -37,5 +41,6 @@ public record RepositoryAccess(
         }
         if (permission == null) permission = RepositoryPermission.NONE;
         availableStrategies = availableStrategies != null ? Set.copyOf(availableStrategies) : Set.of();
+        branches = branches != null ? List.copyOf(branches) : List.of();
     }
 }
