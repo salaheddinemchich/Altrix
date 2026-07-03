@@ -4,6 +4,7 @@ import com.altrix.common.domain.enums.BuildSystem;
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.common.domain.enums.DetectedFramework;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.project.domain.model.ProjectSource;
 import com.altrix.project.domain.model.ProjectStatus;
 import jakarta.persistence.*;
@@ -61,6 +62,10 @@ public class ProjectJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "config_format_preference", nullable = false, length = 20)
     private ConfigFormatPreference configFormatPreference;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "jakarta_messaging_target", nullable = false, length = 24)
+    private JakartaMessagingTarget jakartaMessagingTarget;
 
     @Column(name = "eligible_for_migration", nullable = false)
     private boolean eligibleForMigration;

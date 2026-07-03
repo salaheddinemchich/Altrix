@@ -178,6 +178,31 @@ class ContractValidatorTest {
         assertThat(validator.kinds(v)).doesNotContain(ContractViolationKind.MISSING_IMPORT);
     }
 
+    /**
+     * Real failure (job 788ad935): the generated {@code SpringContextBootstrapper}
+     * throws {@code IllegalStateException} — a {@code java.lang} type needing no
+     * import — and the validator's incomplete java.lang allow-list flagged it as
+     * MISSING_IMPORT, failing an otherwise fully-green sandbox run (compile, boot
+     * and tests all exit 0).  Concrete java.lang exceptions must never be flagged.
+     */
+    @Test
+    void unresolvedTypeReference_ignoresJavaLangExceptions() {
+        Map<String, String> files = Map.of(
+                "src/main/java/p/Bootstrapper.java",
+                "package p;\npublic class Bootstrapper {\n"
+                        + "    public void start() throws InterruptedException {\n"
+                        + "        try { stop(); } catch (IllegalArgumentException e) {\n"
+                        + "            throw new IllegalStateException(\"already started\", e);\n"
+                        + "        }\n"
+                        + "        ThreadLocal<String> ctx = new ThreadLocal<>();\n"
+                        + "        if (ctx.get() == null) throw new UnsupportedOperationException();\n"
+                        + "    }\n"
+                        + "    void stop() { throw new AssertionError(); }\n"
+                        + "}");
+        List<ContractViolation> v = validator.validate(files);
+        assertThat(validator.kinds(v)).doesNotContain(ContractViolationKind.MISSING_IMPORT);
+    }
+
     // ── File / class name mismatch ──────────────────────────────────────────
 
     /**

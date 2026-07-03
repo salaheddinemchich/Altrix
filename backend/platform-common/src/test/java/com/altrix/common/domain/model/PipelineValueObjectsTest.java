@@ -1,6 +1,7 @@
 package com.altrix.common.domain.model;
 
 import com.altrix.common.domain.enums.FileChangeType;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -21,17 +22,18 @@ class PipelineValueObjectsTest {
 
     @Test
     void analysisReport_replacesNullListsWithEmpty() {
-        AnalysisReport r = new AnalysisReport("p1", null, null, null, null);
+        AnalysisReport r = new AnalysisReport("p1", null, null, null, null, null);
         assertThat(r.storageKey()).isEmpty();
         assertThat(r.detectedComponents()).isEmpty();
         assertThat(r.detectedIntegrations()).isEmpty();
         assertThat(r.summary()).isEmpty();
+        assertThat(r.jakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
     }
 
     @Test
     void analysisReport_isDefensivelyImmutable() {
         List<String> mutable = new ArrayList<>(List.of("a"));
-        AnalysisReport r = new AnalysisReport("p1", null, mutable, List.of(), "");
+        AnalysisReport r = new AnalysisReport("p1", null, mutable, List.of(), "", null);
         assertThatThrownBy(() -> r.detectedComponents().add("b"))
                 .isInstanceOf(UnsupportedOperationException.class);
         mutable.add("post-construction");
@@ -40,7 +42,7 @@ class PipelineValueObjectsTest {
 
     @Test
     void analysisReport_propagatesStorageKey() {
-        AnalysisReport r = new AnalysisReport("p1", "uploads/p1.zip", List.of(), List.of(), "");
+        AnalysisReport r = new AnalysisReport("p1", "uploads/p1.zip", List.of(), List.of(), "", null);
         assertThat(r.storageKey()).isEqualTo("uploads/p1.zip");
     }
 
@@ -56,19 +58,20 @@ class PipelineValueObjectsTest {
 
     @Test
     void migrationPlan_handlesNullsAndDefensiveCopy() {
-        MigrationPlan p = new MigrationPlan("p1", null, null, null, null, null, null, null);
+        MigrationPlan p = new MigrationPlan("p1", null, null, null, null, null, null, null, null);
         assertThat(p.storageKey()).isEmpty();
         assertThat(p.targetStack()).isEmpty();
         assertThat(p.steps()).isEmpty();
         assertThat(p.riskLevel()).isEmpty();
         assertThat(p.estimatedEffort()).isEmpty();
         assertThat(p.summary()).isEmpty();
+        assertThat(p.jakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
     }
 
     @Test
     void migrationPlan_preservesAllFields() {
         MigrationPlan p = new MigrationPlan("p1", "uploads/p1.zip", "Spring Boot 3 + Kafka",
-                List.of("Step 1"), "MEDIUM", "2 days", "migrate messaging layer", List.of());
+                List.of("Step 1"), "MEDIUM", "2 days", "migrate messaging layer", List.of(), null);
         assertThat(p.storageKey()).isEqualTo("uploads/p1.zip");
         assertThat(p.targetStack()).isEqualTo("Spring Boot 3 + Kafka");
         assertThat(p.steps()).containsExactly("Step 1");
@@ -107,13 +110,32 @@ class PipelineValueObjectsTest {
         assertThat(ap.approvedAt()).isAfter(Instant.EPOCH);
     }
 
+    @Test
+    void approvedPlan_failingPathsDefaultsToEmpty_onLegacyShapes() {
+        // Back-compat 5-arg constructor and the 2-arg withRetryContext overload
+        // must yield an empty (never null) failingPaths list.
+        ApprovedPlan legacy = new ApprovedPlan(MigrationPlan.empty("p1"), "user", Instant.now(), null, null);
+        assertThat(legacy.failingPaths()).isEmpty();
+        assertThat(legacy.withRetryContext("ctx").failingPaths()).isEmpty();
+        assertThat(legacy.withRetryContext("ctx", null).failingPaths()).isEmpty();
+    }
+
+    @Test
+    void approvedPlan_withRetryContext_carriesFailingPaths() {
+        ApprovedPlan ap = ApprovedPlan.autoApproved(MigrationPlan.empty("p1"))
+                .withRetryContext("ctx", null, List.of("src/A.java"));
+        assertThat(ap.failingPaths()).containsExactly("src/A.java");
+        assertThat(ap.retryContext()).isEqualTo("ctx");
+    }
+
     // ── MigrationArtifact ───────────────────────────────────────────────────
 
     @Test
     void migrationArtifact_handlesNullsAndDefensiveCopy() {
-        MigrationArtifact a = new MigrationArtifact("p1", null, null);
+        MigrationArtifact a = new MigrationArtifact("p1", null, null, null);
         assertThat(a.files()).isEmpty();
         assertThat(a.summary()).isEmpty();
+        assertThat(a.jakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
     }
 
     @Test
@@ -123,7 +145,7 @@ class PipelineValueObjectsTest {
                 .content("//x").changeType(FileChangeType.MODIFIED)
                 .diffSummary("x")
                 .build();
-        MigrationArtifact a = new MigrationArtifact("p1", List.of(f), "did stuff");
+        MigrationArtifact a = new MigrationArtifact("p1", List.of(f), "did stuff", null);
         assertThat(a.files()).hasSize(1);
         assertThat(a.summary()).isEqualTo("did stuff");
     }
@@ -143,6 +165,36 @@ class PipelineValueObjectsTest {
         ValidationReport v = new ValidationReport("p1", false, List.of("compile error"), "x");
         assertThat(v.passed()).isFalse();
         assertThat(v.failures()).containsExactly("compile error");
+    }
+
+    @Test
+    void validationReport_failingFilePaths_extractsNormalisedErrorPaths() {
+        ValidationReport v = new ValidationReport("p1", false, List.of(), "x", List.of(
+                // docker runner shape — already workspace-relative
+                new ValidationReport.Finding("docker", "ERROR", "src/main/java/p/A.java", 12, "cannot find symbol"),
+                // un-stripped absolute sandbox path → normalised
+                new ValidationReport.Finding("docker", "ERROR", "/workspace/src/main/java/p/B.java", 3, "type error"),
+                // duplicate of A (second error in same file) → deduped
+                new ValidationReport.Finding("docker", "ERROR", "src/main/java/p/A.java", 40, "second error"),
+                // Windows separators → unified
+                new ValidationReport.Finding("static", "ERROR", "src\\main\\java\\p\\C.java", -1, "leak"),
+                // non-ERROR severity → excluded
+                new ValidationReport.Finding("docker", "WARNING", "src/main/java/p/D.java", 1, "warn"),
+                // project-wide finding (no path) → excluded
+                new ValidationReport.Finding("docker-boot", "ERROR", null, -1, "boot timed out")));
+
+        assertThat(v.failingFilePaths()).containsExactly(
+                "src/main/java/p/A.java",
+                "src/main/java/p/B.java",
+                "src/main/java/p/C.java");
+    }
+
+    @Test
+    void validationReport_failingFilePaths_emptyWhenNoPerFileFindings() {
+        ValidationReport bootTimeout = new ValidationReport("p1", false, List.of("boot timed out"), "x",
+                List.of(new ValidationReport.Finding("docker-boot", "ERROR", null, -1, "exit 124")));
+        assertThat(bootTimeout.failingFilePaths()).isEmpty();
+        assertThat(ValidationReport.pending("p1").failingFilePaths()).isEmpty();
     }
 
     // ── WorkflowOutcome ─────────────────────────────────────────────────────

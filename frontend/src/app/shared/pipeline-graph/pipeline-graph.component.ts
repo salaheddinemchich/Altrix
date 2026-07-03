@@ -26,6 +26,13 @@ export class PipelineGraphComponent implements OnDestroy {
   readonly jobId = input.required<string>();
   readonly currentStatus = input<string | null>(null);
 
+  /**
+   * The job's error message — disambiguates WHICH stage actually failed
+   * when currentStatus() is FAILED.  See SessionTimeline's
+   * stageIndexForFailure() for the matching backend-text-prefix rationale.
+   */
+  readonly errorMessage = input<string | null>(null);
+
   readonly nodes = signal<PipelineNode[]>(structuredClone(DEFAULT_PIPELINE));
   readonly lastEvent = signal<ProgressEvent | null>(null);
 
@@ -132,7 +139,7 @@ export class PipelineGraphComponent implements OnDestroy {
    *   MIGRATING                            +Migrate ACTIVE
    *   VALIDATING                           +Validate ACTIVE
    *   DONE / COMPLETED                     all DONE
-   *   FAILED                               first non-DONE → ERROR
+   *   FAILED                               see stageIndexForFailure()
    *   PAUSED                               keep existing state
    */
   private applyJobStatus(status: string | null | undefined): void {
@@ -144,8 +151,10 @@ export class PipelineGraphComponent implements OnDestroy {
     if (s === 'FAILED' || s === 'ERROR') {
       this.nodes.update(list => {
         const next = [...list];
-        let errIdx = next.findIndex(n => n.status !== 'DONE');
-        if (errIdx === -1) errIdx = 0;
+        const errIdx = stageIndexForFailure(this.errorMessage(), next);
+        for (let i = 0; i < errIdx; i++) {
+          if (next[i].status !== 'DONE') next[i] = { ...next[i], status: 'DONE' };
+        }
         next[errIdx] = { ...next[errIdx], status: 'ERROR' };
         return next;
       });
@@ -181,4 +190,20 @@ export class PipelineGraphComponent implements OnDestroy {
     this.nodes.set(structuredClone(DEFAULT_PIPELINE));
     this.lastEvent.set(null);
   }
+}
+
+/**
+ * Disambiguates which stage actually failed when all the backfill has to
+ * go on is a coarse FAILED status.  OrchestratorService / ResumeMigration-
+ * Service (backend) prefix the sandbox validator's failure reason with
+ * "Sandbox validation failed:" — recognize that exact text and point at
+ * the Validate stage (index 3) instead of the generic "first non-DONE"
+ * fallback, which always lands on Analyse (index 0) once a job is terminal
+ * and there are no more live WS events to replay. Mirrors SessionTimeline's
+ * identically-named helper.
+ */
+function stageIndexForFailure(errorMessage: string | null | undefined, nodes: PipelineNode[]): number {
+  if (errorMessage?.startsWith('Sandbox validation failed:')) return 3;
+  const idx = nodes.findIndex(n => n.status !== 'DONE');
+  return idx === -1 ? 0 : idx;
 }

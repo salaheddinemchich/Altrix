@@ -1,6 +1,7 @@
 package com.altrix.orchestrator.infrastructure.report;
 
 import com.altrix.common.domain.enums.FileChangeType;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.model.AnalysisReport;
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
@@ -316,6 +317,11 @@ public class MigrationReportBuilder {
             for (String step : plan.steps()) sb.append(i++).append(". ").append(step).append("\n");
             sb.append("\n");
         }
+        if (plan.jakartaMessagingTarget() == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+            sb.append("**Architecture**: Spring Kafka hybrid (manual ApplicationContext) — Jakarta CDI and a "
+                    + "manually-bootstrapped Spring context, bridged via SpringBeanBridge (CDI→Spring) and "
+                    + "CdiLookup (Spring→CDI).\n\n");
+        }
 
         // ── File-Level Changes ───────────────────────────────────────────
         sb.append("## File-Level Changes\n\n");
@@ -334,6 +340,10 @@ public class MigrationReportBuilder {
 
         // ── Architecture Transformation ──────────────────────────────────
         sb.append("## Architecture Transformation\n\n");
+        if (plan.jakartaMessagingTarget() == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+            sb.append("**Pattern**: Spring Kafka hybrid (manual ApplicationContext) — see Migration Plan "
+                    + "Summary.\n\n");
+        }
         if (s.detectedIntegrations().isEmpty()) {
             sb.append("_No messaging integrations detected._\n\n");
         } else {
@@ -418,11 +428,18 @@ public class MigrationReportBuilder {
 
         // ── Remaining Manual Actions ──────────────────────────────────────
         sb.append("## Remaining Manual Actions\n\n");
-        if (s.manualActions().isEmpty()) {
+        List<String> manualActions = new ArrayList<>(s.manualActions());
+        if (plan.jakartaMessagingTarget() == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+            manualActions.add("Verify no duplicate Kafka consumer groups remain after an app-server "
+                    + "hot-redeploy — run `kafka-consumer-groups.sh --describe --group <group>` and confirm "
+                    + "the member count matches the expected listener instance count. The sandbox cannot "
+                    + "exercise a real redeploy cycle; this is a manual verification step.");
+        }
+        if (manualActions.isEmpty()) {
             sb.append("_No manual follow-up actions identified._\n\n");
         } else {
             int i = 1;
-            for (String action : s.manualActions()) sb.append(i++).append(". ").append(action).append("\n");
+            for (String action : manualActions) sb.append(i++).append(". ").append(action).append("\n");
             sb.append("\n");
         }
 

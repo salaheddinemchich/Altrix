@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Project } from '../../core/models/project.model';
-import { ConfigFormatPreference, GitHubRepo } from '../../core/models/repository.model';
+import { ConfigFormatPreference, GitHubRepo, JakartaMessagingTarget } from '../../core/models/repository.model';
 import { ProjectService } from '../../core/services/project.service';
 import { RepositoryService } from '../../core/services/repository.service';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
@@ -34,6 +34,9 @@ export class ProjectsComponent {
   readonly ingestSuccess = signal<string | null>(null);
 
   readonly configOptions: ConfigFormatPreference[] = ['KEEP_ORIGINAL', 'YAML', 'PROPERTIES'];
+
+  readonly jakartaTarget = signal<JakartaMessagingTarget>('NATIVE_KAFKA_CLIENTS');
+  readonly jakartaTargetOptions: JakartaMessagingTarget[] = ['NATIVE_KAFKA_CLIENTS', 'SPRING_KAFKA_HYBRID'];
 
   readonly repoSearchQuery = signal('');
   readonly filteredRepos = computed(() => {
@@ -97,6 +100,7 @@ export class ProjectsComponent {
       repoFullName: repo.fullName,
       defaultBranch: repo.defaultBranch,
       configFormatPreference: this.configFormat(),
+      jakartaMessagingTarget: this.jakartaTarget(),
     }).subscribe({
       next: project => {
         this.ingesting.set(false);

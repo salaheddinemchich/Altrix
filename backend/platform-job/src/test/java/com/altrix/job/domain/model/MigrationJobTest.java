@@ -11,7 +11,7 @@ class MigrationJobTest {
 
     @Test
     void create_producesJobInPendingStatus() {
-        MigrationJob job = MigrationJob.create("proj-1", "user-1", "uploads/key.zip", null, null);
+        MigrationJob job = MigrationJob.create("proj-1", "user-1", "uploads/key.zip", null, null, null);
 
         assertThat(job.getId()).isNotBlank();
         assertThat(job.getProjectId()).isEqualTo("proj-1");
@@ -24,7 +24,7 @@ class MigrationJobTest {
 
     @Test
     void happyPath_pendingToAnalyzingToMigratingToDone() {
-        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null);
+        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null, null);
 
         MigrationJob analyzing = job.startAnalyzing();
         assertThat(analyzing.getStatus()).isEqualTo(JobStatus.ANALYZING);
@@ -40,7 +40,7 @@ class MigrationJobTest {
 
     @Test
     void fail_setsErrorMessageAndTerminalStatus() {
-        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null)
+        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null, null)
                 .startAnalyzing();
 
         MigrationJob failed = job.fail("AI timeout");
@@ -52,7 +52,7 @@ class MigrationJobTest {
 
     @Test
     void cancel_setsTerminalStatus() {
-        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null);
+        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null, null);
         MigrationJob cancelled = job.cancel();
 
         assertThat(cancelled.getStatus()).isEqualTo(JobStatus.CANCELLED);
@@ -61,7 +61,7 @@ class MigrationJobTest {
 
     @Test
     void transitionFromTerminal_throwsIllegalStateException() {
-        MigrationJob done = MigrationJob.create("proj-1", "user-1", "key", null, null)
+        MigrationJob done = MigrationJob.create("proj-1", "user-1", "key", null, null, null)
                 .startAnalyzing()
                 .startMigrating()
                 .complete("output.zip");
@@ -73,7 +73,7 @@ class MigrationJobTest {
 
     @Test
     void immutability_originalUnchangedAfterTransition() {
-        MigrationJob original = MigrationJob.create("proj-1", "user-1", "key", null, null);
+        MigrationJob original = MigrationJob.create("proj-1", "user-1", "key", null, null, null);
         original.startAnalyzing();
 
         assertThat(original.getStatus()).isEqualTo(JobStatus.PENDING);
@@ -81,7 +81,7 @@ class MigrationJobTest {
 
     @Test
     void equality_basedOnIdOnly() {
-        MigrationJob a = MigrationJob.create("proj-1", "user-1", "key", null, null);
+        MigrationJob a = MigrationJob.create("proj-1", "user-1", "key", null, null, null);
         MigrationJob b = a.startAnalyzing();
 
         assertThat(a).isEqualTo(b); // same id

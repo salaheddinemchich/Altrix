@@ -4,6 +4,7 @@ import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.domain.model.ProjectContext;
+import com.altrix.common.domain.model.ValidationReport;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
@@ -185,13 +186,39 @@ public class OrchestratorService implements RunPipelineUseCase {
             }
             session.resetAgentErrors();
             session.storeMigratedFiles(files);
+            // The graph reaching END without throwing only means no agent
+            // crashed — it does NOT mean the artifact is good.  The sandbox
+            // validator's verdict (ValidationReport.passed) is the real
+            // signal; trust it over "no exception" before telling
+            // platform-job this job succeeded.
+            Optional<ValidationReport> validation = result.validationReport();
+            boolean validationFailed = validation.isPresent() && !validation.get().passed();
+            // Same string goes to the session row AND the job-status Kafka
+            // message — the frontend's stage-backfill heuristic recognizes
+            // this exact prefix to highlight the Validate stage instead of
+            // defaulting to Analyse, so the two must never drift apart.
+            String failureReason = validationFailed
+                    ? "Sandbox validation failed: " + validation.get().summary()
+                    : null;
+
             if (session.status() == migrating) {
-                session.complete();                                       // → DONE
+                if (validationFailed) {
+                    session.fail(failureReason);                          // → FAILED
+                } else {
+                    session.complete();                                   // → DONE
+                }
             }
             sessionRepository.save(session);
-            jobStatusUpdatePort.markDone(jobId, outputKey);
-            progressNotifierPort.notify(jobId, "Pipeline", "DONE", "Migration complete. Ready to download.");
-            log.info("Pipeline DONE for job '{}'", jobId);
+
+            if (validationFailed) {
+                jobStatusUpdatePort.markFailed(jobId, failureReason);
+                progressNotifierPort.notify(jobId, "Pipeline", "FAILED", failureReason);
+                log.warn("Pipeline completed but FAILED sandbox validation for job '{}': {}", jobId, failureReason);
+            } else {
+                jobStatusUpdatePort.markDone(jobId, outputKey);
+                progressNotifierPort.notify(jobId, "Pipeline", "DONE", "Migration complete. Ready to download.");
+                log.info("Pipeline DONE for job '{}'", jobId);
+            }
             return files.isEmpty() ? initial : initial.withMigratedFiles(files);
 
         } catch (AiProviderUnavailableException e) {

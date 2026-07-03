@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.infrastructure.semantic;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.orchestrator.domain.model.semantic.SemanticValidationReport.Category;
 import com.altrix.orchestrator.domain.model.semantic.SemanticValidationReport.Finding;
 import com.altrix.orchestrator.infrastructure.config.KafkaMigrationKnowledgeBase;
@@ -42,11 +43,36 @@ public class DependencyValidator {
             "^\\s*import\\s+(?:static\\s+)?([\\w.]+)\\s*;", Pattern.MULTILINE);
 
     /**
+     * Convenience overload — defaults to {@code NATIVE_KAFKA_CLIENTS},
+     * which skips every {@code hybridOnly} knowledge-base mapping. Package-
+     * private callers / tests that aren't exercising the hybrid target can
+     * keep calling this simpler 2-arg form.
+     *
      * @param javaFiles path → Java source content.
      * @param pomXml    the project's pom.xml content, or null when absent
      *                  (Gradle projects or no build file → no-op).
      */
     public List<Finding> validate(Map<String, String> javaFiles, String pomXml) {
+        return validate(javaFiles, pomXml, JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+    }
+
+    /**
+     * @param javaFiles              path → Java source content.
+     * @param pomXml                 the project's pom.xml content, or null
+     *                               when absent (Gradle projects or no
+     *                               build file → no-op).
+     * @param jakartaMessagingTarget gates {@code hybridOnly} knowledge-base
+     *                               mappings (e.g. {@code
+     *                               org.springframework.context.*} →
+     *                               {@code spring-context}) — those only
+     *                               apply when this is {@code
+     *                               SPRING_KAFKA_HYBRID}, so the unrelated
+     *                               Spring Boot / Jakarta-native paths never
+     *                               see a false MISSING_DEPENDENCY finding
+     *                               for a class they get transitively.
+     */
+    public List<Finding> validate(Map<String, String> javaFiles, String pomXml,
+                                   JakartaMessagingTarget jakartaMessagingTarget) {
         if (javaFiles == null || javaFiles.isEmpty() || pomXml == null || pomXml.isBlank()) {
             return List.of();
         }
@@ -59,7 +85,7 @@ public class DependencyValidator {
             Matcher m = IMPORT_LINE.matcher(e.getValue());
             while (m.find()) {
                 String fqn = m.group(1);
-                var coordOpt = knowledgeBase.dependencyForClass(fqn);
+                var coordOpt = knowledgeBase.dependencyForClass(fqn, jakartaMessagingTarget);
                 if (coordOpt.isEmpty()) continue;
                 String coord = coordOpt.get();
                 if (pomDeclares(pomXml, coord)) continue;

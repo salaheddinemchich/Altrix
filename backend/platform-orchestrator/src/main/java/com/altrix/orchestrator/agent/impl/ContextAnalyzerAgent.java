@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.agent.impl;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.model.AnalysisReport;
 import com.altrix.common.domain.model.ProjectContext;
 import com.altrix.common.domain.port.MigrationAgent;
@@ -81,7 +82,8 @@ public class ContextAnalyzerAgent implements MigrationAgent<ProjectContext, Anal
         if (storageKey == null || storageKey.isBlank()) {
             String summary = "Analyzed project '%s' — %d component(s), %d integration(s)"
                     .formatted(input.projectId(), baseComponents.size(), baseIntegrations.size());
-            return new AnalysisReport(input.projectId(), "", baseComponents, baseIntegrations, summary);
+            return new AnalysisReport(input.projectId(), "", baseComponents, baseIntegrations, summary,
+                    input.jakartaMessagingTarget());
         }
 
         try {
@@ -98,14 +100,14 @@ public class ContextAnalyzerAgent implements MigrationAgent<ProjectContext, Anal
                 if (cached.isPresent()) {
                     log.info("[{}] cache HIT for project='{}' hash={} — skipping AI call",
                             getName(), input.projectId(), contentHash);
-                    return cached.get();
+                    return withCurrentJakartaMessagingTarget(cached.get(), input.jakartaMessagingTarget());
                 }
             }
 
             String userContent = buildFileContent(files);
             String response = aiPort.chatFast(SYSTEM_PROMPT, userContent);
             AnalysisReport report = parseAndMerge(input.projectId(), storageKey, response,
-                    baseComponents, baseIntegrations);
+                    baseComponents, baseIntegrations, input.jakartaMessagingTarget());
 
             analysisCache.put(contentHash, report);
             return report;
@@ -114,7 +116,8 @@ public class ContextAnalyzerAgent implements MigrationAgent<ProjectContext, Anal
             log.warn("[{}] AI analysis failed ({}), falling back to context fields", getName(), e.getMessage());
             String summary = "Analyzed project '%s' — %d component(s), %d integration(s) (AI unavailable)"
                     .formatted(input.projectId(), baseComponents.size(), baseIntegrations.size());
-            return new AnalysisReport(input.projectId(), storageKey, baseComponents, baseIntegrations, summary);
+            return new AnalysisReport(input.projectId(), storageKey, baseComponents, baseIntegrations, summary,
+                    input.jakartaMessagingTarget());
         }
     }
 
@@ -156,7 +159,8 @@ public class ContextAnalyzerAgent implements MigrationAgent<ProjectContext, Anal
     }
 
     private AnalysisReport parseAndMerge(String projectId, String storageKey, String response,
-                                         List<String> base, List<String> baseIntegrations) {
+                                         List<String> base, List<String> baseIntegrations,
+                                         JakartaMessagingTarget jakartaMessagingTarget) {
         try {
             JsonNode root = MAPPER.readTree(extractJson(response));
             List<String> aiComps = toStringList(root.path("detectedComponents"));
@@ -169,13 +173,39 @@ public class ContextAnalyzerAgent implements MigrationAgent<ProjectContext, Anal
             mergedIntegs.addAll(baseIntegrations);
 
             return new AnalysisReport(projectId, storageKey,
-                    List.copyOf(mergedComps), List.copyOf(mergedIntegs), summary);
+                    List.copyOf(mergedComps), List.copyOf(mergedIntegs), summary, jakartaMessagingTarget);
         } catch (Exception e) {
             log.warn("[{}] failed to parse AI response, using base context: {}", getName(), e.getMessage());
             String summary = "Analyzed project '%s' — %d component(s) (parse error)"
                     .formatted(projectId, base.size());
-            return new AnalysisReport(projectId, storageKey, base, baseIntegrations, summary);
+            return new AnalysisReport(projectId, storageKey, base, baseIntegrations, summary, jakartaMessagingTarget);
         }
+    }
+
+    /**
+     * The content-hash cache key is purely derived from file contents —
+     * {@code jakartaMessagingTarget} is user-selected metadata about HOW to
+     * migrate, not WHAT the source contains, so it must never participate in
+     * that key. Instead, every cache hit is corrected here: the returned
+     * report always reflects the CURRENT request's target, never whatever
+     * was baked into the cached report from a previous (possibly different)
+     * request against identical content.
+     *
+     * <p>{@code ProjectContext.jakartaMessagingTarget()} has no null-default
+     * (unlike {@link AnalysisReport}, which defaults null to
+     * {@code NATIVE_KAFKA_CLIENTS} in its compact constructor) — normalise
+     * before comparing so an unset request target doesn't spuriously look
+     * different from an already-defaulted cached value and force a needless
+     * rebuild.
+     */
+    private static AnalysisReport withCurrentJakartaMessagingTarget(AnalysisReport cached,
+                                                                      JakartaMessagingTarget jakartaMessagingTarget) {
+        JakartaMessagingTarget current = jakartaMessagingTarget != null
+                ? jakartaMessagingTarget : JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS;
+        if (cached.jakartaMessagingTarget() == current) return cached;
+        return new AnalysisReport(cached.projectId(), cached.storageKey(),
+                cached.detectedComponents(), cached.detectedIntegrations(), cached.summary(),
+                current);
     }
 
     private static String extractJson(String response) {

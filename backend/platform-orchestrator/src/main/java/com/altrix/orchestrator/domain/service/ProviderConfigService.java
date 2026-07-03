@@ -8,7 +8,7 @@ import com.altrix.orchestrator.domain.port.in.UpdateProviderConfigUseCase;
 import com.altrix.orchestrator.domain.port.out.ApiKeyEncryptionPort;
 import com.altrix.orchestrator.domain.port.out.ProviderConfigRepositoryPort;
 import com.altrix.orchestrator.domain.port.out.ProviderRefreshPort;
-import com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory;
+import com.altrix.orchestrator.infrastructure.ai.provider.factory.ProviderFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 

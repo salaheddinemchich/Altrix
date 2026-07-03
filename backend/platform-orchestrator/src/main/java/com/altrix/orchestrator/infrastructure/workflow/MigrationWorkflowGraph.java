@@ -228,10 +228,16 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
 
         // Inject retry context and previous artifact so the migrator starts from
         // the last attempt's output instead of the original source (#checkpoint).
+        // The failing paths from the previous validation narrow the retry's LLM
+        // pass to the implicated files — everything else is kept verbatim from
+        // the checkpoint so the model can't corrupt already-correct output.
         String retryCtx = state.retryContext().orElse(null);
         if (retryCtx != null && !retryCtx.isBlank()) {
             MigrationArtifact prevArtifact = state.migrationArtifact().orElse(null);
-            approved = approved.withRetryContext(retryCtx, prevArtifact);
+            List<String> failingPaths = state.validationReport()
+                    .map(ValidationReport::failingFilePaths)
+                    .orElse(List.of());
+            approved = approved.withRetryContext(retryCtx, prevArtifact, failingPaths);
         }
 
         notifyRunning(ctx.jobId(), "Core Migrator");

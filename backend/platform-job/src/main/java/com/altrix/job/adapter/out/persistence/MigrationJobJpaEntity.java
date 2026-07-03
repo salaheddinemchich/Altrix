@@ -1,6 +1,7 @@
 package com.altrix.job.adapter.out.persistence;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.enums.JobStatus;
 import com.altrix.job.domain.model.JobProviderProfile;
 import jakarta.persistence.*;
@@ -41,6 +42,10 @@ public class MigrationJobJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "provider_profile", nullable = false, length = 20)
     private JobProviderProfile providerProfile;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "jakarta_messaging_target", nullable = false, length = 24)
+    private JakartaMessagingTarget jakartaMessagingTarget;
 
     @Column(name = "output_storage_key")
     private String outputStorageKey;

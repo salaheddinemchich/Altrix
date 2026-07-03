@@ -159,12 +159,29 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
             List<MigratedFile> files = artifact != null ? artifact.files() : List.of();
             String outputKey = migratedFileStoragePort.storeMigratedZip(jobId, files);
 
-            persistCompletionBestEffort(sessionId, files, outputKey);
+            // Reaching here only means the retry loop ran out of attempts or
+            // got a PASS — it does NOT mean the artifact is good.  Trust
+            // validation.passed() over "the loop finished" before telling
+            // platform-job this job succeeded (mirrors OrchestratorService.run()).
+            boolean validationFailed = validation != null && !validation.passed();
+            // Same string goes to the session row AND the job-status Kafka
+            // message — the frontend's stage-backfill heuristic recognizes
+            // this exact prefix to highlight the Validate stage instead of
+            // defaulting to Analyse, so the two must never drift apart.
+            String failureReason = validationFailed ? "Sandbox validation failed: " + validation.summary() : null;
+            persistCompletionBestEffort(sessionId, files, outputKey, failureReason);
 
-            jobStatusUpdatePort.markDone(jobId, outputKey);
-            progressNotifierPort.notify(jobId, "Pipeline", "DONE",
-                    "Migration complete. Ready to download.");
-            log.info("Resume pipeline DONE for job '{}' session '{}'", jobId, sessionId);
+            if (validationFailed) {
+                jobStatusUpdatePort.markFailed(jobId, failureReason);
+                progressNotifierPort.notify(jobId, "Pipeline", "FAILED", failureReason);
+                log.warn("Resume pipeline completed but FAILED sandbox validation for job '{}' session '{}': {}",
+                        jobId, sessionId, failureReason);
+            } else {
+                jobStatusUpdatePort.markDone(jobId, outputKey);
+                progressNotifierPort.notify(jobId, "Pipeline", "DONE",
+                        "Migration complete. Ready to download.");
+                log.info("Resume pipeline DONE for job '{}' session '{}'", jobId, sessionId);
+            }
 
         } catch (Exception e) {
             log.error("Resume pipeline FAILED for job '{}' session '{}': {}",
@@ -269,9 +286,14 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
             // Build retry context for the next attempt and loop.
             // Pass the current artifact as previousArtifact so the migrator starts from
             // attempt N's output instead of the original source — prevents regression
-            // when AI providers are unavailable on attempt N+1.
+            // when AI providers are unavailable on attempt N+1.  The failing paths
+            // narrow the retry's LLM pass to the implicated files only — re-migrating
+            // healthy files hands the model a fresh chance to corrupt output that
+            // already passed the guard chain (proven regression: job d3fa6347, where
+            // the deterministically-converted @KafkaListener pollers were re-rewritten
+            // by the LLM on retry and lost their CdiLookup import).
             String retryContext = buildRetryContext(attempt, validation);
-            plan = plan.withRetryContext(retryContext, artifact);
+            plan = plan.withRetryContext(retryContext, artifact, validation.failingFilePaths());
             log.info("Validation FAILED on attempt {}/{} for job '{}' — retrying with {} issue(s) in context",
                     attempt, totalAttempts, jobId, validation.failures().size());
         }
@@ -316,27 +338,31 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
      */
     private void persistCompletionBestEffort(WorkflowSessionId sessionId,
                                               List<MigratedFile> files,
-                                              String outputKey) {
+                                              String outputKey,
+                                              String validationFailureReason) {
         try {
             WorkflowSession fresh = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new SessionNotFoundException(sessionId));
             fresh.resetAgentErrors();
             fresh.storeMigratedFiles(files);
-            walkToCompletion(fresh, files.size());
+            walkToCompletion(fresh, files.size(), validationFailureReason);
             sessionRepository.save(fresh);
         } catch (Exception e) {
             log.warn("Could not persist session completion for '{}' (non-fatal — " +
-                     "artifact stored at '{}', job will be marked DONE): {}",
-                    sessionId, outputKey, e.getMessage());
+                     "artifact stored at '{}', job will be marked {}): {}",
+                    sessionId, outputKey, validationFailureReason != null ? "FAILED" : "DONE", e.getMessage());
         }
     }
 
     /**
-     * Walks the session through whatever intermediate states remain until DONE.
-     * Tolerates being called from MIGRATING / VALIDATING / PAUSED (the user may
-     * have paused mid-run) and is a no-op on a session already DONE/FAILED.
+     * Walks the session through whatever intermediate states remain until
+     * DONE — or FAILED when {@code validationFailureReason} is non-null, so
+     * the session's terminal state matches what the sandbox actually found
+     * instead of always landing on DONE.  Tolerates being called from
+     * MIGRATING / VALIDATING / PAUSED (the user may have paused mid-run) and
+     * is a no-op on a session already DONE/FAILED.
      */
-    private void walkToCompletion(WorkflowSession s, int fileCount) {
+    private void walkToCompletion(WorkflowSession s, int fileCount, String validationFailureReason) {
         if (s.status() == SessionStatus.PAUSED) {
             s.resume();
         }
@@ -344,7 +370,11 @@ public class ResumeMigrationService implements ResumeMigrationUseCase {
             s.startValidation(fileCount);
         }
         if (s.status() == SessionStatus.VALIDATING) {
-            s.complete();
+            if (validationFailureReason != null) {
+                s.fail(validationFailureReason);
+            } else {
+                s.complete();
+            }
         }
         // Anything else (DONE / FAILED / unexpected) — leave alone.
     }

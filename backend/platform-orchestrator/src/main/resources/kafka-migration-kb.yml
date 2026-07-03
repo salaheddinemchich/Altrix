@@ -60,6 +60,21 @@ kafka-migration:
       dependency: org.apache.kafka:kafka-clients
     - class-fqn: org.springframework.kafka.*
       dependency: org.springframework.kafka:spring-kafka
+    # Jakarta EE + Spring Kafka hybrid only — the manually-bootstrapped
+    # ApplicationContext (AnnotationConfigApplicationContext, @Configuration,
+    # @ComponentScan, @Value, PropertySourcesPlaceholderConfigurer) needs
+    # plain Spring Framework, NOT spring-boot-starter-*.
+    # hybrid-only: true — org.springframework.context.* is far more common
+    # in ordinary Spring Boot code (ApplicationContext, ApplicationContextAware)
+    # which gets spring-context transitively via spring-boot-starter, so
+    # DependencyValidator must not raise MISSING_DEPENDENCY for it outside
+    # the hybrid target. PomDependencyReconciler's auto-add (a different,
+    # unconditional consumer of this same mapping) is unaffected by this
+    # flag — it only adds a dependency that's genuinely imported, which
+    # carries no false-positive risk.
+    - class-fqn: org.springframework.context.*
+      dependency: org.springframework:spring-context
+      hybrid-only: true
 
   # The feature catalog.  pubsub-feature ids match BlueprintFeature.id.
   mappings:

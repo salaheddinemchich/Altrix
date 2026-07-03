@@ -93,7 +93,7 @@ class DockerBootHealthRunnerTest {
                 .content("class Foo {}")
                 .changeType(FileChangeType.MODIFIED)
                 .build();
-        MigrationArtifact artifact = new MigrationArtifact("p1", List.of(justJava), "no pom");
+        MigrationArtifact artifact = new MigrationArtifact("p1", List.of(justJava), "no pom", null);
 
         List<SandboxFinding> findings = runner.run(artifact);
 
@@ -107,10 +107,28 @@ class DockerBootHealthRunnerTest {
         SandboxLogRepository repo = Mockito.mock(SandboxLogRepository.class);
         DockerBootHealthRunner runner = new DockerBootHealthRunner(disabledConfig(), repo);
 
-        MigrationArtifact empty = new MigrationArtifact("p1", List.of(), "empty");
+        MigrationArtifact empty = new MigrationArtifact("p1", List.of(), "empty", null);
 
         assertThat(runner.run(empty)).isEmpty();
         assertThat(runner.run(null)).isEmpty();
+    }
+
+    // ── Regression: job cc3607e5-b8e7-4ca7-90d1-3356c6358d88 — the migrated
+    // Jakarta EE + Spring Kafka hybrid project compiled fine (docker exit 0)
+    // but boot-health timed out (exit 124) because Payara Micro rejected the
+    // unconditional Spring-Boot-style "--server.port=8080" flag ("is not a
+    // valid command line switch for Payara Micro") and exited immediately.
+
+    @Test
+    void buildScript_usesPayaraPortFlag_forMicrobundleJar() {
+        String script = runner().buildScript();
+        assertThat(script).contains("*-microbundle.jar) exec java -jar \"$JAR\" --port 8080");
+    }
+
+    @Test
+    void buildScript_usesSpringBootPortFlag_forOrdinaryJar() {
+        String script = runner().buildScript();
+        assertThat(script).contains("*) exec java -jar \"$JAR\" --server.port=8080");
     }
 
     @Test

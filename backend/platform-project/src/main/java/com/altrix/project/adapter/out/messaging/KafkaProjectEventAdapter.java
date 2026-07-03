@@ -13,9 +13,11 @@ import org.springframework.stereotype.Component;
  *
  * Message format:
  *   key   = projectId
- *   value = userId|storageKey
+ *   value = userId|storageKey|jakartaMessagingTarget
  *
- * Pipe-delimited so the job service can extract both userId and storageKey.
+ * Pipe-delimited so the job service can extract userId, storageKey, and the
+ * user's Jakarta EE messaging target choice. The 3rd segment is additive —
+ * older consumers reading only 2 parts are unaffected.
  */
 @Slf4j
 @Component
@@ -29,8 +31,9 @@ public class KafkaProjectEventAdapter implements ProjectEventPublisherPort {
 
     @Override
     public void publishProjectRegistered(Project project) {
-        // value = "userId|storageKey" — both needed by downstream services
-        String value = project.getUserId() + "|" + project.getStorageKey();
+        // value = "userId|storageKey|jakartaMessagingTarget"
+        String value = project.getUserId() + "|" + project.getStorageKey()
+                + "|" + project.getJakartaMessagingTarget();
         log.info("Publishing project.registered for project '{}' storageKey='{}'", project.getId(), project.getStorageKey());
         kafkaTemplate.send(topic, project.getId(), value)
                 .whenComplete((result, ex) -> {

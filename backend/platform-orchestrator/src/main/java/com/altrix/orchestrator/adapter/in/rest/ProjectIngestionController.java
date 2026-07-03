@@ -79,16 +79,20 @@ public class ProjectIngestionController {
         String configPref = request.configFormatPreference() != null
                 ? "\"" + request.configFormatPreference().name() + "\""
                 : "null";
+        String jakartaTarget = request.jakartaMessagingTarget() != null
+                ? "\"" + request.jakartaMessagingTarget().name() + "\""
+                : "null";
 
         // Build the JSON body for platform-project's /clone endpoint by hand —
-        // an out-of-the-box ObjectMapper is overkill for 5 fixed fields and
+        // an out-of-the-box ObjectMapper is overkill for 6 fixed fields and
         // would force the controller to depend on Jackson types directly.
         String jsonBody = String.format(
-                "{\"repoUrl\":\"%s\",\"branch\":\"%s\",\"accessToken\":\"%s\",\"shallow\":false,\"configFormatPreference\":%s}",
+                "{\"repoUrl\":\"%s\",\"branch\":\"%s\",\"accessToken\":\"%s\",\"shallow\":false,\"configFormatPreference\":%s,\"jakartaMessagingTarget\":%s}",
                 jsonEscape(repoUrl),
                 jsonEscape(request.defaultBranch()),
                 jsonEscape(accessToken),
-                configPref);
+                configPref,
+                jakartaTarget);
 
         HttpRequest httpRequest = HttpRequest.newBuilder()
                 .uri(URI.create(platformProjectBaseUrl + "/api/v1/projects/clone"))

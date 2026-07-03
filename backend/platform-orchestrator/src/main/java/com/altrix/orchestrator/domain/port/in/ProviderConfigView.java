@@ -1,6 +1,6 @@
 package com.altrix.orchestrator.domain.port.in;
 
-import com.altrix.orchestrator.infra.ai.provider.ProviderCostTier;
+import com.altrix.orchestrator.infrastructure.ai.provider.ProviderCostTier;
 
 import java.time.Instant;
 

@@ -1,6 +1,7 @@
 package com.altrix.project.domain.service;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.exception.ProjectNotFoundException;
 import com.altrix.common.exception.RepositoryIngestionException;
 import com.altrix.project.domain.model.Project;
@@ -43,7 +44,8 @@ public class ProjectService implements UploadProjectUseCase, GetProjectQuery, In
             String fileName,
             InputStream zipContent,
             long fileSizeBytes,
-            ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference,
+            JakartaMessagingTarget jakartaMessagingTarget
     ) {
         log.info("Uploading project '{}' for user '{}'", fileName, userId);
 
@@ -52,7 +54,7 @@ public class ProjectService implements UploadProjectUseCase, GetProjectQuery, In
         log.debug("Stored ZIP at storage key '{}'", storageKey);
 
         // 2. Create the domain entity in PENDING status
-        Project project = Project.create(userId, fileName, storageKey, configFormatPreference);
+        Project project = Project.create(userId, fileName, storageKey, configFormatPreference, jakartaMessagingTarget);
 
         // 3. Retrieve the stored ZIP as a stream and run detection
         try (InputStream zipStream = fileStoragePort.retrieve(storageKey)) {
@@ -119,6 +121,7 @@ public class ProjectService implements UploadProjectUseCase, GetProjectQuery, In
                     name,
                     storageKey,
                     cmd.configFormatPreference(),
+                    cmd.jakartaMessagingTarget(),
                     cmd.repoUrl(),
                     snapshot.branch(),
                     ProjectSource.GIT_CLONE);

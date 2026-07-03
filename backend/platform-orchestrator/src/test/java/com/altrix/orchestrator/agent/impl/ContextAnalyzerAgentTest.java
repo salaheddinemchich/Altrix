@@ -95,7 +95,7 @@ class ContextAnalyzerAgentTest {
                 .build();
 
         AnalysisReport cached = new AnalysisReport("p1", "uploads/p1.zip",
-                List.of("com.x.Cached"), List.of("Kafka"), "cached summary");
+                List.of("com.x.Cached"), List.of("Kafka"), "cached summary", null);
         when(fileReader.readSourceFiles("uploads/p1.zip")).thenReturn(SINGLE_FILE);
         when(analysisCache.get(anyString())).thenReturn(Optional.of(cached));
 
@@ -104,6 +104,52 @@ class ContextAnalyzerAgentTest {
         assertThat(report).isSameAs(cached);
         verifyNoInteractions(aiPort);
         verify(analysisCache, never()).put(anyString(), any());
+    }
+
+    // ── Finding 3 regression: content-hash cache must never return a stale
+    // jakartaMessagingTarget — the target is user-selected metadata, not
+    // content-derived, so it is never part of the cache key and must always
+    // be corrected to the CURRENT request's value on every cache hit.
+
+    @Test
+    void execute_cacheHit_overridesStaleJakartaMessagingTarget_toCurrentRequestValue() {
+        ProjectContext ctx = ProjectContext.builder()
+                .jobId("j1").projectId("p1").storageKey("uploads/p1.zip")
+                .jakartaMessagingTarget(com.altrix.common.domain.enums.JakartaMessagingTarget.SPRING_KAFKA_HYBRID)
+                .build();
+        // Cached report was produced by an earlier submission of the SAME
+        // content with a DIFFERENT (native) target.
+        AnalysisReport cached = new AnalysisReport("p1", "uploads/p1.zip",
+                List.of("com.x.Cached"), List.of("Kafka"), "cached summary",
+                com.altrix.common.domain.enums.JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+        when(fileReader.readSourceFiles("uploads/p1.zip")).thenReturn(SINGLE_FILE);
+        when(analysisCache.get(anyString())).thenReturn(Optional.of(cached));
+
+        AnalysisReport report = agent.execute(ctx);
+
+        assertThat(report.jakartaMessagingTarget())
+                .isEqualTo(com.altrix.common.domain.enums.JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        assertThat(report.detectedComponents()).isEqualTo(cached.detectedComponents());
+        verifyNoInteractions(aiPort);
+        verify(analysisCache, never()).put(anyString(), any());
+    }
+
+    @Test
+    void execute_cacheHit_matchingTarget_returnsCachedInstanceUnmodified() {
+        ProjectContext ctx = ProjectContext.builder()
+                .jobId("j1").projectId("p1").storageKey("uploads/p1.zip")
+                .jakartaMessagingTarget(com.altrix.common.domain.enums.JakartaMessagingTarget.SPRING_KAFKA_HYBRID)
+                .build();
+        AnalysisReport cached = new AnalysisReport("p1", "uploads/p1.zip",
+                List.of("com.x.Cached"), List.of("Kafka"), "cached summary",
+                com.altrix.common.domain.enums.JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        when(fileReader.readSourceFiles("uploads/p1.zip")).thenReturn(SINGLE_FILE);
+        when(analysisCache.get(anyString())).thenReturn(Optional.of(cached));
+
+        AnalysisReport report = agent.execute(ctx);
+
+        // No-op rebuild — same target, so the original cached instance is returned as-is.
+        assertThat(report).isSameAs(cached);
     }
 
     @Test
@@ -133,7 +179,7 @@ class ContextAnalyzerAgentTest {
                 .build();
 
         AnalysisReport cached = new AnalysisReport("p1", "uploads/p1.zip",
-                List.of("A"), List.of("B"), "ok");
+                List.of("A"), List.of("B"), "ok", null);
         when(fileReader.readSourceFiles("uploads/p1.zip")).thenReturn(SINGLE_FILE);
         when(analysisCache.get(anyString())).thenReturn(Optional.of(cached));
 

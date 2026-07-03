@@ -112,7 +112,7 @@ class MigrationQualityRunnerTest {
     }
 
     private static MigrationArtifact art(MigratedFile f) {
-        return new MigrationArtifact("p1", List.of(f), "done");
+        return new MigrationArtifact("p1", List.of(f), "done", null);
     }
 
     private static void assertHasError(List<SandboxFinding> findings, String messageSubstring) {

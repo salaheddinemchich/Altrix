@@ -1,6 +1,6 @@
 package com.altrix.orchestrator.adapter.out.rag;
 
-import com.altrix.orchestrator.infra.ai.tools.McpToolsPort;
+import com.altrix.orchestrator.infrastructure.ai.tools.McpToolsPort;
 import com.altrix.orchestrator.infrastructure.config.DocumentationCorpusConfig;
 import com.altrix.orchestrator.infrastructure.config.DocumentationCorpusConfig.AllowedDomain;
 import com.altrix.orchestrator.infrastructure.rag.DomainAllowListValidator;

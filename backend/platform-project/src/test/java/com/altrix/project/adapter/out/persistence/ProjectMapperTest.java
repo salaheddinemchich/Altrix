@@ -4,6 +4,7 @@ import com.altrix.common.domain.enums.BuildSystem;
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.common.domain.enums.DetectedFramework;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.project.domain.model.Project;
 import com.altrix.project.domain.model.ProjectStatus;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ class ProjectMapperTest {
                 .configFormat(ConfigFormat.YAML)
                 .framework(DetectedFramework.SPRING_BOOT)
                 .configFormatPreference(ConfigFormatPreference.KEEP_ORIGINAL)
+                .jakartaMessagingTarget(JakartaMessagingTarget.SPRING_KAFKA_HYBRID)
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
@@ -43,11 +45,13 @@ class ProjectMapperTest {
         assertThat(domain.getBuildSystem()).isEqualTo(BuildSystem.GRADLE_KOTLIN);
         assertThat(domain.getConfigFormat()).isEqualTo(ConfigFormat.YAML);
         assertThat(domain.getFramework()).isEqualTo(DetectedFramework.SPRING_BOOT);
+        assertThat(domain.getJakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
     }
 
     @Test
     void toJpaEntity_mapsAllFields() {
-        Project domain = Project.create("user-1", "myapp.zip", "uploads/myapp.zip", ConfigFormatPreference.FORCE_PROPERTIES);
+        Project domain = Project.create("user-1", "myapp.zip", "uploads/myapp.zip",
+                ConfigFormatPreference.FORCE_PROPERTIES, JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
 
         ProjectJpaEntity entity = mapper.toJpaEntity(domain);
 
@@ -57,11 +61,12 @@ class ProjectMapperTest {
         assertThat(entity.getStorageKey()).isEqualTo("uploads/myapp.zip");
         assertThat(entity.getStatus()).isEqualTo(ProjectStatus.PENDING);
         assertThat(entity.getConfigFormatPreference()).isEqualTo(ConfigFormatPreference.FORCE_PROPERTIES);
+        assertThat(entity.getJakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
     }
 
     @Test
     void roundTrip_preservesAllFields() {
-        Project original = Project.create("user-1", "app.zip", "key", null);
+        Project original = Project.create("user-1", "app.zip", "key", null, null);
         ProjectJpaEntity entity = mapper.toJpaEntity(original);
         Project restored = mapper.toDomain(entity);
 
@@ -73,12 +78,13 @@ class ProjectMapperTest {
         assertThat(restored.getSource()).isEqualTo(
                 com.altrix.project.domain.model.ProjectSource.MANUAL);
         assertThat(restored.getRepoUrl()).isNull();
+        assertThat(restored.getJakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
     }
 
     @Test
     void roundTrip_preservesGitProvenance() {
         Project original = Project.createFromGit(
-                "user-1", "widgets", "k", null,
+                "user-1", "widgets", "k", null, JakartaMessagingTarget.SPRING_KAFKA_HYBRID,
                 "https://github.com/acme/widgets.git",
                 "main",
                 com.altrix.project.domain.model.ProjectSource.GIT_CLONE);
@@ -89,5 +95,6 @@ class ProjectMapperTest {
         assertThat(restored.getTrackedBranch()).isEqualTo("main");
         assertThat(restored.getSource()).isEqualTo(
                 com.altrix.project.domain.model.ProjectSource.GIT_CLONE);
+        assertThat(restored.getJakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
     }
 }

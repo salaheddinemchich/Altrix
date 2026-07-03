@@ -50,6 +50,37 @@ public record ValidationReport(
     }
 
     /**
+     * Artifact-relative paths of the files implicated in ERROR-severity
+     * {@link #findings}.  Consumed by the retry loop to narrow the next
+     * migration attempt to the files that actually failed, instead of
+     * re-sending healthy files through the LLM (which reliably corrupts
+     * previously-correct output).
+     *
+     * <p>Paths are normalised: separators unified to {@code /}, any leading
+     * sandbox {@code /workspace/} prefix and leading slashes stripped —
+     * matching the artifact-relative form ({@code src/main/java/...}) that
+     * {@code MigratedFile} paths use.  Deduplicated, insertion-ordered.
+     *
+     * <p>Empty when no runner produced per-file findings (project-wide
+     * failures such as a boot timeout) — callers treat empty as
+     * "no narrowing possible".
+     */
+    public List<String> failingFilePaths() {
+        var out = new java.util.LinkedHashSet<String>();
+        for (Finding f : findings) {
+            if (!"ERROR".equalsIgnoreCase(f.severity())) continue;
+            String p = f.filePath();
+            if (p == null || p.isBlank()) continue;
+            p = p.replace('\\', '/');
+            int ws = p.indexOf("/workspace/");
+            if (ws >= 0) p = p.substring(ws + "/workspace/".length());
+            while (p.startsWith("/")) p = p.substring(1);
+            if (!p.isBlank()) out.add(p);
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * One structured validation issue.  Mirrors the orchestrator-side
      * {@code SandboxFinding} but lives in {@code platform-common} so it can
      * cross service boundaries (frontend payload, future platform-report

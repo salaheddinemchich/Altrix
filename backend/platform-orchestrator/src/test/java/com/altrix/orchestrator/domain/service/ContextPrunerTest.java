@@ -123,6 +123,6 @@ class ContextPrunerTest {
 
     private static MigrationPlan planWithTargets(String projectId, List<String> targets) {
         return new MigrationPlan(projectId, "key", "Spring Boot 3 + Kafka",
-                List.of(), "MEDIUM", "TBD", "summary", targets);
+                List.of(), "MEDIUM", "TBD", "summary", targets, null);
     }
 }

@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
+
 import java.io.Serializable;
 
 import java.util.List;
@@ -44,7 +46,14 @@ public record MigrationPlan(
          * REWRITE in this migration. Consumed by {@code ContextPruner} (#27).
          * Empty when the planner could not identify specific files.
          */
-        List<String> targetFiles
+        List<String> targetFiles,
+
+        /**
+         * User-selected, never AI-inferred. Carried from {@code AnalysisReport} so
+         * {@code CoreMigratorAgent} branches on a real field instead of re-deriving
+         * it from source. Only meaningful for Jakarta EE sources.
+         */
+        JakartaMessagingTarget jakartaMessagingTarget
 
 ) implements Serializable {
     public MigrationPlan {
@@ -55,9 +64,12 @@ public record MigrationPlan(
         estimatedEffort = estimatedEffort != null ? estimatedEffort : "";
         summary = summary != null ? summary : "";
         targetFiles = targetFiles != null ? List.copyOf(targetFiles) : List.of();
+        jakartaMessagingTarget = jakartaMessagingTarget != null
+                ? jakartaMessagingTarget : JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS;
     }
 
     public static MigrationPlan empty(String projectId) {
-        return new MigrationPlan(projectId, "", "", List.of(), "", "", "", List.of());
+        return new MigrationPlan(projectId, "", "", List.of(), "", "", "", List.of(),
+                JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
     }
 }

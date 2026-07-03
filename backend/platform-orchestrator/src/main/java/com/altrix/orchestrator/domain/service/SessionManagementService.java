@@ -108,7 +108,8 @@ public class SessionManagementService
                 editedPlan.riskLevel(),
                 editedPlan.estimatedEffort(),
                 editedPlan.summary(),
-                editedPlan.targetFiles()
+                editedPlan.targetFiles(),
+                session.plan().jakartaMessagingTarget()
         );
         session.updatePlan(merged);
         WorkflowSession saved = sessionRepository.save(session);

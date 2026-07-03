@@ -302,7 +302,23 @@ public class ContractValidator {
             "Void", "Class", "Enum", "Iterable", "Comparable", "CharSequence",
             "StringBuilder", "StringBuffer", "Exception", "RuntimeException", "Throwable",
             "Error", "Override", "Deprecated", "SuppressWarnings", "FunctionalInterface",
-            "SafeVarargs", "Cloneable", "AutoCloseable", "Record", "Process", "Appendable");
+            "SafeVarargs", "Cloneable", "AutoCloseable", "Record", "Process", "Appendable",
+            // Concrete java.lang exceptions/errors — importless like the rest of
+            // java.lang.  IllegalStateException was missing and produced the lone
+            // false-positive MISSING_IMPORT that failed job 788ad935's otherwise
+            // fully-green sandbox run (the generated SpringContextBootstrapper
+            // throws it by design).
+            "IllegalStateException", "IllegalArgumentException", "NullPointerException",
+            "UnsupportedOperationException", "IndexOutOfBoundsException",
+            "ArrayIndexOutOfBoundsException", "StringIndexOutOfBoundsException",
+            "ClassCastException", "NumberFormatException", "ArithmeticException",
+            "InterruptedException", "SecurityException", "ClassNotFoundException",
+            "CloneNotSupportedException", "IllegalAccessException", "InstantiationException",
+            "NoSuchMethodException", "NoSuchFieldException", "NegativeArraySizeException",
+            "ArrayStoreException", "IllegalMonitorStateException",
+            "AssertionError", "StackOverflowError", "OutOfMemoryError", "NoClassDefFoundError",
+            // Non-exception java.lang types commonly referenced without import.
+            "Runtime", "ThreadLocal", "ClassLoader", "ProcessBuilder", "StackTraceElement");
 
     /**
      * Orphaned-type-reference check — catches a type used in a type position

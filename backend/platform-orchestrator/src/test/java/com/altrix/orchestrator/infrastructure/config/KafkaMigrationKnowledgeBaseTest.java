@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.infrastructure.config;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.orchestrator.infrastructure.config.KafkaMigrationKnowledgeBase.ClassDependency;
 import com.altrix.orchestrator.infrastructure.config.KafkaMigrationKnowledgeBase.Mapping;
 import org.junit.jupiter.api.Test;
@@ -63,7 +64,7 @@ class KafkaMigrationKnowledgeBaseTest {
         var k = kb(List.of(),
                 List.of(new ClassDependency(
                         "org.apache.kafka.clients.consumer.KafkaConsumer",
-                        "org.apache.kafka:kafka-clients")),
+                        "org.apache.kafka:kafka-clients", false)),
                 List.of());
         assertThat(k.dependencyForClass("org.apache.kafka.clients.consumer.KafkaConsumer"))
                 .contains("org.apache.kafka:kafka-clients");
@@ -75,7 +76,7 @@ class KafkaMigrationKnowledgeBaseTest {
         var k = kb(List.of(),
                 List.of(new ClassDependency(
                         "org.apache.kafka.clients.producer.*",
-                        "org.apache.kafka:kafka-clients")),
+                        "org.apache.kafka:kafka-clients", false)),
                 List.of());
         assertThat(k.dependencyForClass("org.apache.kafka.clients.producer.KafkaProducer"))
                 .contains("org.apache.kafka:kafka-clients");
@@ -113,9 +114,50 @@ class KafkaMigrationKnowledgeBaseTest {
 
     @Test
     void classDependencyRejectsBlankFields() {
-        assertThatThrownBy(() -> new ClassDependency("", "dep"))
+        assertThatThrownBy(() -> new ClassDependency("", "dep", false))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ClassDependency("fqn", " "))
+        assertThatThrownBy(() -> new ClassDependency("fqn", " ", false))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void dependencyForClass_1ArgOverload_matchesRegardlessOfHybridOnlyFlag() {
+        var k = kb(List.of(),
+                List.of(new ClassDependency("org.springframework.context.*",
+                        "org.springframework:spring-context", true)),
+                List.of());
+        assertThat(k.dependencyForClass("org.springframework.context.ApplicationContext"))
+                .contains("org.springframework:spring-context");
+    }
+
+    @Test
+    void dependencyForClass_2ArgOverload_skipsHybridOnlyMapping_whenTargetIsNotHybrid() {
+        var k = kb(List.of(),
+                List.of(new ClassDependency("org.springframework.context.*",
+                        "org.springframework:spring-context", true)),
+                List.of());
+        assertThat(k.dependencyForClass("org.springframework.context.ApplicationContext",
+                JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS)).isEmpty();
+        assertThat(k.dependencyForClass("org.springframework.context.ApplicationContext", null)).isEmpty();
+    }
+
+    @Test
+    void dependencyForClass_2ArgOverload_matchesHybridOnlyMapping_whenTargetIsHybrid() {
+        var k = kb(List.of(),
+                List.of(new ClassDependency("org.springframework.context.*",
+                        "org.springframework:spring-context", true)),
+                List.of());
+        assertThat(k.dependencyForClass("org.springframework.context.ApplicationContext",
+                JakartaMessagingTarget.SPRING_KAFKA_HYBRID)).contains("org.springframework:spring-context");
+    }
+
+    @Test
+    void dependencyForClass_2ArgOverload_nonHybridOnlyMapping_matchesRegardlessOfTarget() {
+        var k = kb(List.of(),
+                List.of(new ClassDependency(
+                        "org.apache.kafka.clients.consumer.KafkaConsumer", "org.apache.kafka:kafka-clients", false)),
+                List.of());
+        assertThat(k.dependencyForClass("org.apache.kafka.clients.consumer.KafkaConsumer",
+                JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS)).contains("org.apache.kafka:kafka-clients");
     }
 }

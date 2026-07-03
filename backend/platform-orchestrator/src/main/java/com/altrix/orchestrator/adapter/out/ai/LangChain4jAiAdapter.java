@@ -1,8 +1,8 @@
 package com.altrix.orchestrator.adapter.out.ai;
 
 import com.altrix.orchestrator.domain.port.out.AiPort;
-import com.altrix.orchestrator.infra.ai.ProviderRouter;
-import com.altrix.orchestrator.infra.ai.provider.ProviderTier;
+import com.altrix.orchestrator.infrastructure.ai.ProviderRouter;
+import com.altrix.orchestrator.infrastructure.ai.provider.ProviderTier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

@@ -1,6 +1,7 @@
 package com.altrix.project.adapter.in.rest;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.project.domain.model.Project;
 import com.altrix.project.domain.port.in.GetProjectQuery;
 import com.altrix.project.domain.port.in.IngestGitRepositoryUseCase;
@@ -62,7 +63,9 @@ public class ProjectController {
             // @RequestPart on an enum requires the part to carry application/json,
             // which most multipart clients don't set on simple text parts.
             @RequestParam(value = "configFormatPreference", required = false)
-            ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference,
+            @RequestParam(value = "jakartaMessagingTarget", required = false)
+            JakartaMessagingTarget jakartaMessagingTarget
     ) throws IOException {
 
         log.info("Upload request from user '{}', file='{}'", userId, file.getOriginalFilename());
@@ -72,7 +75,8 @@ public class ProjectController {
                 file.getOriginalFilename(),
                 file.getInputStream(),
                 file.getSize(),
-                configFormatPreference
+                configFormatPreference,
+                jakartaMessagingTarget
         );
 
         return ProjectResponse.from(project);
@@ -104,7 +108,8 @@ public class ProjectController {
                 request.branch(),
                 request.accessToken(),
                 request.shallow(),
-                request.configFormatPreference()
+                request.configFormatPreference(),
+                request.jakartaMessagingTarget()
         ));
 
         return ProjectResponse.from(project);

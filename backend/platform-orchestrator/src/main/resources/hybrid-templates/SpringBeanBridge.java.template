@@ -1,0 +1,38 @@
+package ${package};
+
+import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.inject.Produces;
+import org.springframework.kafka.core.KafkaTemplate;
+
+/**
+ * CDI &rarr; Spring bridge. Exposes the Spring-managed {@link KafkaTemplate}
+ * as a real, injectable CDI bean — so business code writes plain
+ * {@code @Inject KafkaTemplate<String,String> kafkaTemplate;} instead of
+ * reaching for a static accessor on {@code SpringContextBootstrapper}
+ * directly. That static-singleton/service-locator call is exactly the
+ * anti-pattern CDI/DI exists to avoid; this producer is the one place that
+ * crosses the container boundary so nothing else has to.
+ *
+ * <p><b>The declaring class is {@code @Dependent}, and the producer method is
+ * {@code @Produces @Dependent} — NOT {@code @ApplicationScoped} on either.</b>
+ * This is the WELD-001435 fix and must not be "simplified" back. Normal-scoped
+ * beans (e.g. {@code @ApplicationScoped}) are injected via a lazily-created
+ * client proxy, and Weld can only generate that proxy for a type with a no-arg
+ * constructor. {@link KafkaTemplate} has none (only a constructor taking a
+ * {@code ProducerFactory}), so a normal scope here fails CDI deployment
+ * validation with "WELD-001435: not proxyable". {@code @Dependent} is a CDI
+ * pseudo-scope that needs no proxy — it calls this method directly at each
+ * injection point, which still hands back the one Spring-managed singleton
+ * every time.
+ *
+ * <p>Generated deterministically by Altrix's {@code HybridScaffoldingGenerator}.
+ */
+@Dependent
+public class SpringBeanBridge {
+
+    @Produces
+    @Dependent
+    public KafkaTemplate<String, String> kafkaTemplate() {
+        return SpringContextBootstrapper.context().getBean(KafkaTemplate.class);
+    }
+}

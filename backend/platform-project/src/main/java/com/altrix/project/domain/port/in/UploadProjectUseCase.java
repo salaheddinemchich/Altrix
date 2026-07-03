@@ -1,6 +1,7 @@
 package com.altrix.project.domain.port.in;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.project.domain.model.Project;
 
 import java.io.InputStream;
@@ -25,6 +26,9 @@ public interface UploadProjectUseCase {
      * @param zipContent              raw bytes of the uploaded ZIP
      * @param fileSizeBytes           size in bytes — used for storage quota checks
      * @param configFormatPreference  user's preferred output config format
+     * @param jakartaMessagingTarget  user's explicit choice of Jakarta EE messaging
+     *                                output; only meaningful once detection confirms
+     *                                Jakarta EE, ignored otherwise
      * @return the newly created {@link Project} domain entity
      */
     Project upload(
@@ -32,6 +36,7 @@ public interface UploadProjectUseCase {
             String fileName,
             InputStream zipContent,
             long fileSizeBytes,
-            ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference,
+            JakartaMessagingTarget jakartaMessagingTarget
     );
 }

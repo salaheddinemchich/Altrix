@@ -3,6 +3,7 @@ package com.altrix.common.domain.model;
 import java.io.Serializable;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * Input to {@code CoreMigratorAgent} (Agent 3).
@@ -41,7 +42,19 @@ public record ApprovedPlan(
          * are preserved even if AI providers are unavailable on this retry.
          * {@code null} on the first attempt.
          */
-        MigrationArtifact previousArtifact
+        MigrationArtifact previousArtifact,
+
+        /**
+         * Artifact-relative paths of the files implicated in the previous
+         * validation failure (from {@link ValidationReport#failingFilePaths()}).
+         * On a checkpointed retry ({@code previousArtifact != null}) the migrator
+         * narrows the LLM pass to these files and keeps everything else verbatim
+         * from the checkpoint — re-migrating healthy files hands the model a
+         * fresh chance to corrupt output that already passed the guard chain.
+         * Empty on the first attempt or when no runner produced per-file
+         * findings (e.g. a boot timeout); empty means "no narrowing".
+         */
+        List<String> failingPaths
 
 ) implements Serializable {
     public ApprovedPlan {
@@ -49,6 +62,13 @@ public record ApprovedPlan(
         if (approvedBy == null) approvedBy = "auto";
         if (approvedAt == null) approvedAt = Instant.EPOCH;
         // retryContext and previousArtifact may be null — intentional
+        failingPaths = failingPaths != null ? List.copyOf(failingPaths) : List.of();
+    }
+
+    /** Back-compat canonical shape from before {@code failingPaths} existed. */
+    public ApprovedPlan(MigrationPlan plan, String approvedBy, Instant approvedAt,
+                        String retryContext, MigrationArtifact previousArtifact) {
+        this(plan, approvedBy, approvedAt, retryContext, previousArtifact, List.of());
     }
 
     public static ApprovedPlan autoApproved(MigrationPlan plan) {
@@ -61,5 +81,10 @@ public record ApprovedPlan(
 
     public ApprovedPlan withRetryContext(String context, MigrationArtifact artifact) {
         return new ApprovedPlan(plan, approvedBy, approvedAt, context, artifact);
+    }
+
+    public ApprovedPlan withRetryContext(String context, MigrationArtifact artifact,
+                                         List<String> failingPaths) {
+        return new ApprovedPlan(plan, approvedBy, approvedAt, context, artifact, failingPaths);
     }
 }

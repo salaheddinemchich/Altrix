@@ -1,6 +1,7 @@
 package com.altrix.common.domain.model;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import lombok.Builder;
 import lombok.With;
 
@@ -24,6 +25,10 @@ public record ProjectContext(
         /** MinIO storage key of the uploaded project ZIP. */
         String storageKey,
         ConfigFormatPreference configFormatPreference,
+
+        /** Only meaningful when the detected source is Jakarta EE; ignored otherwise. */
+        JakartaMessagingTarget jakartaMessagingTarget,
+
         DetectionResult detectionResult,
         List<String> pubSubTopics,
         List<String> pubSubSubscriptions,

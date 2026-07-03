@@ -47,7 +47,7 @@ class DockerSandboxRunnerTest {
                 .content("class Foo {}")
                 .changeType(FileChangeType.MODIFIED).diffSummary("rewrite")
                 .build();
-        MigrationArtifact art = new MigrationArtifact("p1", List.of(java), "done");
+        MigrationArtifact art = new MigrationArtifact("p1", List.of(java), "done", null);
 
         List<SandboxFinding> findings = r.run(art);
         assertThat(findings).hasSize(1);

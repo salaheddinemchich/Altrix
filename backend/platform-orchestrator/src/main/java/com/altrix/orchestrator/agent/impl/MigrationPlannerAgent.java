@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.agent.impl;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.model.AnalysisReport;
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.domain.port.MigrationAgent;
@@ -110,12 +111,13 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
         if (cached.isPresent()) {
             log.info("[{}] similarity cache HIT for project='{}' — skipping AI call",
                     getName(), input.projectId());
-            return cached.get();
+            return withCurrentJakartaMessagingTarget(cached.get(), input.jakartaMessagingTarget());
         }
 
         try {
             String response = aiPort.chatFast(SYSTEM_PROMPT, buildUserContent(input));
-            MigrationPlan plan = parsePlan(input.projectId(), input.storageKey(), response);
+            MigrationPlan plan = parsePlan(input.projectId(), input.storageKey(), response,
+                    input.jakartaMessagingTarget());
             plan = filterHallucinatedFiles(plan);
             planSimilarityService.store(input, plan);
             return plan;
@@ -170,7 +172,7 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
         return new MigrationPlan(
                 plan.projectId(), plan.storageKey(), plan.targetStack(),
                 plan.steps(), plan.riskLevel(), plan.estimatedEffort(),
-                plan.summary(), kept);
+                plan.summary(), kept, plan.jakartaMessagingTarget());
     }
 
     private String buildUserContent(AnalysisReport report) {
@@ -181,17 +183,19 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
                 report.summary());
     }
 
-    private MigrationPlan parsePlan(String projectId, String storageKey, String response) {
+    private MigrationPlan parsePlan(String projectId, String storageKey, String response,
+                                     JakartaMessagingTarget jakartaMessagingTarget) {
         try {
             JsonNode root = MAPPER.readTree(extractJson(response));
-            String targetStack = root.path("targetStack").asText("Spring Boot 3 + Apache Kafka");
+            String targetStack = resolveTargetStack(
+                    root.path("targetStack").asText("Spring Boot 3 + Apache Kafka"), jakartaMessagingTarget);
             List<String> steps = toStringList(root.path("steps"));
             String riskLevel = root.path("riskLevel").asText("MEDIUM");
             String estimatedEffort = root.path("estimatedEffort").asText("TBD");
             String summary = root.path("summary").asText("");
             List<String> targetFiles = toStringList(root.path("targetFiles"));
             return new MigrationPlan(projectId, storageKey, targetStack, steps,
-                    riskLevel, estimatedEffort, summary, targetFiles);
+                    riskLevel, estimatedEffort, summary, targetFiles, jakartaMessagingTarget);
         } catch (Exception e) {
             log.warn("[{}] failed to parse AI response: {}", getName(), e.getMessage());
             throw new RuntimeException("Plan parse failed", e);
@@ -202,8 +206,46 @@ public class MigrationPlannerAgent implements MigrationAgent<AnalysisReport, Mig
         String summary = report.summary().isBlank()
                 ? "Migration plan — no steps generated (AI unavailable)"
                 : "Migration plan based on: " + report.summary();
+        String targetStack = resolveTargetStack("Spring Boot 3 + Apache Kafka", report.jakartaMessagingTarget());
         return new MigrationPlan(report.projectId(), report.storageKey(),
-                "Spring Boot 3 + Apache Kafka", List.of(), "MEDIUM", "TBD", summary, List.of());
+                targetStack, List.of(), "MEDIUM", "TBD", summary, List.of(), report.jakartaMessagingTarget());
+    }
+
+    private static final String HYBRID_TARGET_STACK = "Jakarta EE + Apache Kafka (Spring Kafka hybrid)";
+    private static final String HYBRID_TARGET_STACK_SUFFIX = " (Spring Kafka hybrid)";
+
+    /**
+     * Never trust the AI to know about the user's explicit Jakarta-messaging
+     * toggle — force the deterministic label when hybrid is selected. When
+     * NOT hybrid, strip the hybrid suffix if present (a no-op for a fresh AI
+     * response, but necessary when re-labelling a cached plan that was
+     * originally produced for a hybrid request — see
+     * {@link #withCurrentJakartaMessagingTarget}) and otherwise keep
+     * whatever the model (or fallback default) produced.
+     */
+    private static String resolveTargetStack(String aiTargetStack, JakartaMessagingTarget jakartaMessagingTarget) {
+        if (jakartaMessagingTarget == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+            return HYBRID_TARGET_STACK;
+        }
+        return aiTargetStack == null ? null : aiTargetStack.replace(HYBRID_TARGET_STACK_SUFFIX, "");
+    }
+
+    /**
+     * The similarity cache key is purely content-derived (dependency Jaccard
+     * overlap + Spring Boot major version) — {@code jakartaMessagingTarget} is
+     * user-selected metadata about HOW to migrate, not WHAT the source
+     * contains, so it must never participate in that key.  Instead, every
+     * cache hit is corrected here: the returned plan always reflects the
+     * CURRENT request's target, never whatever was baked into the cached
+     * plan from a previous (possibly different) request.
+     */
+    private static MigrationPlan withCurrentJakartaMessagingTarget(MigrationPlan cached,
+                                                                     JakartaMessagingTarget jakartaMessagingTarget) {
+        if (cached.jakartaMessagingTarget() == jakartaMessagingTarget) return cached;
+        String targetStack = resolveTargetStack(cached.targetStack(), jakartaMessagingTarget);
+        return new MigrationPlan(cached.projectId(), cached.storageKey(), targetStack,
+                cached.steps(), cached.riskLevel(), cached.estimatedEffort(),
+                cached.summary(), cached.targetFiles(), jakartaMessagingTarget);
     }
 
     private static String extractJson(String response) {

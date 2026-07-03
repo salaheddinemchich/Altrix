@@ -62,7 +62,63 @@ public record SemanticValidationReport(
          * redundant; the migrator should be constrained to the minimal form.
          * Flagged for the AI repair tier — NOT auto-deleted (too risky).
          */
-        SPRING_OVERENGINEERING
+        SPRING_OVERENGINEERING,
+        /**
+         * Jakarta EE + Spring Kafka hybrid only — a CDI persistence/business
+         * class reached from a Spring {@code @KafkaListener} via
+         * {@code CdiLookup.get(...)} that is still {@code @ApplicationScoped}
+         * instead of {@code @Stateless}, or a {@code CdiLookup.get(...)} call
+         * whose target cannot be statically resolved at all.  A Kafka
+         * consumer thread carries no JTA transaction; only an EJB proxy
+         * boundary creates one.  Defense-in-depth for whatever
+         * {@code CdiStatelessConverter}'s static scan in the migrator
+         * couldn't already auto-fix — flagged for the AI repair tier, not
+         * auto-deleted.
+         */
+        SPRING_KAFKA_TX_GAP,
+        /**
+         * Jakarta EE + Spring Kafka hybrid only — {@code SPRING_KAFKA_HYBRID}
+         * was selected but the final migrated artifact contains no
+         * {@code @KafkaListener} at all, so the deterministic
+         * {@code HybridScaffoldingGenerator} produced no bridge classes
+         * ({@code SpringKafkaConfig} / {@code CdiLookup} / …). A hybrid
+         * migration with zero listeners means something upstream went wrong —
+         * every former Pub/Sub consumer should have become a
+         * {@code @KafkaListener}. Flagged for the AI repair tier / human
+         * review, not auto-fixed.
+         */
+        SPRING_KAFKA_NO_LISTENERS_FOUND,
+        /**
+         * Jakarta EE + Spring Kafka hybrid only — a migrated file drifted
+         * toward the raw kafka-clients pattern (constructing
+         * {@code KafkaProducer} / {@code KafkaConsumer} / {@code AdminClient}
+         * directly, or calling {@code producerProperties()} /
+         * {@code consumerProperties()} / {@code adminProperties()}) instead of
+         * the hybrid target's {@code KafkaTemplate} / {@code @KafkaListener}
+         * idiom. The rewrite into {@code KafkaTemplate.send(...)} is too
+         * creative to auto-fix safely (it would risk reproducing the exact
+         * hallucination this defends against), so it is detect-only — flagged
+         * for the AI repair tier with a precise, mechanical instruction.
+         */
+        SPRING_KAFKA_TARGET_DRIFT,
+        /**
+         * Jakarta EE + Spring Kafka hybrid only — a Pub/Sub consumer that the
+         * deterministic {@code HybridConsumerTransformer} could not fully
+         * convert, fired <b>per method</b> (distinct from
+         * {@code SPRING_KAFKA_NO_LISTENERS_FOUND}, which fires only when ZERO
+         * consumers convert). Two shapes:
+         * <ul>
+         *   <li>a {@code @KafkaListener} method whose body still calls
+         *       {@code pubsub.publish(...)} — the deterministic transform
+         *       converted the method's structure but deferred the
+         *       publish→{@code KafkaTemplate.send} rewrite (a message-shape
+         *       judgement call) to a targeted retry;</li>
+         *   <li>a method still calling {@code PubSubService.consume(...)} — the
+         *       class was left for the LLM (shape mismatch / no topic binding).</li>
+         * </ul>
+         * Detect-only with a precise, mechanical retry instruction.
+         */
+        SPRING_KAFKA_CONSUMER_NOT_CONVERTED
     }
 
     public static SemanticValidationReport clean(String projectId, int fileCount) {

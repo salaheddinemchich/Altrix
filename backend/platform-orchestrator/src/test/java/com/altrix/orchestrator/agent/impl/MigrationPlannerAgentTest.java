@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.agent.impl;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.model.AnalysisReport;
 import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.exception.AgentFailureException;
@@ -49,7 +50,7 @@ class MigrationPlannerAgentTest {
     @Test
     void execute_aiProvidesStructuredPlan() {
         AnalysisReport input = new AnalysisReport(
-                "p1", "uploads/p1.zip", List.of("c1"), List.of("i1"), "ran analysis");
+                "p1", "uploads/p1.zip", List.of("c1"), List.of("i1"), "ran analysis", null);
         when(aiPort.chatFast(anyString(), anyString())).thenReturn("""
                 {"targetStack":"Spring Boot 3 + Kafka","steps":["Step 1: Replace PubSub"],\
                 "riskLevel":"MEDIUM","estimatedEffort":"3 days","summary":"migrate p1"}""");
@@ -69,9 +70,9 @@ class MigrationPlannerAgentTest {
     @Test
     void execute_similarityCacheHit_returnsCachedPlan_skipsAi() {
         AnalysisReport input = new AnalysisReport(
-                "p1", "uploads/p1.zip", List.of("c1"), List.of("Google Pub/Sub"), "ran analysis");
+                "p1", "uploads/p1.zip", List.of("c1"), List.of("Google Pub/Sub"), "ran analysis", null);
         MigrationPlan cached = new MigrationPlan("p1", "", "Spring Boot 3 + Kafka",
-                List.of("Step 1"), "LOW", "1 day", "cached plan", List.of());
+                List.of("Step 1"), "LOW", "1 day", "cached plan", List.of(), null);
         when(planSimilarityService.findSimilar(input)).thenReturn(Optional.of(cached));
 
         MigrationPlan plan = agent.execute(input);
@@ -84,7 +85,7 @@ class MigrationPlannerAgentTest {
     @Test
     void execute_aiFails_fallsBackToBasicPlan() {
         AnalysisReport input = new AnalysisReport(
-                "p1", "uploads/p1.zip", List.of(), List.of(), "ran analysis");
+                "p1", "uploads/p1.zip", List.of(), List.of(), "ran analysis", null);
         when(aiPort.chatFast(anyString(), anyString())).thenThrow(new RuntimeException("AI down"));
 
         MigrationPlan plan = agent.execute(input);
@@ -114,7 +115,7 @@ class MigrationPlannerAgentTest {
     @Test
     void execute_filtersTargetFilesNotPresentInSourceZip() {
         AnalysisReport input = new AnalysisReport(
-                "p1", "uploads/p1.zip", List.of("c1"), List.of("i1"), "ran analysis");
+                "p1", "uploads/p1.zip", List.of("c1"), List.of("i1"), "ran analysis", null);
         // AI proposes both a real file and a hallucinated one
         when(aiPort.chatFast(anyString(), anyString())).thenReturn("""
                 {"targetStack":"Spring Boot 3 + Kafka","steps":["Step 1"],\
@@ -126,5 +127,114 @@ class MigrationPlannerAgentTest {
         MigrationPlan plan = agent.execute(input);
 
         assertThat(plan.targetFiles()).containsExactly("src/main/java/Real.java");
+    }
+
+    @Test
+    void execute_threadsJakartaMessagingTarget_fromAnalysisReportOntoPlan() {
+        AnalysisReport input = new AnalysisReport("p1", "uploads/p1.zip", List.of("c1"), List.of("i1"),
+                "ran analysis", JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        when(aiPort.chatFast(anyString(), anyString())).thenReturn("""
+                {"targetStack":"Jakarta EE + Apache Kafka","steps":["Step 1"],\
+                "riskLevel":"MEDIUM","estimatedEffort":"3 days","summary":"migrate p1"}""");
+
+        MigrationPlan plan = agent.execute(input);
+
+        assertThat(plan.jakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+    }
+
+    @Test
+    void execute_hybridTarget_deterministicallyOverridesTargetStack_regardlessOfAiOutput() {
+        AnalysisReport input = new AnalysisReport("p1", "uploads/p1.zip", List.of("c1"), List.of("i1"),
+                "ran analysis", JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        when(aiPort.chatFast(anyString(), anyString())).thenReturn("""
+                {"targetStack":"Spring Boot 3 + Apache Kafka","steps":["Step 1"],\
+                "riskLevel":"MEDIUM","estimatedEffort":"3 days","summary":"migrate p1"}""");
+
+        MigrationPlan plan = agent.execute(input);
+
+        assertThat(plan.targetStack()).isEqualTo("Jakarta EE + Apache Kafka (Spring Kafka hybrid)");
+    }
+
+    @Test
+    void execute_nativeTarget_doesNotOverrideAiTargetStack() {
+        AnalysisReport input = new AnalysisReport("p1", "uploads/p1.zip", List.of("c1"), List.of("i1"),
+                "ran analysis", JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+        when(aiPort.chatFast(anyString(), anyString())).thenReturn("""
+                {"targetStack":"Jakarta EE + Apache Kafka","steps":["Step 1"],\
+                "riskLevel":"MEDIUM","estimatedEffort":"3 days","summary":"migrate p1"}""");
+
+        MigrationPlan plan = agent.execute(input);
+
+        assertThat(plan.targetStack()).isEqualTo("Jakarta EE + Apache Kafka");
+        assertThat(plan.jakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+    }
+
+    @Test
+    void execute_aiFails_fallbackPlan_carriesJakartaMessagingTargetAndOverridesTargetStack() {
+        AnalysisReport input = new AnalysisReport("p1", "uploads/p1.zip", List.of(), List.of(),
+                "ran analysis", JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        when(aiPort.chatFast(anyString(), anyString())).thenThrow(new RuntimeException("AI down"));
+
+        MigrationPlan plan = agent.execute(input);
+
+        assertThat(plan.jakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        assertThat(plan.targetStack()).isEqualTo("Jakarta EE + Apache Kafka (Spring Kafka hybrid)");
+    }
+
+    // ── Finding 2 regression: similarity cache must never return a stale
+    // jakartaMessagingTarget — the target is user-selected metadata, not
+    // content-derived, so it is never part of the similarity key and must
+    // always be corrected to the CURRENT request's value on every cache hit.
+
+    @Test
+    void execute_similarityCacheHit_overridesStaleJakartaMessagingTarget_toCurrentRequestValue() {
+        AnalysisReport currentRequest = new AnalysisReport("p2", "uploads/p2.zip",
+                List.of("c1"), List.of("Google Pub/Sub"), "ran analysis",
+                JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+        // Cached plan was produced for a DIFFERENT (but similar-enough) project
+        // that had selected the hybrid target.
+        MigrationPlan staleCachedPlan = new MigrationPlan("p1", "", "Jakarta EE + Apache Kafka (Spring Kafka hybrid)",
+                List.of("Step 1"), "LOW", "1 day", "cached plan", List.of(),
+                JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        when(planSimilarityService.findSimilar(currentRequest)).thenReturn(Optional.of(staleCachedPlan));
+
+        MigrationPlan plan = agent.execute(currentRequest);
+
+        assertThat(plan.jakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+        // The hybrid suffix from the stale cached plan must not leak through either.
+        assertThat(plan.targetStack()).isEqualTo("Jakarta EE + Apache Kafka");
+        verify(aiPort, org.mockito.Mockito.never()).chatFast(anyString(), anyString());
+    }
+
+    @Test
+    void execute_similarityCacheHit_overridesNativeCachedPlan_toHybridWhenCurrentRequestIsHybrid() {
+        AnalysisReport currentRequest = new AnalysisReport("p2", "uploads/p2.zip",
+                List.of("c1"), List.of("Google Pub/Sub"), "ran analysis",
+                JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        MigrationPlan staleCachedPlan = new MigrationPlan("p1", "", "Jakarta EE + Apache Kafka",
+                List.of("Step 1"), "LOW", "1 day", "cached plan", List.of(),
+                JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+        when(planSimilarityService.findSimilar(currentRequest)).thenReturn(Optional.of(staleCachedPlan));
+
+        MigrationPlan plan = agent.execute(currentRequest);
+
+        assertThat(plan.jakartaMessagingTarget()).isEqualTo(JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        assertThat(plan.targetStack()).isEqualTo("Jakarta EE + Apache Kafka (Spring Kafka hybrid)");
+    }
+
+    @Test
+    void execute_similarityCacheHit_matchingTarget_returnsCachedPlanInstanceUnmodified() {
+        AnalysisReport currentRequest = new AnalysisReport("p2", "uploads/p2.zip",
+                List.of("c1"), List.of("Google Pub/Sub"), "ran analysis",
+                JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        MigrationPlan cached = new MigrationPlan("p1", "", "Jakarta EE + Apache Kafka (Spring Kafka hybrid)",
+                List.of("Step 1"), "LOW", "1 day", "cached plan", List.of(),
+                JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+        when(planSimilarityService.findSimilar(currentRequest)).thenReturn(Optional.of(cached));
+
+        MigrationPlan plan = agent.execute(currentRequest);
+
+        // No-op rebuild — same target, so the original cached instance is returned as-is.
+        assertThat(plan).isSameAs(cached);
     }
 }

@@ -290,14 +290,29 @@ public class DockerBootHealthRunner implements SandboxRunnerPort {
      * compile failure surfaces in the log; then exec into the produced JAR.
      * {@code exec} replaces the shell so signal handling (and the eventual
      * container removal on stop) work cleanly.
+     *
+     * <p>The launch flag is NOT one-size-fits-all: a Spring Boot fat jar
+     * takes {@code --server.port=}, but a Payara Micro bundle (produced by
+     * {@code payara-micro-maven-plugin}'s {@code bundle} goal, always named
+     * {@code *-microbundle.jar} — see {@code test-altrix}/{@code
+     * test-altrix-kafka}/the Jakarta hybrid target) rejects that flag
+     * outright ({@code "--server.port=8080 is not a valid command line
+     * switch for Payara Micro"}) and exits, which this runner only ever saw
+     * as a boot-health TIMEOUT since nothing in the log ever matched
+     * {@link #BOOT_OK}. The jar filename is a purely mechanical signal we
+     * already have in hand here — no extra framework-detection plumbing
+     * needed — so branch the launch flag on it instead of guessing.
      */
-    private String buildScript() {
+    String buildScript() {
         return "set -e; "
              + "mvn -B -DskipTests package; "
              + "JAR=$(ls target/*.jar 2>/dev/null | grep -v '\\-sources\\|\\-javadoc' | head -1); "
              + "if [ -z \"$JAR\" ]; then echo '[boot-health] no jar built under target/'; exit 2; fi; "
              + "echo \"[boot-health] launching $JAR\"; "
-             + "exec java -jar \"$JAR\" --server.port=" + CONTAINER_PORT;
+             + "case \"$JAR\" in "
+             + "*-microbundle.jar) exec java -jar \"$JAR\" --port " + CONTAINER_PORT + " ;; "
+             + "*) exec java -jar \"$JAR\" --server.port=" + CONTAINER_PORT + " ;; "
+             + "esac";
     }
 
     /** Start the container, then read back the host port Docker actually assigned. */

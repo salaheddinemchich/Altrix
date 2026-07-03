@@ -1,0 +1,76 @@
+package ${package};
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+/**
+ * Owns the lifecycle of the manually-created Spring {@code ApplicationContext}
+ * that lives alongside Jakarta EE's own CDI container. There is no Spring Boot
+ * involved — {@link AnnotationConfigApplicationContext}'s constructor already
+ * scans {@code SpringKafkaConfig} and calls {@code refresh()} itself, which is
+ * the point at which {@code @EnableKafka}'s post-processor registers every
+ * {@code @KafkaListener} method found via {@code @ComponentScan}.
+ *
+ * <p>Started by {@code AppStartupListener.contextInitialized} and stopped by
+ * {@code AppStartupListener.contextDestroyed}. Closing it on shutdown matters:
+ * without it, an app-server hot-redeploy (Payara/WildFly routinely redeploy
+ * without restarting the JVM) leaks this context and its Kafka consumer
+ * poll threads on every redeploy.
+ *
+ * <p>This file is generated deterministically by Altrix's
+ * {@code HybridScaffoldingGenerator}, NOT freehanded by the model — it encodes
+ * two lifecycle invariants that have specifically broken before and must not
+ * regress:
+ * <ul>
+ *   <li><b>start() force-closes any existing context first</b> rather than
+ *       warning and returning, so a double-start (e.g. a redeploy that fires
+ *       contextInitialized twice) can never leave two live contexts each with
+ *       their own consumer threads.</li>
+ *   <li><b>stop() nulls the static reference BEFORE calling close()</b>, never
+ *       after. If close() throws, a stale-but-still-referenced context is worse
+ *       than a null one; nulling first guarantees a failed close can't leave
+ *       dangling state behind a non-null reference.</li>
+ * </ul>
+ */
+public final class SpringContextBootstrapper {
+
+    private static final Logger log = LoggerFactory.getLogger(SpringContextBootstrapper.class);
+
+    private static volatile AnnotationConfigApplicationContext context;
+
+    private SpringContextBootstrapper() {
+    }
+
+    public static synchronized void start() {
+        if (context != null) {
+            // Force-close the existing context before starting a new one —
+            // never just warn and continue, which would leak the old context
+            // and its Kafka consumer threads.
+            log.warn("Spring context already started — force-closing the existing one before restarting");
+            stop();
+        }
+        log.info("Bootstrapping manual Spring ApplicationContext for spring-kafka");
+        context = new AnnotationConfigApplicationContext(SpringKafkaConfig.class);
+        log.info("Spring ApplicationContext ready — @KafkaListener beans registered");
+    }
+
+    public static synchronized void stop() {
+        AnnotationConfigApplicationContext ctx = context;
+        if (ctx == null) return;
+        log.info("Closing manual Spring ApplicationContext");
+        // Null the static reference FIRST, then close: if close() throws, a
+        // stale-but-still-referenced context is worse than a null one.
+        context = null;
+        ctx.close();
+    }
+
+    public static AnnotationConfigApplicationContext context() {
+        AnnotationConfigApplicationContext ctx = context;
+        if (ctx == null) {
+            throw new IllegalStateException(
+                    "Spring context not started — AppStartupListener.contextInitialized must run first");
+        }
+        return ctx;
+    }
+}

@@ -86,7 +86,8 @@ class DockerSandboxRunnerOriginalProjectSmokeTest {
         MigrationArtifact artifact = new MigrationArtifact(
                 "smoke-" + UUID.randomUUID(),
                 files,
-                "Original project, no migration applied — sandbox correctness probe");
+                "Original project, no migration applied — sandbox correctness probe",
+                null);
 
         System.out.println("[smoke] staged " + files.size() + " file(s) from " + root);
 

@@ -1,6 +1,7 @@
 package com.altrix.orchestrator.agent.impl;
 
 import com.altrix.common.domain.enums.FileChangeType;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.orchestrator.domain.model.semantic.SemanticValidationReport.Category;
@@ -12,6 +13,10 @@ import com.altrix.orchestrator.infrastructure.semantic.DeterministicRepairEngine
 import com.altrix.orchestrator.infrastructure.semantic.JavaxToJakartaRewriter;
 import com.altrix.orchestrator.infrastructure.semantic.LombokConstructorReconciler;
 import com.altrix.orchestrator.infrastructure.semantic.MessagingConfigRepairer;
+import com.altrix.orchestrator.infrastructure.hybrid.CdiLookupCallScanner;
+import com.altrix.orchestrator.infrastructure.hybrid.HybridConsumerConversionDetector;
+import com.altrix.orchestrator.infrastructure.hybrid.SpringKafkaTargetConformanceDetector;
+import com.altrix.orchestrator.infrastructure.hybrid.SpringKafkaTxGapDetector;
 import com.altrix.orchestrator.infrastructure.semantic.SpringKafkaOverEngineeringDetector;
 import com.altrix.orchestrator.infrastructure.semantic.SpringValueConstructorInjectionFixer;
 import org.junit.jupiter.api.Test;
@@ -41,7 +46,8 @@ class SemanticValidatorAgentTest {
                 new DeterministicRepairEngine(kb), new DependencyValidator(kb),
                 new JavaxToJakartaRewriter(), new LombokConstructorReconciler(),
                 new SpringValueConstructorInjectionFixer(), new MessagingConfigRepairer(),
-                new SpringKafkaOverEngineeringDetector());
+                new SpringKafkaOverEngineeringDetector(), new SpringKafkaTxGapDetector(new CdiLookupCallScanner()),
+                new SpringKafkaTargetConformanceDetector(), new HybridConsumerConversionDetector());
     }
 
     private MigratedFile java(String path, String content) {
@@ -55,7 +61,7 @@ class SemanticValidatorAgentTest {
         var agent = agent(kb(List.of()));
         var artifact = new MigrationArtifact("p1", List.of(
                 java("p/Foo.java", "package p;\nimport org.apache.kafka.clients.producer.KafkaProducer;\npublic class Foo {}")),
-                "ok");
+                "ok", null);
 
         MigrationArtifact out = agent.execute(artifact);
 
@@ -123,7 +129,7 @@ class SemanticValidatorAgentTest {
                 MigratedFile.builder().originalPath("pom.xml").newPath("pom.xml")
                         .content("<project/>").changeType(FileChangeType.MODIFIED)
                         .diffSummary("x").build()),
-                "ok");
+                "ok", null);
         // No java files → nothing to validate → pass-through, clean.
         assertThat(agent.execute(artifact)).isSameAs(artifact);
     }
@@ -139,7 +145,7 @@ class SemanticValidatorAgentTest {
     void detectsMissingKafkaDependencyViaPom() {
         var kbWithDeps = new KafkaMigrationKnowledgeBase(List.of(),
                 List.of(new KafkaMigrationKnowledgeBase.ClassDependency(
-                        "org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients")),
+                        "org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients", false)),
                 List.of(), List.of());
         var agent = agent(kbWithDeps);
         var report = agent.validate("p1", Map.of(
@@ -163,7 +169,7 @@ class SemanticValidatorAgentTest {
         // File uses KafkaConsumer but doesn't import it.
         var artifact = new MigrationArtifact("p1", List.of(
                 java("p/S.java", "package p;\npublic class S { KafkaConsumer<String,String> c; }")),
-                "ok");
+                "ok", null);
 
         MigrationArtifact out = agent.execute(artifact);
 
@@ -171,5 +177,49 @@ class SemanticValidatorAgentTest {
         assertThat(out).isNotSameAs(artifact);
         assertThat(out.files().get(0).content())
                 .contains("import org.apache.kafka.clients.consumer.KafkaConsumer;");
+    }
+
+    // ── Jakarta EE + Spring Kafka hybrid: SPRING_KAFKA_TX_GAP wiring ──────
+
+    private static final String HYBRID_LISTENER = """
+            package p;
+            import org.springframework.kafka.annotation.KafkaListener;
+            import org.springframework.stereotype.Component;
+            import com.example.config.CdiLookup;
+            @Component
+            public class OrderListener {
+                @KafkaListener(topics = "orders")
+                public void handle(String m) {
+                    CdiLookup.get(OrderStore.class).markPaid("x");
+                }
+            }""";
+
+    private static final String UNCONVERTED_STORE = """
+            package p;
+            import jakarta.enterprise.context.ApplicationScoped;
+            @ApplicationScoped
+            public class OrderStore {
+                public void markPaid(String id) { }
+            }""";
+
+    @Test
+    void hybridTarget_flagsSpringKafkaTxGap_whenCdiTargetStillApplicationScoped() {
+        var agent = agent(kb(List.of()));
+        var report = agent.validate("p1",
+                Map.of("p/OrderListener.java", HYBRID_LISTENER, "p/OrderStore.java", UNCONVERTED_STORE),
+                null, JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+
+        assertThat(report.clean()).isFalse();
+        assertThat(report.countOf(Category.SPRING_KAFKA_TX_GAP)).isEqualTo(1);
+    }
+
+    @Test
+    void nativeTarget_neverRunsSpringKafkaTxGapCheck_evenWithSameViolation() {
+        var agent = agent(kb(List.of()));
+        var report = agent.validate("p1",
+                Map.of("p/OrderListener.java", HYBRID_LISTENER, "p/OrderStore.java", UNCONVERTED_STORE),
+                null, JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+
+        assertThat(report.countOf(Category.SPRING_KAFKA_TX_GAP)).isZero();
     }
 }

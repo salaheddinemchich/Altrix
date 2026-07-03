@@ -27,7 +27,7 @@ class BuildSystemDetectorTest {
     @BeforeEach
     void setUp() {
         detector = new BuildSystemDetector();
-        baseProject = Project.create("user-1", "app.zip", "uploads/app.zip", null);
+        baseProject = Project.create("user-1", "app.zip", "uploads/app.zip", null, null);
     }
 
     private InputStream zipWith(Map<String, String> entries) throws IOException {

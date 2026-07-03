@@ -39,10 +39,10 @@ class MigrationReportBuilderTest {
     private WorkflowOutcome baseOutcome(ValidationReport validation, List<MigratedFile> files) {
         return new WorkflowOutcome(
                 "p1",
-                new AnalysisReport("p1", "", List.of("OrderService"), List.of("GCP Pub/Sub Publisher"), "Analysis summary"),
+                new AnalysisReport("p1", "", List.of("OrderService"), List.of("GCP Pub/Sub Publisher"), "Analysis summary", null),
                 new MigrationPlan("p1", "uploads/p1.zip", "Spring Boot 3 + Kafka",
-                        List.of("Replace PubSubTemplate with KafkaTemplate"), "MEDIUM", "3 days", "Plan summary", List.of()),
-                new MigrationArtifact("p1", files, "artifact summary"),
+                        List.of("Replace PubSubTemplate with KafkaTemplate"), "MEDIUM", "3 days", "Plan summary", List.of(), null),
+                new MigrationArtifact("p1", files, "artifact summary", null),
                 validation);
     }
 

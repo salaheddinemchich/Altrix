@@ -59,7 +59,8 @@
   <!-- ══ Live pipeline ══════════════════════════════════════════════════════ -->
   <app-pipeline-graph
     [jobId]="job()!.id"
-    [currentStatus]="job()!.status"/>
+    [currentStatus]="job()!.status"
+    [errorMessage]="session()?.errorMessage ?? job()!.errorMessage"/>
 
   <!-- ══ Detailed step timeline (#114) ══════════════════════════════════════ -->
   <div class="card" style="margin-top:16px">
@@ -67,6 +68,7 @@
     <app-session-timeline
       [jobId]="job()!.id"
       [currentStatus]="session()?.status ?? job()!.status"
+      [errorMessage]="session()?.errorMessage ?? job()!.errorMessage"
       [sessionId]="session()?.sessionId ?? null"
       [plan]="session()?.plan ?? null"
       [canApprove]="true"

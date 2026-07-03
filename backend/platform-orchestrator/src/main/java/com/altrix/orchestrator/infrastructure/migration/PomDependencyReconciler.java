@@ -25,6 +25,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static java.util.Map.entry;
+
 /**
  * Deterministic, no-AI safety net for the Pub/Sub → Kafka dependency swap
  * in {@code pom.xml}.
@@ -61,6 +63,32 @@ public class PomDependencyReconciler {
 
     private static final Pattern IMPORT_LINE =
             Pattern.compile("^\\s*import\\s+(?:static\\s+)?([\\w.]+)\\s*;", Pattern.MULTILINE);
+
+    /**
+     * {@link KafkaMigrationKnowledgeBase#dependencyForClass(String)} returns
+     * version-less {@code group:artifact} coordinates by design (its own
+     * javadoc: "version policy is the pom's concern") — fine for its other
+     * two consumers, which only ever read the coordinate, but fatal here:
+     * this class WRITES a real {@code <dependency>} element, and Maven
+     * refuses to even read a project model that declares one without a
+     * {@code <version>} ("'dependencies.dependency.version' ... is
+     * missing"), aborting before compilation gets a chance to run.
+     *
+     * <p>Every version below is already proven to resolve in this exact
+     * production path: {@code kafka-clients} matches the pin used by the
+     * hand-migrated {@code test-altrix-kafka} reference fixture;
+     * {@code spring-kafka} and {@code spring-context} match the versions
+     * the LLM itself already writes elsewhere in a Spring-Kafka-hybrid
+     * target's generated pom.xml. A coordinate with no entry here is
+     * deliberately left un-added (see {@link #addMissingDependencies}) —
+     * an unresolved import is a normal, diagnosable compile error; an
+     * unparseable pom.xml is not.
+     */
+    private static final Map<String, String> FALLBACK_VERSIONS = Map.ofEntries(
+            entry("org.apache.kafka:kafka-clients", "3.9.0"),
+            entry("org.springframework.kafka:spring-kafka", "3.1.6"),
+            entry("org.springframework:spring-context", "6.1.13")
+    );
 
     private final KafkaMigrationKnowledgeBase knowledgeBase;
 
@@ -156,12 +184,20 @@ public class PomDependencyReconciler {
             String[] parts = coordinate.split(":", 2);
             if (parts.length != 2) continue;
 
+            String version = FALLBACK_VERSIONS.get(coordinate);
+            if (version == null) {
+                log.warn("[PomDependencyReconciler] skipping '{}' — no known fallback version, " +
+                        "adding it without one would make pom.xml unparseable by Maven", coordinate);
+                continue;
+            }
+
             Element dependency = doc.createElement("dependency");
             dependency.appendChild(textElement(doc, "groupId", parts[0]));
             dependency.appendChild(textElement(doc, "artifactId", parts[1]));
+            dependency.appendChild(textElement(doc, "version", version));
             dependencies.appendChild(dependency);
             changed = true;
-            log.info("[PomDependencyReconciler] added missing dependency '{}'", coordinate);
+            log.info("[PomDependencyReconciler] added missing dependency '{}:{}'", coordinate, version);
         }
         return changed;
     }

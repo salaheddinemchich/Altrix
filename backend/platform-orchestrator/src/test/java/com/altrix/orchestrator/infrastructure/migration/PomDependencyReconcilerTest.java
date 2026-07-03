@@ -39,12 +39,56 @@ class PomDependencyReconcilerTest {
 
         String result = reconciler(
                 List.of("spring-cloud-gcp-starter-pubsub"),
-                List.of(new ClassDependency("org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients")))
+                List.of(new ClassDependency("org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients", false)))
                 .reconcile(pom, javaFiles);
 
         assertThat(result).doesNotContain("spring-cloud-gcp-starter-pubsub");
         assertThat(result).contains("<groupId>org.apache.kafka</groupId>");
         assertThat(result).contains("<artifactId>kafka-clients</artifactId>");
+        assertThat(result).contains("<version>3.9.0</version>");
+    }
+
+    // ── Regression: job 6da249e5-6b34-42f7-b98c-4969c0809340 — the migrated
+    // SpringKafkaConfig.java legitimately imports org.apache.kafka.clients.admin.*
+    // (for the KafkaAdmin/NewTopic beans), this reconciler correctly added the
+    // missing kafka-clients dependency, but with no <version> — Maven refused
+    // to even read the project model ("dependencies.dependency.version ...
+    // is missing"), failing before compilation could run at all.
+
+    @Test
+    void addedDependencyAlwaysHasAVersion() {
+        String pom = """
+                <project>
+                  <dependencies>
+                  </dependencies>
+                </project>""";
+        Map<String, String> javaFiles = Map.of(
+                "p/SpringKafkaConfig.java",
+                "package p;\nimport org.apache.kafka.clients.admin.NewTopic;\npublic class SpringKafkaConfig {}");
+
+        String result = reconciler(List.of(),
+                List.of(new ClassDependency("org.apache.kafka.clients.admin.*", "org.apache.kafka:kafka-clients", false)))
+                .reconcile(pom, javaFiles);
+
+        assertThat(result).contains("<version>3.9.0</version>");
+    }
+
+    @Test
+    void skipsAddingDependencyWithNoKnownFallbackVersion_ratherThanEmitInvalidXml() {
+        String pom = """
+                <project>
+                  <dependencies>
+                  </dependencies>
+                </project>""";
+        Map<String, String> javaFiles = Map.of(
+                "p/Thing.java",
+                "package p;\nimport com.unknown.lib.Thing;\npublic class Thing {}");
+
+        String result = reconciler(List.of(),
+                List.of(new ClassDependency("com.unknown.lib.*", "com.unknown:lib-no-known-version", false)))
+                .reconcile(pom, javaFiles);
+
+        assertThat(result).isEqualTo(pom);
     }
 
     @Test
@@ -64,7 +108,7 @@ class PomDependencyReconcilerTest {
                 "package p;\nimport org.apache.kafka.clients.consumer.KafkaConsumer;\npublic class Consumer {}");
 
         String result = reconciler(List.of(),
-                List.of(new ClassDependency("org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients")))
+                List.of(new ClassDependency("org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients", false)))
                 .reconcile(pom, javaFiles);
 
         assertThat(result.split("kafka-clients", -1).length - 1).isEqualTo(1);

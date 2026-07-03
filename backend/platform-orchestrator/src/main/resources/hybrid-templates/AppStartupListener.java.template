@@ -1,0 +1,27 @@
+package ${package};
+
+import jakarta.servlet.ServletContextEvent;
+import jakarta.servlet.ServletContextListener;
+import jakarta.servlet.annotation.WebListener;
+
+/**
+ * The Jakarta-native equivalent of Spring Boot's auto-bootstrap: a plain
+ * Servlet lifecycle hook the app server (Payara Micro here) calls
+ * automatically on deploy/undeploy. This is the only place the hybrid bridge
+ * reaches outside the CDI container.
+ *
+ * <p>Generated deterministically by Altrix's {@code HybridScaffoldingGenerator}.
+ */
+@WebListener
+public class AppStartupListener implements ServletContextListener {
+
+    @Override
+    public void contextInitialized(ServletContextEvent sce) {
+        SpringContextBootstrapper.start();
+    }
+
+    @Override
+    public void contextDestroyed(ServletContextEvent sce) {
+        SpringContextBootstrapper.stop();
+    }
+}

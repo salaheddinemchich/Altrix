@@ -53,7 +53,7 @@ class ProjectServiceTest {
         InputStream zip = new ByteArrayInputStream(new byte[]{});
         when(fileStoragePort.store(any(), anyLong(), any())).thenReturn("uploads/key.zip");
 
-        Project detected = Project.create("user-1", "app.zip", "uploads/key.zip", null)
+        Project detected = Project.create("user-1", "app.zip", "uploads/key.zip", null, null)
                 .withDetectionApplied(BuildSystem.GRADLE_KOTLIN, ConfigFormat.YAML, DetectedFramework.SPRING_BOOT,
                         true, java.util.List.of("SPRING_BOOT", "GRADLE_KOTLIN", "GCP_PUBSUB"));
         when(fileStoragePort.retrieve("uploads/key.zip")).thenReturn(zip);
@@ -61,7 +61,7 @@ class ProjectServiceTest {
         when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Project result = projectService.upload(
-                "user-1", "app.zip", zip, 100L, ConfigFormatPreference.KEEP_ORIGINAL);
+                "user-1", "app.zip", zip, 100L, ConfigFormatPreference.KEEP_ORIGINAL, null);
 
         assertThat(result.getStatus()).isEqualTo(ProjectStatus.READY);
         verify(fileStoragePort).store(any(), anyLong(), eq("application/zip"));
@@ -69,8 +69,24 @@ class ProjectServiceTest {
     }
 
     @Test
+    void upload_propagatesExplicitJakartaMessagingTarget_toCreatedProject() throws Exception {
+        InputStream zip = new ByteArrayInputStream(new byte[]{});
+        when(fileStoragePort.store(any(), anyLong(), any())).thenReturn("uploads/key.zip");
+        when(fileStoragePort.retrieve("uploads/key.zip")).thenReturn(zip);
+        when(buildSystemDetector.detect(any(), any(InputStream.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Project result = projectService.upload("user-1", "app.zip", zip, 100L, null,
+                com.altrix.common.domain.enums.JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+
+        assertThat(result.getJakartaMessagingTarget())
+                .isEqualTo(com.altrix.common.domain.enums.JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+    }
+
+    @Test
     void findById_returnsProject_whenExists() {
-        Project project = Project.create("user-1", "app.zip", "key", null);
+        Project project = Project.create("user-1", "app.zip", "key", null, null);
         when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
 
         Project found = projectService.findById(project.getId());
@@ -87,7 +103,7 @@ class ProjectServiceTest {
 
     @Test
     void findAllByUserId_returnsList() {
-        Project p = Project.create("user-1", "app.zip", "key", null);
+        Project p = Project.create("user-1", "app.zip", "key", null, null);
         when(projectRepository.findAllByUserId("user-1")).thenReturn(List.of(p));
 
         List<Project> results = projectService.findAllByUserId("user-1");
@@ -102,7 +118,7 @@ class ProjectServiceTest {
         when(buildSystemDetector.detect(any(), any())).thenThrow(new RuntimeException("bad zip"));
         when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> projectService.upload("user-1", "app.zip", zip, 100L, null))
+        assertThatThrownBy(() -> projectService.upload("user-1", "app.zip", zip, 100L, null, null))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Detection failed");
 
@@ -135,7 +151,7 @@ class ProjectServiceTest {
         // mock returns a project built with createFromGit so the assertions
         // below match what the real detector would do (withDetectionApplied
         // is a @With-based copy that retains all non-detection fields).
-        Project detected = Project.createFromGit("user-1", "widgets", "uploads/clone-key.zip", null,
+        Project detected = Project.createFromGit("user-1", "widgets", "uploads/clone-key.zip", null, null,
                         "https://github.com/acme/widgets.git", "main",
                         com.altrix.project.domain.model.ProjectSource.GIT_CLONE)
                 .withDetectionApplied(BuildSystem.MAVEN, ConfigFormat.YAML, DetectedFramework.SPRING_BOOT,
@@ -150,7 +166,8 @@ class ProjectServiceTest {
                         "main",
                         null,
                         false,
-                        ConfigFormatPreference.KEEP_ORIGINAL));
+                        ConfigFormatPreference.KEEP_ORIGINAL,
+                        null));
 
         // Repo URL → project name (.git stripped)
         assertThat(result.getName()).isEqualTo("widgets");
@@ -169,8 +186,37 @@ class ProjectServiceTest {
     }
 
     @Test
+    void ingestFromGit_propagatesExplicitJakartaMessagingTarget_toCreatedProject(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) throws Exception {
+        java.nio.file.Path workspace = tmp.resolve("clone");
+        java.nio.file.Files.createDirectories(workspace);
+        java.nio.file.Files.writeString(workspace.resolve("pom.xml"), "<project/>");
+
+        when(repositoryIngestion.clone(any())).thenReturn(new com.altrix.project.domain.model.RepositorySnapshot(
+                workspace, "https://github.com/acme/widgets.git", "main", "0".repeat(40),
+                10L, false, java.time.Instant.now()));
+        when(fileStoragePort.store(any(), anyLong(), any())).thenReturn("uploads/clone-key.zip");
+        when(buildSystemDetector.detect(any(), any(InputStream.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Project result = projectService.ingestFromGit(
+                new com.altrix.project.domain.port.in.IngestGitRepositoryUseCase.GitIngestionCommand(
+                        "user-1",
+                        "https://github.com/acme/widgets.git",
+                        "main",
+                        null,
+                        false,
+                        null,
+                        com.altrix.common.domain.enums.JakartaMessagingTarget.SPRING_KAFKA_HYBRID));
+
+        assertThat(result.getJakartaMessagingTarget())
+                .isEqualTo(com.altrix.common.domain.enums.JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+    }
+
+    @Test
     void findLatestByRepoUrl_delegates_to_repository_port() {
-        Project p = Project.createFromGit("user-1", "widgets", "k", null,
+        Project p = Project.createFromGit("user-1", "widgets", "k", null, null,
                 "https://github.com/acme/widgets.git", "main",
                 com.altrix.project.domain.model.ProjectSource.GIT_CLONE);
         when(projectRepository.findLatestByRepoUrl("https://github.com/acme/widgets.git"))
@@ -198,7 +244,7 @@ class ProjectServiceTest {
 
         assertThatThrownBy(() -> projectService.ingestFromGit(
                 new com.altrix.project.domain.port.in.IngestGitRepositoryUseCase.GitIngestionCommand(
-                        "u", "https://example.com/r.git", null, null, false, null)))
+                        "u", "https://example.com/r.git", null, null, false, null, null)))
                 .isInstanceOf(RuntimeException.class);
 
         // Project saved in ERROR state, workspace always cleaned up

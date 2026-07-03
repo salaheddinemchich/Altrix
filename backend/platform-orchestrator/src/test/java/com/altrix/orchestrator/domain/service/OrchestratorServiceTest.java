@@ -3,13 +3,16 @@ package com.altrix.orchestrator.domain.service;
 import com.altrix.common.domain.enums.FileChangeType;
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
+import com.altrix.common.domain.model.MigrationPlan;
 import com.altrix.common.domain.model.ProjectContext;
+import com.altrix.common.domain.model.ValidationReport;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
 import com.altrix.orchestrator.domain.model.session.WorkflowSession;
 import com.altrix.orchestrator.domain.model.workflow.MigrationState;
 import com.altrix.orchestrator.domain.port.out.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -20,6 +23,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -61,7 +65,7 @@ class OrchestratorServiceTest {
         ProjectContext initial = ProjectContext.builder()
                 .jobId("job-1").projectId("proj-1").build();
 
-        MigrationArtifact artifact = new MigrationArtifact("proj-1", List.of(file), "done");
+        MigrationArtifact artifact = new MigrationArtifact("proj-1", List.of(file), "done", null);
         MigrationState result = new MigrationState(Map.of(
                 MigrationState.PROJECT_CONTEXT, initial,
                 MigrationState.MIGRATION_ARTIFACT, artifact,
@@ -80,6 +84,90 @@ class OrchestratorServiceTest {
         verify(progressNotifierPort).notify(eq("job-1"), eq("Pipeline"), eq("DONE"), any());
     }
 
+    // ── Regression: job d2a0e15e-b8e5-4a1c-8694-2d8bf1cc0895 reached END with
+    // a FAILED sandbox validation (compile/test/boot all failed, report said
+    // DO_NOT_DEPLOY) but was still marked DONE, because the graph completing
+    // without throwing was wrongly treated as success. ──────────────────────
+
+    @Test
+    void run_marksFailed_whenWorkflowCompletesButSandboxValidationFailed() {
+        MigratedFile file = MigratedFile.builder()
+                .originalPath("A.java").newPath("A.java")
+                .content("content").changeType(FileChangeType.MODIFIED)
+                .diffSummary("migrated").build();
+
+        ProjectContext initial = ProjectContext.builder()
+                .jobId("job-1").projectId("proj-1").build();
+
+        MigrationArtifact artifact = new MigrationArtifact("proj-1", List.of(file), "done", null);
+        ValidationReport failedValidation = new ValidationReport(
+                "proj-1", false, List.of("compile failed"), "Compile, tests, and boot health all failed");
+        MigrationPlan plan = new MigrationPlan(
+                "proj-1", "storage-key", "Spring Boot 3 + Kafka",
+                List.of(), "MEDIUM", "1d", "summary", List.of("A.java"), null);
+        MigrationState result = new MigrationState(Map.of(
+                MigrationState.PROJECT_CONTEXT, initial,
+                MigrationState.MIGRATION_PLAN, plan,
+                MigrationState.MIGRATION_ARTIFACT, artifact,
+                MigrationState.VALIDATION_REPORT, failedValidation,
+                MigrationState.RETRY_COUNT, 0));
+
+        when(workflowExecution.execute(initial)).thenReturn(result);
+        when(migratedFileStoragePort.storeMigratedZip(eq("job-1"), any()))
+                .thenReturn("migrated/job-1/output.zip");
+
+        service().run(initial);
+
+        verify(jobStatusUpdatePort, never()).markDone(any(), any());
+        verify(jobStatusUpdatePort).markFailed(eq("job-1"), contains("Compile, tests, and boot health all failed"));
+        verify(progressNotifierPort).notify(eq("job-1"), eq("Pipeline"), eq("FAILED"), any());
+
+        // Regression: the session row's errorMessage must carry the SAME
+        // "Sandbox validation failed:" prefix as the job's — the frontend's
+        // stage-backfill heuristic reads session.errorMessage first and only
+        // recognizes that exact prefix to highlight the Validate stage.
+        // Before this fix, the session got the bare summary (no prefix),
+        // so the timeline always defaulted to highlighting "Analyse".
+        ArgumentCaptor<WorkflowSession> sessionCaptor = ArgumentCaptor.forClass(WorkflowSession.class);
+        verify(sessionRepository, atLeastOnce()).save(sessionCaptor.capture());
+        assertThat(sessionCaptor.getValue().errorMessage())
+                .startsWith("Sandbox validation failed:")
+                .contains("Compile, tests, and boot health all failed");
+    }
+
+    @Test
+    void run_marksDone_whenValidationReportPresentAndPassed() {
+        MigratedFile file = MigratedFile.builder()
+                .originalPath("A.java").newPath("A.java")
+                .content("content").changeType(FileChangeType.MODIFIED)
+                .diffSummary("migrated").build();
+
+        ProjectContext initial = ProjectContext.builder()
+                .jobId("job-1").projectId("proj-1").build();
+
+        MigrationArtifact artifact = new MigrationArtifact("proj-1", List.of(file), "done", null);
+        ValidationReport passedValidation = new ValidationReport(
+                "proj-1", true, List.of(), "All checks passed");
+        MigrationPlan plan = new MigrationPlan(
+                "proj-1", "storage-key", "Spring Boot 3 + Kafka",
+                List.of(), "MEDIUM", "1d", "summary", List.of("A.java"), null);
+        MigrationState result = new MigrationState(Map.of(
+                MigrationState.PROJECT_CONTEXT, initial,
+                MigrationState.MIGRATION_PLAN, plan,
+                MigrationState.MIGRATION_ARTIFACT, artifact,
+                MigrationState.VALIDATION_REPORT, passedValidation,
+                MigrationState.RETRY_COUNT, 0));
+
+        when(workflowExecution.execute(initial)).thenReturn(result);
+        when(migratedFileStoragePort.storeMigratedZip(eq("job-1"), any()))
+                .thenReturn("migrated/job-1/output.zip");
+
+        service().run(initial);
+
+        verify(jobStatusUpdatePort).markDone("job-1", "migrated/job-1/output.zip");
+        verify(jobStatusUpdatePort, never()).markFailed(any(), any());
+    }
+
     @Test
     void run_cachesResultAfterSuccess() {
         MigratedFile file = MigratedFile.builder()
@@ -88,7 +176,7 @@ class OrchestratorServiceTest {
         ProjectContext initial = ProjectContext.builder()
                 .jobId("j").projectId("p").build();
 
-        MigrationArtifact artifact = new MigrationArtifact("p", List.of(file), "ok");
+        MigrationArtifact artifact = new MigrationArtifact("p", List.of(file), "ok", null);
         MigrationState state = new MigrationState(Map.of(
                 MigrationState.PROJECT_CONTEXT, initial,
                 MigrationState.MIGRATION_ARTIFACT, artifact,

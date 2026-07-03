@@ -46,7 +46,7 @@ class StaticSandboxRunnerTest {
                 .content("import google.cloud.pubsub; class Listener {}")
                 .changeType(FileChangeType.MODIFIED).diffSummary("partial")
                 .build();
-        List<SandboxFinding> findings = runner.run(new MigrationArtifact("p1", List.of(f), "done"));
+        List<SandboxFinding> findings = runner.run(new MigrationArtifact("p1", List.of(f), "done", null));
         assertThat(findings).anySatisfy(s -> {
             assertThat(s.severity()).isEqualTo(Severity.ERROR);
             assertThat(s.runnerId()).isEqualTo("static");
@@ -62,7 +62,7 @@ class StaticSandboxRunnerTest {
                 .content("import com.google.api.services.pubsub.Pubsub; class Svc {}")
                 .changeType(FileChangeType.MODIFIED).diffSummary("partial")
                 .build();
-        assertThat(runner.run(new MigrationArtifact("p1", List.of(f), "done")))
+        assertThat(runner.run(new MigrationArtifact("p1", List.of(f), "done", null)))
                 .anyMatch(s -> s.severity() == Severity.ERROR
                             && s.message().contains("Legacy GCP Pub/Sub REST v1 import"));
     }
@@ -74,7 +74,7 @@ class StaticSandboxRunnerTest {
                 .content("import google.cloud.pubsub; class Util {}")
                 .changeType(FileChangeType.UNCHANGED).diffSummary("not migrated")
                 .build();
-        List<SandboxFinding> findings = runner.run(new MigrationArtifact("p1", List.of(f), "done"));
+        List<SandboxFinding> findings = runner.run(new MigrationArtifact("p1", List.of(f), "done", null));
         // No per-file error; only the project-level "nothing migrated" WARNING
         // since the artifact has files but none MODIFIED.
         assertThat(findings).allMatch(s -> s.severity() != Severity.ERROR);

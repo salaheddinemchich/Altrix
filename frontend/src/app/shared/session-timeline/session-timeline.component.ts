@@ -57,6 +57,15 @@ export class SessionTimelineComponent implements OnDestroy {
   readonly currentStatus = input<string | null>(null);
 
   /**
+   * The job/session's error message — when {@code currentStatus()} is
+   * FAILED, this disambiguates WHICH stage actually failed (backfillSteps()
+   * otherwise has no signal beyond "first non-DONE stage", which is wrong
+   * for any failure past stage 0 once there are no more live WS events to
+   * replay, e.g. after a page reload).
+   */
+  readonly errorMessage = input<string | null>(null);
+
+  /**
    * Session id — when present, the Validate and Migrate steps render
    * expandable panels (sandbox logs, per-file doc provenance) that
    * lazy-load via SessionService.  Without it, those toggles are hidden.
@@ -395,7 +404,7 @@ export class SessionTimelineComponent implements OnDestroy {
       this.sub?.unsubscribe();
       // Reset + backfill atomically so an in-flight WebSocket apply() can't
       // race the reset and leave the timeline in an inconsistent state.
-      this.steps.set(backfillSteps(initialSteps(), status));
+      this.steps.set(backfillSteps(initialSteps(), status, this.errorMessage()));
       if (!id) return;
       this.sub = this.pipelineApi.watch(id).subscribe(evt => this.apply(evt));
     }, { allowSignalWrites: true });
@@ -912,10 +921,14 @@ function initialSteps(): TimelineStep[] {
  *   MIGRATING                            +Migrate ACTIVE
  *   VALIDATING                           +Validate ACTIVE
  *   DONE / COMPLETED                     all DONE
- *   FAILED                               first non-DONE → ERROR
+ *   FAILED                               see stageIndexForFailure()
  *   PAUSED                               keep existing state
  */
-function backfillSteps(base: TimelineStep[], status: string | null | undefined): TimelineStep[] {
+function backfillSteps(
+  base: TimelineStep[],
+  status: string | null | undefined,
+  errorMessage?: string | null,
+): TimelineStep[] {
   if (!status) return base;
   const s = status.toUpperCase();
   const epoch = Date.now();
@@ -924,8 +937,11 @@ function backfillSteps(base: TimelineStep[], status: string | null | undefined):
 
   if (s === 'FAILED' || s === 'ERROR') {
     const next = [...base];
-    let errIdx = next.findIndex(n => n.status !== 'DONE');
-    if (errIdx === -1) errIdx = 0;
+    const errIdx = stageIndexForFailure(errorMessage, next);
+    for (let i = 0; i < errIdx; i++) {
+      next[i] = { ...next[i], status: 'DONE' as PipelineNodeStatus,
+                  startedAt: next[i].startedAt ?? epoch, endedAt: next[i].endedAt ?? epoch };
+    }
     next[errIdx] = { ...next[errIdx], status: 'ERROR', endedAt: epoch };
     return next;
   }
@@ -957,6 +973,21 @@ function backfillSteps(base: TimelineStep[], status: string | null | undefined):
     }
     return step;
   });
+}
+
+/**
+ * Disambiguates which stage actually failed when all the backfill has to
+ * go on is a coarse FAILED status.  OrchestratorService / ResumeMigration-
+ * Service (backend) prefix the sandbox validator's failure reason with
+ * "Sandbox validation failed:" — recognize that exact text and point at
+ * the Validate stage (index 3) instead of the generic "first non-DONE"
+ * fallback, which always lands on Analyse (index 0) once a job is terminal
+ * and there are no more live WS events to replay.
+ */
+function stageIndexForFailure(errorMessage: string | null | undefined, steps: TimelineStep[]): number {
+  if (errorMessage?.startsWith('Sandbox validation failed:')) return 3;
+  const idx = steps.findIndex(n => n.status !== 'DONE');
+  return idx === -1 ? 0 : idx;
 }
 
 function mapStatus(s: string): PipelineNodeStatus {

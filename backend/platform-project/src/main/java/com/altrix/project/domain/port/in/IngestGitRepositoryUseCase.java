@@ -1,6 +1,7 @@
 package com.altrix.project.domain.port.in;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.project.domain.model.Project;
 
 /**
@@ -32,6 +33,9 @@ public interface IngestGitRepositoryUseCase {
      * @param accessToken            HTTPS token for private repos, {@code null} for public
      * @param shallow                {@code true} to request a shallow clone (depth = 50)
      * @param configFormatPreference user-supplied config-format preference, optional
+     * @param jakartaMessagingTarget user's explicit choice of Jakarta EE messaging
+     *                               output, optional; only meaningful once detection
+     *                               confirms Jakarta EE, ignored otherwise
      */
     record GitIngestionCommand(
             String userId,
@@ -39,7 +43,8 @@ public interface IngestGitRepositoryUseCase {
             String branch,
             String accessToken,
             boolean shallow,
-            ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference,
+            JakartaMessagingTarget jakartaMessagingTarget
     ) {
         public GitIngestionCommand {
             if (userId == null || userId.isBlank()) {

@@ -33,7 +33,7 @@ class JobQueryServiceTest {
 
     @Test
     void findById_returnsJob_whenExists() {
-        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null);
+        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null, null);
         when(jobRepository.findById(job.getId())).thenReturn(Optional.of(job));
 
         MigrationJob result = queryService.findById(job.getId());
@@ -61,7 +61,7 @@ class JobQueryServiceTest {
 
     @Test
     void getStatus_fallsBackToDb_onCacheMiss() {
-        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null).startAnalyzing();
+        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null, null).startAnalyzing();
         when(jobCachePort.getStatus(job.getId())).thenReturn(Optional.empty());
         when(jobRepository.findById(job.getId())).thenReturn(Optional.of(job));
 
@@ -73,7 +73,7 @@ class JobQueryServiceTest {
 
     @Test
     void findAll_delegatesToRepository() {
-        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null);
+        MigrationJob job = MigrationJob.create("proj-1", "user-1", "key", null, null, null);
         JobFilter filter = JobFilter.builder().userId("user-1").build();
         when(jobRepository.findAll(filter)).thenReturn(List.of(job));
 

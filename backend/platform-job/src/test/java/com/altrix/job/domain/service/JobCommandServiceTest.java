@@ -38,10 +38,10 @@ class JobCommandServiceTest {
 
     @Test
     void createJob_savesAndPublishesAndCaches() {
-        MigrationJob saved = MigrationJob.create("proj-1", "user-1", "key", null, null);
+        MigrationJob saved = MigrationJob.create("proj-1", "user-1", "key", null, null, null);
         when(jobRepository.save(any())).thenReturn(saved);
 
-        MigrationJob result = commandService.createJob("proj-1", "user-1", "key", null, null);
+        MigrationJob result = commandService.createJob("proj-1", "user-1", "key", null, null, null);
 
         assertThat(result.getStatus()).isEqualTo(JobStatus.PENDING);
         verify(jobRepository).save(any());
@@ -51,7 +51,7 @@ class JobCommandServiceTest {
 
     @Test
     void markAnalyzing_transitionsStatus() {
-        MigrationJob pending  = MigrationJob.create("proj-1", "user-1", "key", null, null);
+        MigrationJob pending  = MigrationJob.create("proj-1", "user-1", "key", null, null, null);
         MigrationJob analyzing = pending.startAnalyzing();
         when(jobRepository.findById("job-id")).thenReturn(Optional.of(pending));
         when(jobRepository.save(any())).thenReturn(analyzing);
@@ -64,7 +64,7 @@ class JobCommandServiceTest {
 
     @Test
     void markDone_publishesCompletedEvent() {
-        MigrationJob migrating = MigrationJob.create("proj-1", "user-1", "key", null, null)
+        MigrationJob migrating = MigrationJob.create("proj-1", "user-1", "key", null, null, null)
                 .startAnalyzing().startMigrating();
         MigrationJob done      = migrating.complete("output.zip");
         when(jobRepository.findById("job-id")).thenReturn(Optional.of(migrating));
@@ -78,7 +78,7 @@ class JobCommandServiceTest {
 
     @Test
     void markFailed_setsErrorAndPublishes() {
-        MigrationJob analyzing = MigrationJob.create("proj-1", "user-1", "key", null, null).startAnalyzing();
+        MigrationJob analyzing = MigrationJob.create("proj-1", "user-1", "key", null, null, null).startAnalyzing();
         MigrationJob failed    = analyzing.fail("AI timeout");
         when(jobRepository.findById("job-id")).thenReturn(Optional.of(analyzing));
         when(jobRepository.save(any())).thenReturn(failed);
@@ -91,7 +91,7 @@ class JobCommandServiceTest {
 
     @Test
     void markMigrating_transitionsStatus() {
-        MigrationJob analyzing = MigrationJob.create("proj-1", "user-1", "key", null, null).startAnalyzing();
+        MigrationJob analyzing = MigrationJob.create("proj-1", "user-1", "key", null, null, null).startAnalyzing();
         MigrationJob migrating = analyzing.startMigrating();
         when(jobRepository.findById("job-id")).thenReturn(Optional.of(analyzing));
         when(jobRepository.save(any())).thenReturn(migrating);

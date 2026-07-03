@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.agent.impl;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.model.MigratedFile;
 import com.altrix.common.domain.model.MigrationArtifact;
 import com.altrix.common.domain.port.MigrationAgent;
@@ -18,6 +19,9 @@ import com.altrix.orchestrator.infrastructure.semantic.DeterministicRepairEngine
 import com.altrix.orchestrator.infrastructure.semantic.JavaxToJakartaRewriter;
 import com.altrix.orchestrator.infrastructure.semantic.LombokConstructorReconciler;
 import com.altrix.orchestrator.infrastructure.semantic.MessagingConfigRepairer;
+import com.altrix.orchestrator.infrastructure.hybrid.HybridConsumerConversionDetector;
+import com.altrix.orchestrator.infrastructure.hybrid.SpringKafkaTargetConformanceDetector;
+import com.altrix.orchestrator.infrastructure.hybrid.SpringKafkaTxGapDetector;
 import com.altrix.orchestrator.infrastructure.semantic.SpringKafkaOverEngineeringDetector;
 import com.altrix.orchestrator.infrastructure.semantic.SpringValueConstructorInjectionFixer;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +68,9 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
     private final SpringValueConstructorInjectionFixer springValueFixer;
     private final MessagingConfigRepairer messagingConfigRepairer;
     private final SpringKafkaOverEngineeringDetector overEngineeringDetector;
+    private final SpringKafkaTxGapDetector springKafkaTxGapDetector;
+    private final SpringKafkaTargetConformanceDetector targetConformanceDetector;
+    private final HybridConsumerConversionDetector consumerConversionDetector;
 
     private static final Pattern IMPORT_LINE = Pattern.compile(
             "^\\s*import\\s+(?:static\\s+)?([\\w.]+)\\s*;", Pattern.MULTILINE);
@@ -168,17 +175,23 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
         }
 
         // ── Validate (post-repair) ───────────────────────────────────────
-        SemanticValidationReport report = validate(input.projectId(), javaFiles, pomXml);
+        SemanticValidationReport report = validate(input.projectId(), javaFiles, pomXml, input.jakartaMessagingTarget());
         if (report.clean()) {
             log.info("[{}] {}", getName(), report.summary());
         } else {
-            log.warn("[{}] {} — contract={}, leak={}, forbidden-import={}, missing-dep={}, spring-overeng={} (after {} deterministic fix(es))",
+            log.warn("[{}] {} — contract={}, leak={}, forbidden-import={}, missing-dep={}, spring-overeng={}, "
+                            + "spring-kafka-tx-gap={}, target-drift={}, no-listeners={}, consumer-not-converted={} "
+                            + "(after {} deterministic fix(es))",
                     getName(), report.summary(),
                     report.countOf(Category.CONTRACT),
                     report.countOf(Category.PUBSUB_LEAK),
                     report.countOf(Category.FORBIDDEN_IMPORT),
                     report.countOf(Category.MISSING_DEPENDENCY),
                     report.countOf(Category.SPRING_OVERENGINEERING),
+                    report.countOf(Category.SPRING_KAFKA_TX_GAP),
+                    report.countOf(Category.SPRING_KAFKA_TARGET_DRIFT),
+                    report.countOf(Category.SPRING_KAFKA_NO_LISTENERS_FOUND),
+                    report.countOf(Category.SPRING_KAFKA_CONSUMER_NOT_CONVERTED),
                     repair.actions().size());
             if (log.isDebugEnabled()) {
                 report.findings().forEach(f -> log.debug("[{}]   {}:{} [{}] {} {}",
@@ -231,7 +244,7 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
                     .diffSummary(diffSummary)
                     .build());
         }
-        return new MigrationArtifact(input.projectId(), rebuilt, input.summary());
+        return new MigrationArtifact(input.projectId(), rebuilt, input.summary(), input.jakartaMessagingTarget());
     }
 
     /**
@@ -240,7 +253,17 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
      * findings on a java-only file map.
      */
     SemanticValidationReport validate(String projectId, Map<String, String> javaFiles) {
-        return validate(projectId, javaFiles, null);
+        return validate(projectId, javaFiles, null, JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+    }
+
+    /**
+     * Convenience overload without an explicit messaging target — defaults to
+     * {@code NATIVE_KAFKA_CLIENTS} (the {@code SPRING_KAFKA_TX_GAP} check is
+     * skipped). Package-private so unit tests not exercising the hybrid
+     * target can keep calling the simpler 3-arg form.
+     */
+    SemanticValidationReport validate(String projectId, Map<String, String> javaFiles, String pomXml) {
+        return validate(projectId, javaFiles, pomXml, JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
     }
 
     /**
@@ -248,8 +271,11 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
      *
      * @param pomXml the project's pom.xml content, or null to skip the
      *               dependency check (Gradle / no build file).
+     * @param jakartaMessagingTarget only when {@code SPRING_KAFKA_HYBRID} does
+     *                               the {@code SPRING_KAFKA_TX_GAP} check run.
      */
-    SemanticValidationReport validate(String projectId, Map<String, String> javaFiles, String pomXml) {
+    SemanticValidationReport validate(String projectId, Map<String, String> javaFiles, String pomXml,
+                                       JakartaMessagingTarget jakartaMessagingTarget) {
         if (javaFiles.isEmpty()) {
             return SemanticValidationReport.clean(projectId, 0);
         }
@@ -269,11 +295,50 @@ public class SemanticValidatorAgent implements MigrationAgent<MigrationArtifact,
         // 3 — KnowledgeBase forbidden-import scan.
         findings.addAll(scanForbiddenImports(javaFiles));
         // 4 — Dependency validation (Kafka class referenced but no dep on the build).
-        findings.addAll(dependencyValidator.validate(javaFiles, pomXml));
+        findings.addAll(dependencyValidator.validate(javaFiles, pomXml, jakartaMessagingTarget));
         // 5 — Spring-Kafka over-engineering (detect-only; flagged for AI repair).
         for (SpringKafkaOverEngineeringDetector.Detection d : overEngineeringDetector.detect(javaFiles)) {
             findings.add(new Finding(Category.SPRING_OVERENGINEERING, d.filePath(), d.line(), d.symbol(),
                     d.message()));
+        }
+        // 6 — Spring-Kafka hybrid transaction gap (detect-only; defense-in-depth
+        // for whatever CdiStatelessConverter's static scan in the migrator
+        // couldn't already auto-fix). Only meaningful for the hybrid target.
+        if (jakartaMessagingTarget == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+            for (SpringKafkaTxGapDetector.Detection d : springKafkaTxGapDetector.detect(javaFiles)) {
+                findings.add(new Finding(Category.SPRING_KAFKA_TX_GAP, d.filePath(), d.line(), d.symbol(),
+                        d.message()));
+            }
+            // 7 — Target-pattern drift: a file migrated toward raw kafka-clients
+            // instead of the hybrid KafkaTemplate/@KafkaListener idiom (root
+            // cause 2 of job 2c91a1fc). Detect-only — too creative to auto-fix;
+            // flagged for the AI repair tier with a precise instruction.
+            for (SpringKafkaTargetConformanceDetector.Detection d : targetConformanceDetector.detect(javaFiles)) {
+                findings.add(new Finding(Category.SPRING_KAFKA_TARGET_DRIFT, d.filePath(), d.line(), d.symbol(),
+                        d.message()));
+            }
+            // 8b — Consumer-conversion gaps the HybridConsumerTransformer left
+            // for a targeted retry: a @KafkaListener still calling pubsub.publish
+            // (category C), or a method still calling consume() (class bailed to
+            // the LLM). Per-method, distinct from the zero-listeners signal below.
+            for (HybridConsumerConversionDetector.Detection d : consumerConversionDetector.detect(javaFiles)) {
+                findings.add(new Finding(Category.SPRING_KAFKA_CONSUMER_NOT_CONVERTED, d.filePath(), d.line(),
+                        d.symbol(), d.message()));
+            }
+            // 8 — No listeners at all. The migrator's HybridScaffoldingGenerator
+            // only generates the bridge classes when at least one @KafkaListener
+            // survives; zero listeners under the hybrid target means every former
+            // Pub/Sub consumer failed to convert, so CdiLookup et al. were never
+            // generated. Surface it formally rather than letting it pass silently.
+            boolean anyListener = javaFiles.values().stream()
+                    .anyMatch(c -> c != null && c.contains("@KafkaListener"));
+            if (!anyListener) {
+                findings.add(new Finding(Category.SPRING_KAFKA_NO_LISTENERS_FOUND, "", -1, "",
+                        "SPRING_KAFKA_HYBRID selected but the migrated artifact contains no @KafkaListener. "
+                                + "Every former Pub/Sub consumer must become a Spring @KafkaListener @Component; "
+                                + "without one, the hybrid bridge classes are not generated and there is nothing "
+                                + "consuming from Kafka."));
+            }
         }
 
         if (findings.isEmpty()) {

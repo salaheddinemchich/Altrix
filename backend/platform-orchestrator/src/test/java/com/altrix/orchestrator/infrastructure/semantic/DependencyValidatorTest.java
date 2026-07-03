@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.infrastructure.semantic;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.orchestrator.domain.model.semantic.SemanticValidationReport.Category;
 import com.altrix.orchestrator.infrastructure.config.KafkaMigrationKnowledgeBase;
 import com.altrix.orchestrator.infrastructure.config.KafkaMigrationKnowledgeBase.ClassDependency;
@@ -15,8 +16,8 @@ class DependencyValidatorTest {
     private KafkaMigrationKnowledgeBase kb() {
         return new KafkaMigrationKnowledgeBase(List.of(),
                 List.of(
-                        new ClassDependency("org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients"),
-                        new ClassDependency("org.apache.kafka.clients.producer.*", "org.apache.kafka:kafka-clients")),
+                        new ClassDependency("org.apache.kafka.clients.consumer.*", "org.apache.kafka:kafka-clients", false),
+                        new ClassDependency("org.apache.kafka.clients.producer.*", "org.apache.kafka:kafka-clients", false)),
                 List.of(), List.of());
     }
 
@@ -92,5 +93,72 @@ class DependencyValidatorTest {
     void emptyInputsAreSafe() {
         assertThat(validator().validate(null, POM_WITH_KAFKA)).isEmpty();
         assertThat(validator().validate(Map.of(), POM_WITH_KAFKA)).isEmpty();
+    }
+
+    // ── Finding 5 regression: a hybridOnly mapping must never raise a
+    // MISSING_DEPENDENCY finding on the unrelated default (non-hybrid) path,
+    // even though PomDependencyReconciler's unconditional auto-add — a
+    // SEPARATE consumer of the same knowledge-base entry — is unaffected.
+
+    private KafkaMigrationKnowledgeBase kbWithHybridOnlySpringContext() {
+        return new KafkaMigrationKnowledgeBase(List.of(),
+                List.of(new ClassDependency("org.springframework.context.*",
+                        "org.springframework:spring-context", true)),
+                List.of(), List.of());
+    }
+
+    private static final String JAVA_USING_APPLICATION_CONTEXT_AWARE =
+            "package p;\nimport org.springframework.context.ApplicationContextAware;\n"
+                    + "public class S implements ApplicationContextAware {\n"
+                    + "    public void setApplicationContext(org.springframework.context.ApplicationContext c) {}\n}";
+
+    @Test
+    void hybridOnlyMapping_noFinding_onOrdinarySpringBootPath_evenWithoutExplicitPomDeclaration() {
+        var validator = new DependencyValidator(kbWithHybridOnlySpringContext());
+
+        // Ordinary (non-hybrid) Spring Boot project — spring-context arrives
+        // transitively via spring-boot-starter, never declared explicitly.
+        var findings = validator.validate(Map.of("p/S.java", JAVA_USING_APPLICATION_CONTEXT_AWARE),
+                POM_WITHOUT_KAFKA, JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
+
+        assertThat(findings).isEmpty();
+    }
+
+    @Test
+    void hybridOnlyMapping_2ArgOverload_alsoDefaultsToNoFinding() {
+        var validator = new DependencyValidator(kbWithHybridOnlySpringContext());
+
+        var findings = validator.validate(Map.of("p/S.java", JAVA_USING_APPLICATION_CONTEXT_AWARE),
+                POM_WITHOUT_KAFKA);
+
+        assertThat(findings).isEmpty();
+    }
+
+    @Test
+    void hybridOnlyMapping_flagsMissingDependency_whenTargetIsHybrid() {
+        var validator = new DependencyValidator(kbWithHybridOnlySpringContext());
+
+        var findings = validator.validate(Map.of("p/S.java", JAVA_USING_APPLICATION_CONTEXT_AWARE),
+                POM_WITHOUT_KAFKA, JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+
+        assertThat(findings).hasSize(1);
+        assertThat(findings.get(0).symbol()).isEqualTo("org.springframework:spring-context");
+    }
+
+    @Test
+    void hybridOnlyMapping_noFinding_whenHybridAndPomDeclaresItExplicitly() {
+        var validator = new DependencyValidator(kbWithHybridOnlySpringContext());
+        String pomWithSpringContext = """
+                <project>
+                  <dependencies>
+                    <dependency><groupId>org.springframework</groupId>
+                      <artifactId>spring-context</artifactId></dependency>
+                  </dependencies>
+                </project>""";
+
+        var findings = validator.validate(Map.of("p/S.java", JAVA_USING_APPLICATION_CONTEXT_AWARE),
+                pomWithSpringContext, JakartaMessagingTarget.SPRING_KAFKA_HYBRID);
+
+        assertThat(findings).isEmpty();
     }
 }

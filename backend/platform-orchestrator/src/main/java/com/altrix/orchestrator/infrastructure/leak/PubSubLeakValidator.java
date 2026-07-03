@@ -76,8 +76,12 @@ public class PubSubLeakValidator {
 
     // ── package + simple-name allow / deny lists ────────────────────────────
 
-    /** Java import prefixes that are 100% Pub/Sub — any match is a leak. */
-    private static final List<String> FORBIDDEN_IMPORT_PREFIXES = List.of(
+    /** Java import prefixes that are 100% Pub/Sub — any match is a leak.
+     *  Public: also the single authority for
+     *  {@link com.altrix.orchestrator.infrastructure.hybrid.PubSubWrapperRemover}'s
+     *  raw-client glue detection, so both gates can never disagree on what
+     *  counts as the Pub/Sub client surface. */
+    public static final List<String> FORBIDDEN_IMPORT_PREFIXES = List.of(
             "com.google.api.services.pubsub",
             "com.google.cloud.pubsub",
             "com.google.pubsub",
@@ -89,8 +93,12 @@ public class PubSubLeakValidator {
      * surface.  Validator only flags them when no project-declared type
      * shadows the name — so a hand-written {@code class Subscription} in
      * the user's domain is left alone.
+     *
+     * <p>Public for the same reason as {@link #FORBIDDEN_IMPORT_PREFIXES}:
+     * {@code PubSubWrapperRemover} needs the client type names to recognise
+     * glue classes that import the client package via a wildcard.
      */
-    private static final Set<String> FORBIDDEN_TYPE_NAMES = Set.of(
+    public static final Set<String> FORBIDDEN_TYPE_NAMES = Set.of(
             "Pubsub",
             "PubsubMessage",
             "ReceivedMessage",

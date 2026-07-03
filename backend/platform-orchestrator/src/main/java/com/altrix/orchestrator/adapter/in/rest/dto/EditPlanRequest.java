@@ -28,9 +28,10 @@ public record EditPlanRequest(
 ) {
     /**
      * Builds a {@link MigrationPlan} carrying only the reviewer-editable
-     * fields.  {@code projectId} / {@code storageKey} are blank here on
-     * purpose — the service overlays them from the stored plan before
-     * persisting.
+     * fields.  {@code projectId} / {@code storageKey} / {@code jakartaMessagingTarget}
+     * are placeholders here on purpose — the service overlays all three from
+     * the stored plan before persisting (the messaging target is not
+     * reviewer-editable).
      */
     public MigrationPlan toEditedPlan() {
         return new MigrationPlan(
@@ -40,7 +41,8 @@ public record EditPlanRequest(
                 riskLevel,
                 estimatedEffort,
                 summary,
-                targetFiles
+                targetFiles,
+                (com.altrix.common.domain.enums.JakartaMessagingTarget) null
         );
     }
 }

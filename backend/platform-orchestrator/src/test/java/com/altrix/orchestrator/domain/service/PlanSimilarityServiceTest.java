@@ -26,11 +26,11 @@ class PlanSimilarityServiceTest {
     }
 
     private static MigrationPlan plan(String id) {
-        return new MigrationPlan(id, "", "Stack", List.of(), "LOW", "1d", "sum", List.of());
+        return new MigrationPlan(id, "", "Stack", List.of(), "LOW", "1d", "sum", List.of(), null);
     }
 
     private static AnalysisReport report(String id, List<String> integrations) {
-        return new AnalysisReport(id, "", List.of(), integrations, "summary");
+        return new AnalysisReport(id, "", List.of(), integrations, "summary", null);
     }
 
     // ── Jaccard ───────────────────────────────────────────────────────────────
@@ -133,7 +133,7 @@ class PlanSimilarityServiceTest {
     @Test
     void extractSpringBootMajor_fromSummary_whenNotInIntegrations() {
         AnalysisReport report = new AnalysisReport("p", "", List.of(), List.of("Kafka"),
-                "This is a Spring Boot 2 application");
+                "This is a Spring Boot 2 application", null);
         assertThat(PlanSimilarityService.extractSpringBootMajor(report)).isEqualTo("2");
     }
 

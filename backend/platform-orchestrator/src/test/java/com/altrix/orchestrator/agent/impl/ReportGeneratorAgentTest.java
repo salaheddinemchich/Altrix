@@ -49,7 +49,7 @@ class ReportGeneratorAgentTest {
         return new WorkflowOutcome("p1",
                 AnalysisReport.empty("p1"),
                 new MigrationPlan("p1", "", "Spring Boot 3 + Kafka", List.of("Step 1: replace PubSub"),
-                        "MEDIUM", "3 days", "the plan", List.of()),
+                        "MEDIUM", "3 days", "the plan", List.of(), null),
                 MigrationArtifact.empty("p1"),
                 ValidationReport.pending("p1"));
     }

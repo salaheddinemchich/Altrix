@@ -1,5 +1,7 @@
 package com.altrix.common.domain.model;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
+
 import java.io.Serializable;
 
 import java.util.List;
@@ -25,7 +27,10 @@ public record AnalysisReport(
         List<String> detectedIntegrations,
 
         /** Free-form summary the planner can include in its prompt. */
-        String summary
+        String summary,
+
+        /** Carried from {@code ProjectContext}; only meaningful for Jakarta EE sources. */
+        JakartaMessagingTarget jakartaMessagingTarget
 
 ) implements Serializable {
     public AnalysisReport {
@@ -33,9 +38,11 @@ public record AnalysisReport(
         detectedComponents = detectedComponents != null ? List.copyOf(detectedComponents) : List.of();
         detectedIntegrations = detectedIntegrations != null ? List.copyOf(detectedIntegrations) : List.of();
         summary = summary != null ? summary : "";
+        jakartaMessagingTarget = jakartaMessagingTarget != null
+                ? jakartaMessagingTarget : JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS;
     }
 
     public static AnalysisReport empty(String projectId) {
-        return new AnalysisReport(projectId, "", List.of(), List.of(), "");
+        return new AnalysisReport(projectId, "", List.of(), List.of(), "", JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS);
     }
 }

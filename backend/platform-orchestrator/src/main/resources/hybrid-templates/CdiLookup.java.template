@@ -1,0 +1,23 @@
+package ${package};
+
+import jakarta.enterprise.inject.spi.CDI;
+
+/**
+ * Spring &rarr; CDI bridge, the mirror of {@code SpringBeanBridge}. The
+ * {@code @KafkaListener} beans live in the manually-bootstrapped Spring
+ * context, not the CDI container, so they can't {@code @Inject} CDI beans
+ * (e.g. {@code OrderStore} / {@code PaymentStore}) directly. {@link CDI#current()}
+ * is the standard Jakarta CDI API for reaching into the active CDI container
+ * from non-CDI-managed code — the official escape hatch, not a hack.
+ *
+ * <p>Generated deterministically by Altrix's {@code HybridScaffoldingGenerator}.
+ */
+public final class CdiLookup {
+
+    private CdiLookup() {
+    }
+
+    public static <T> T get(Class<T> type) {
+        return CDI.current().select(type).get();
+    }
+}

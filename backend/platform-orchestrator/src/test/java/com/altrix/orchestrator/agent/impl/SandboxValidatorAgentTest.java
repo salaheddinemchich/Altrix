@@ -42,7 +42,7 @@ class SandboxValidatorAgentTest {
                 .content("import org.springframework.kafka.annotation.KafkaListener; class Listener {}")
                 .changeType(FileChangeType.MODIFIED).diffSummary("migrated")
                 .build();
-        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done"));
+        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done", null));
         assertThat(report.passed()).isTrue();
         assertThat(report.failures()).isEmpty();
     }
@@ -54,7 +54,7 @@ class SandboxValidatorAgentTest {
                 .content("import google.cloud.pubsub; class Listener {}")
                 .changeType(FileChangeType.MODIFIED).diffSummary("partial migration")
                 .build();
-        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done"));
+        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done", null));
         assertThat(report.passed()).isFalse();
         assertThat(report.failures()).anyMatch(f -> f.contains("Pub/Sub import not removed"));
     }
@@ -66,7 +66,7 @@ class SandboxValidatorAgentTest {
                 .content("@SubscriberHandler class Sub {}")
                 .changeType(FileChangeType.MODIFIED).diffSummary("partial migration")
                 .build();
-        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done"));
+        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done", null));
         assertThat(report.passed()).isFalse();
         assertThat(report.failures()).anyMatch(f -> f.contains("annotation still present"));
     }
@@ -78,7 +78,7 @@ class SandboxValidatorAgentTest {
                 .content("import google.cloud.pubsub; class Util {}")
                 .changeType(FileChangeType.UNCHANGED).diffSummary("not migrated")
                 .build();
-        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done"));
+        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done", null));
         // UNCHANGED files are not subject to migration-correctness checks
         assertThat(report.passed()).isTrue();
     }
@@ -97,7 +97,7 @@ class SandboxValidatorAgentTest {
                 .content("import google.cloud.pubsub; class Listener {}")
                 .changeType(FileChangeType.MODIFIED).diffSummary("partial migration")
                 .build();
-        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done"));
+        ValidationReport report = agent.execute(new MigrationArtifact("p1", List.of(file), "done", null));
 
         // Back-compat surface still works
         assertThat(report.failures()).isNotEmpty();

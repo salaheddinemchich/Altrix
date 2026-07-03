@@ -1,5 +1,6 @@
 package com.altrix.orchestrator.infrastructure.config;
 
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Structured Pub/Sub → Kafka migration knowledge base.
@@ -115,8 +117,21 @@ public record KafkaMigrationKnowledgeBase(
      *                   ending in {@code .*} to cover a whole package).
      * @param dependency Maven coordinate {@code group:artifact} (version
      *                   omitted — version policy is the pom's concern).
+     * @param hybridOnly when true, this mapping is only meaningful for the
+     *                   Jakarta EE + Spring Kafka hybrid target ({@code
+     *                   org.springframework.context.*} → {@code
+     *                   spring-context} is the first such case — that
+     *                   import is far more common in ordinary Spring Boot
+     *                   code than the rest of this catalog, so treating it
+     *                   as a missing dependency on the unrelated default
+     *                   path would be a false positive). {@link
+     *                   #dependencyForClass(String, JakartaMessagingTarget)}
+     *                   honours this flag; the original 1-arg overload
+     *                   (used by {@code PomDependencyReconciler}, which has
+     *                   no false-positive risk — it only ever ADDS a
+     *                   dependency that's genuinely imported) does not.
      */
-    public record ClassDependency(String classFqn, String dependency) {
+    public record ClassDependency(String classFqn, String dependency, boolean hybridOnly) {
         public ClassDependency {
             if (classFqn == null || classFqn.isBlank())     throw new IllegalArgumentException("classFqn required");
             if (dependency == null || dependency.isBlank()) throw new IllegalArgumentException("dependency required");
@@ -150,8 +165,28 @@ public record KafkaMigrationKnowledgeBase(
      * entries in the config.
      */
     public Optional<String> dependencyForClass(String classFqn) {
+        return dependencyForClass(classFqn, (cd) -> true);
+    }
+
+    /**
+     * Same lookup as {@link #dependencyForClass(String)}, except entries
+     * marked {@link ClassDependency#hybridOnly()} are skipped unless
+     * {@code jakartaMessagingTarget} is {@code SPRING_KAFKA_HYBRID}. Use
+     * this overload anywhere a "missing dependency" finding is surfaced to
+     * the user (e.g. {@code DependencyValidator}) — the 1-arg overload
+     * remains for callers like {@code PomDependencyReconciler} that only
+     * ever ADD a dependency the code genuinely imports, where scope doesn't
+     * matter.
+     */
+    public Optional<String> dependencyForClass(String classFqn, JakartaMessagingTarget jakartaMessagingTarget) {
+        boolean hybrid = jakartaMessagingTarget == JakartaMessagingTarget.SPRING_KAFKA_HYBRID;
+        return dependencyForClass(classFqn, cd -> hybrid || !cd.hybridOnly());
+    }
+
+    private Optional<String> dependencyForClass(String classFqn, Predicate<ClassDependency> scoped) {
         if (classFqn == null) return Optional.empty();
         for (ClassDependency cd : classDependencies) {
+            if (!scoped.test(cd)) continue;
             String key = cd.classFqn();
             if (key.endsWith(".*")) {
                 String prefix = key.substring(0, key.length() - 2);

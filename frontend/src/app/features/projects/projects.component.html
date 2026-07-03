@@ -99,6 +99,17 @@
         </select>
       </div>
 
+      <div>
+        <label for="jakartaTarget">Jakarta EE messaging target</label>
+        <select id="jakartaTarget"
+                [ngModel]="jakartaTarget()"
+                (ngModelChange)="jakartaTarget.set($event)">
+          @for (opt of jakartaTargetOptions; track opt) {
+            <option [value]="opt">{{ opt }}</option>
+          }
+        </select>
+      </div>
+
       <button
         class="btn btn-gold"
         [disabled]="ingesting()"

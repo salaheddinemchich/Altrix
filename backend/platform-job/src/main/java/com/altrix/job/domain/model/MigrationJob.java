@@ -1,6 +1,7 @@
 package com.altrix.job.domain.model;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.enums.JobStatus;
 import lombok.Builder;
 import lombok.Getter;
@@ -28,6 +29,12 @@ public final class MigrationJob {
     /** Controls which AI provider tier this job may use (default: {@link JobProviderProfile#DEFAULT}). */
     private final JobProviderProfile providerProfile;
 
+    /**
+     * Messaging implementation for a Jakarta EE target (default:
+     * {@link JakartaMessagingTarget#NATIVE_KAFKA_CLIENTS}). Ignored for Spring Boot sources.
+     */
+    private final JakartaMessagingTarget jakartaMessagingTarget;
+
     private final String outputStorageKey;
     private final String errorMessage;
     private final Instant createdAt;
@@ -39,7 +46,8 @@ public final class MigrationJob {
             String userId,
             String projectStorageKey,
             ConfigFormatPreference configFormatPreference,
-            JobProviderProfile providerProfile
+            JobProviderProfile providerProfile,
+            JakartaMessagingTarget jakartaMessagingTarget
     ) {
         Instant now = Instant.now();
         return MigrationJob.builder()
@@ -56,6 +64,10 @@ public final class MigrationJob {
                         Objects.requireNonNullElse(
                                 providerProfile,
                                 JobProviderProfile.DEFAULT))
+                .jakartaMessagingTarget(
+                        Objects.requireNonNullElse(
+                                jakartaMessagingTarget,
+                                JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS))
                 .createdAt(now)
                 .updatedAt(now)
                 .build();

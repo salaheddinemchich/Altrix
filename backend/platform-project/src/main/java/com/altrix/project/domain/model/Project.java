@@ -4,6 +4,7 @@ import com.altrix.common.domain.enums.BuildSystem;
 import com.altrix.common.domain.enums.ConfigFormat;
 import com.altrix.common.domain.enums.ConfigFormatPreference;
 import com.altrix.common.domain.enums.DetectedFramework;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.With;
@@ -63,6 +64,14 @@ public final class Project {
     private final ConfigFormatPreference configFormatPreference;
 
     /**
+     * User's explicit choice of Jakarta EE messaging output — only meaningful
+     * once detection confirms the source is Jakarta EE; ignored otherwise.
+     * Defaults to {@code NATIVE_KAFKA_CLIENTS}. Never inferred from source —
+     * set only by the user at upload/ingestion time.
+     */
+    private final JakartaMessagingTarget jakartaMessagingTarget;
+
+    /**
      * True when the project uses GCP Pub/Sub and is eligible for migration.
      */
     private final boolean eligibleForMigration;
@@ -103,7 +112,8 @@ public final class Project {
             String userId,
             String name,
             String storageKey,
-            ConfigFormatPreference configFormatPreference
+            ConfigFormatPreference configFormatPreference,
+            JakartaMessagingTarget jakartaMessagingTarget
     ) {
         Instant now = Instant.now();
         return Project.builder()
@@ -115,6 +125,9 @@ public final class Project {
                 .configFormatPreference(
                         Objects.requireNonNullElse(configFormatPreference,
                                 ConfigFormatPreference.KEEP_ORIGINAL))
+                .jakartaMessagingTarget(
+                        Objects.requireNonNullElse(jakartaMessagingTarget,
+                                JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS))
                 .source(ProjectSource.MANUAL)
                 .createdAt(now)
                 .updatedAt(now)
@@ -132,6 +145,7 @@ public final class Project {
             String name,
             String storageKey,
             ConfigFormatPreference configFormatPreference,
+            JakartaMessagingTarget jakartaMessagingTarget,
             String repoUrl,
             String trackedBranch,
             ProjectSource source
@@ -146,6 +160,9 @@ public final class Project {
                 .configFormatPreference(
                         Objects.requireNonNullElse(configFormatPreference,
                                 ConfigFormatPreference.KEEP_ORIGINAL))
+                .jakartaMessagingTarget(
+                        Objects.requireNonNullElse(jakartaMessagingTarget,
+                                JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS))
                 .repoUrl(Objects.requireNonNull(repoUrl, "repoUrl"))
                 .trackedBranch(trackedBranch)
                 .source(Objects.requireNonNullElse(source, ProjectSource.GIT_CLONE))

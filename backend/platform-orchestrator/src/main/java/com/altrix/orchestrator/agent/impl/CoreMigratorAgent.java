@@ -2,6 +2,7 @@ package com.altrix.orchestrator.agent.impl;
 
 import com.altrix.common.domain.enums.DocumentType;
 import com.altrix.common.domain.enums.FileChangeType;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import com.altrix.common.domain.model.ApprovedPlan;
 import com.altrix.common.domain.model.DocumentChunk;
 import com.altrix.common.domain.model.MigratedFile;
@@ -42,9 +43,11 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -381,6 +384,162 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
 
             """;
 
+    /** Opt-in only — selected by the user's explicit
+     *  {@code JakartaMessagingTarget.SPRING_KAFKA_HYBRID} choice on the plan,
+     *  NEVER inferred from source.  Used in place of {@link #JAKARTA_EE_PREFIX}
+     *  when the project is Jakarta EE AND the user asked for spring-kafka.
+     *
+     *  <p>Grounded in a hand-built, proven-working reference project
+     *  ({@code kb-test-jakarta-springkafka}) — every constraint below fixes a
+     *  real bug hit and fixed there, not a guess: the WELD-001435
+     *  "not proxyable" CDI deployment failure ({@code @Dependent}, not
+     *  {@code @ApplicationScoped}, on the {@code KafkaTemplate} producer
+     *  method — {@code KafkaTemplate} has no no-arg constructor so Weld can't
+     *  generate a client proxy for a normal scope); the bootstrapper
+     *  null-before-close ordering bug; and {@code UNKNOWN_TOPIC_OR_PARTITION}
+     *  warnings on every consumer until a producer happens to fire first
+     *  (fixed there with {@code KafkaAdmin}/{@code NewTopic} beans). */
+    private static final String JAKARTA_EE_SPRING_KAFKA_PREFIX = """
+            DETECTED STACK: Jakarta EE 10 + Spring Kafka hybrid (user-selected).
+
+            The project is Jakarta EE (CDI/EJB/JAX-RS) but the user explicitly
+            chose spring-kafka for messaging instead of raw kafka-clients.
+            Jakarta EE has no Spring ApplicationContext by default, so this
+            migration MUST manually bootstrap one, side by side with the CDI
+            container, bridged in both directions.  This is plain Spring
+            Framework (spring-context + spring-kafka) — NOT Spring Boot.
+            NEVER add any spring-boot-starter-* dependency.
+
+            You MUST generate ALL of the following files — they are not
+            optional extras, the bridge does not work without every one of
+            them:
+
+            1. SpringKafkaConfig.java
+               @Configuration @EnableKafka, with:
+               - @ComponentScan restricted to the actual listener packages in
+                 this project (not a wildcard scan of everything).
+               - producerFactory / kafkaTemplate / consumerFactory /
+                 kafkaListenerContainerFactory beans.
+               - bootstrap.servers read from an environment variable via
+                 @Value — NEVER hardcoded.
+               - A KafkaAdmin bean PLUS a NewTopic @Bean for every topic this
+                 project produces or consumes.  Without this, every consumer
+                 logs UNKNOWN_TOPIC_OR_PARTITION until a producer happens to
+                 fire first and the broker's auto-create kicks in — always
+                 declare topics explicitly.
+
+            2. SpringContextBootstrapper.java
+               Static start()/stop()/context() holding an
+               AnnotationConfigApplicationContext.
+               - start() MUST force-close any existing context first (if
+                 context != null, close it before creating the new one) —
+                 never just warn and continue.
+               - stop() MUST null out the static context reference BEFORE
+                 calling close() on it, not after.  If close() throws, a
+                 stale-but-still-referenced context is worse than a null one;
+                 null first so a failure can't leave dangling state.
+
+            3. AppStartupListener.java
+               @WebListener implementing ServletContextListener.
+               contextInitialized -> SpringContextBootstrapper.start().
+               contextDestroyed   -> SpringContextBootstrapper.stop().
+
+            4. SpringBeanBridge.java (CDI -> Spring)
+               A CDI class with:
+                   @Produces
+                   @Dependent   // NOT @ApplicationScoped — see below
+                   public KafkaTemplate<String,String> kafkaTemplate() {
+                       return SpringContextBootstrapper.context().getBean(KafkaTemplate.class);
+                   }
+               @Dependent IS REQUIRED here.  KafkaTemplate has no no-arg
+               constructor, only a ProducerFactory-arg one, so CDI/Weld
+               cannot generate a client proxy for a normal scope like
+               @ApplicationScoped — that fails deployment with
+               WELD-001435 ("type is not proxyable"). @Dependent is a CDI
+               pseudo-scope that needs no proxy, so it works. Do NOT
+               "fix" this back to @ApplicationScoped.
+
+            5. CdiLookup.java (Spring -> CDI)
+                   public static <T> T get(Class<T> type) {
+                       return CDI.current().select(type).get();
+                   }
+
+            6. EVERY former Pub/Sub consumer becomes a plain Spring
+               @Component (NOT a CDI bean) with @KafkaListener methods. Any
+               call from inside that listener into a CDI-managed
+               persistence/business class MUST go through
+               CdiLookup.get(SomeClass.class) — NEVER `new SomeClass()`, and
+               NEVER @Inject (CDI injection does not cross into a Spring
+               bean). A @KafkaListener method with no surrounding @Component
+               on its class is a guaranteed silent failure — component scan
+               will never find it.
+
+            7. Any CDI persistence/business class reached from a listener via
+               CdiLookup.get(...) (the equivalent of an OrderStore /
+               PaymentStore from the original Pub/Sub code) MUST be migrated
+               to a @Stateless EJB (jakarta.ejb.Stateless) with
+               @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+               on the methods called from listener threads — NOT left as
+               plain @ApplicationScoped. A Kafka consumer thread carries no
+               JTA transaction; only an EJB proxy boundary creates one
+               regardless of which thread calls it. This is required, not
+               optional polish.
+
+            FORBIDDEN:
+              * Any spring-boot-starter-* dependency (this is plain Spring
+                Framework, manually bootstrapped — Spring Boot's
+                auto-configuration does not apply and does not run here).
+              * @SpringBootApplication, @EnableAutoConfiguration, or any
+                annotation that assumes a Spring Boot–managed context.
+              * Leaving a CDI persistence class reached via CdiLookup as
+                @ApplicationScoped when it is invoked from a listener thread.
+
+            """;
+
+    /** User-selected (never inferred) — converts CDI persistence classes reached
+     *  from a Spring {@code @KafkaListener} via {@code CdiLookup} to
+     *  {@code @Stateless} EJBs, since a Kafka consumer thread carries no JTA
+     *  transaction and only an EJB proxy boundary creates one. Invoked only
+     *  for {@link com.altrix.common.domain.enums.JakartaMessagingTarget#SPRING_KAFKA_HYBRID}. */
+    private final com.altrix.orchestrator.infrastructure.hybrid.CdiStatelessConverter cdiStatelessConverter;
+    /** Hybrid-only — adds the 5 mandatory Spring Kafka bridge classes
+     *  (SpringKafkaConfig / SpringContextBootstrapper / AppStartupListener /
+     *  SpringBeanBridge / CdiLookup) that a genuine Pub/Sub project has no
+     *  source file to map from. The ONLY pipeline component that ADDS files
+     *  rather than transforming existing ones; runs last so its @ComponentScan
+     *  reflects the final, repaired listener set. */
+    private final com.altrix.orchestrator.infrastructure.hybrid.HybridScaffoldingGenerator hybridScaffoldingGenerator;
+    /** Hybrid-only — deterministically converts Pub/Sub consumers to Spring
+     *  {@code @KafkaListener @Component} classes from SOURCE, before the LLM
+     *  pass, and removes them from the LLM's input. The only transform that
+     *  runs source-in / pre-migration (everything else post-processes migrated
+     *  output); see its Javadoc. Producing real listeners is also what lets
+     *  {@link #hybridScaffoldingGenerator} fire. */
+    private final com.altrix.orchestrator.infrastructure.hybrid.HybridConsumerTransformer hybridConsumerTransformer;
+    /** Hybrid-only — identifies the Pub/Sub topic-bootstrap class (@Singleton
+     *  @Startup) so it can be DELETED (its topic-creation job moves into the
+     *  generated SpringKafkaConfig's KafkaAdmin/NewTopic beans) and harvests the
+     *  topic constants those beans need. */
+    private final com.altrix.orchestrator.infrastructure.hybrid.TopicBootstrapAnchor topicBootstrapAnchor;
+    /** Hybrid-only — rewrites the Pub/Sub constants class (PubSubConfig shape) to
+     *  a pure constants holder before the LLM sees it, removing the @Configuration
+     *  /@Bean boilerplate and GCP path helpers the model otherwise hallucinates
+     *  into a second, conflicting Kafka config. */
+    private final com.altrix.orchestrator.infrastructure.hybrid.PubSubConfigAnchor pubSubConfigAnchor;
+    /** Hybrid-only — post-revert deterministic fix for non-consumer files (e.g. JAX-RS
+     *  resources) that call {@code pubsub.publish(PubSubConfig.topic(CONST), msg)}:
+     *  rewrites them to {@code kafkaTemplate.send(PubSubConfig.CONST, msg)} via CDI
+     *  injection of the KafkaTemplate produced by {@code SpringBeanBridge}.  Runs after
+     *  {@link #revertFilesWithUnresolvedImports} so it sees the reverted original source
+     *  (which still carries the GCP publish pattern). */
+    private final com.altrix.orchestrator.infrastructure.hybrid.HybridPublishRewriter hybridPublishRewriter;
+    /** Hybrid-only — detects the hand-rolled Pub/Sub wrapper service and its raw-client
+     *  CDI producer so they can be DELETED instead of LLM-migrated: with consumers
+     *  converted to {@code @KafkaListener} and publishers on the bridged KafkaTemplate
+     *  they are dead code, and the LLM reliably re-implements them with type errors
+     *  (job d3fa6347: {@code Iterable} vs {@code List}). */
+    private final com.altrix.orchestrator.infrastructure.hybrid.PubSubWrapperRemover pubSubWrapperRemover;
+
     private final AiPort aiPort;
     private final FileReaderPort fileReader;
     private final ContextPruner contextPruner;
@@ -474,7 +633,8 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
 
         if (storageKey == null || storageKey.isBlank()) {
             log.warn("[{}] no storageKey in plan — returning empty artifact", getName());
-            return new MigrationArtifact(projectId, List.of(), "No files to migrate (storageKey missing)");
+            return new MigrationArtifact(projectId, List.of(), "No files to migrate (storageKey missing)",
+                    input.plan().jakartaMessagingTarget());
         }
 
         try {
@@ -507,8 +667,19 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // result was 30+ "package org.springframework.* does not exist"
             // compile errors in the sandbox.  Detection is cheap: just a
             // substring scan of pom.xml.
+            //
+            // Jakarta-vs-Spring-Boot detection stays source-derived (legitimate
+            // — it's "what IS this project"). The sub-choice WITHIN Jakarta
+            // (native kafka-clients vs the spring-kafka hybrid) is NEVER
+            // inferred here — it comes only from the user's explicit choice,
+            // threaded onto the plan all the way from job creation.
             boolean isJakarta = isJakartaProject(allFiles);
-            String stackPrefix = isJakarta ? JAKARTA_EE_PREFIX : SPRING_BOOT_PREFIX;
+            JakartaMessagingTarget jakartaMessagingTarget = input.plan().jakartaMessagingTarget();
+            String stackPrefix = !isJakarta
+                    ? SPRING_BOOT_PREFIX
+                    : jakartaMessagingTarget == JakartaMessagingTarget.SPRING_KAFKA_HYBRID
+                            ? JAKARTA_EE_SPRING_KAFKA_PREFIX
+                            : JAKARTA_EE_PREFIX;
             String baseSystemPrompt = stackPrefix + SYSTEM_PROMPT + IDENTITY_PRESERVATION_RULES;
             String effectiveSystemPrompt = input.retryContext() != null && !input.retryContext().isBlank()
                     ? input.retryContext() + "\n\n" + baseSystemPrompt
@@ -528,12 +699,132 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // rather than re-reading the context inside each worker.  Null when
             // no blueprint exists → migrator falls back to file-by-file.
             ProjectBlueprint blueprint = resolveBlueprint();
-            List<MigratedFile> migrated = migrateFiles(pruned.files(), effectiveSystemPrompt,
+
+            // ── Hybrid-only, SOURCE-IN: deterministically convert Pub/Sub
+            // consumers to Spring @KafkaListener @Component BEFORE the LLM pass,
+            // and remove them from the LLM's input so the model can't invent
+            // divergent structure for them (the proven, model-independent
+            // failure mode). Bindings are read from the full source set (the
+            // TopicBootstrap class may itself be pruned), but only files that
+            // were going to be migrated are partitioned out. On retry the
+            // already-converted files no longer match the @Schedule poller
+            // shape, so they fall through to the LLM with the targeted
+            // CONSUMER_NOT_CONVERTED retry instruction (e.g. the category-C
+            // publish-call rewrite).
+            Map<String, String> toMigrate = new LinkedHashMap<>(pruned.files());
+            List<MigratedFile> deterministicConsumers = new ArrayList<>();
+            // Files we DELETE from the artifact entirely (e.g. the Pub/Sub
+            // TopicBootstrap, whose job moves into generated KafkaAdmin/NewTopic
+            // beans). Tracked so the pruner's "re-add unchanged" pass below can't
+            // resurrect them.
+            Set<String> deletedSourcePaths = new LinkedHashSet<>();
+            // Topic constant simple-names the deleted bootstrap created — threaded
+            // to the scaffolding generator so it emits one NewTopic bean each.
+            Set<String> topicConstantNames = new LinkedHashSet<>();
+            // Held outside the hybrid block so the re-stamp pass below
+            // (after ContractRepairer) can enforce it regardless of what the
+            // repairer did to the file.
+            MigratedFile anchoredConfig = null;
+            if (jakartaMessagingTarget == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+                var conv = hybridConsumerTransformer.transform(allFiles);
+                for (MigratedFile cf : conv.convertedFiles()) {
+                    if (toMigrate.remove(cf.originalPath()) != null) {
+                        deterministicConsumers.add(cf);
+                    }
+                }
+                if (!deterministicConsumers.isEmpty() || !conv.bails().isEmpty()) {
+                    log.info("[{}] hybrid consumer transform: {} converted deterministically, {} bailed to LLM",
+                            getName(), deterministicConsumers.size(), conv.bails().size());
+                }
+
+                // PubSubConfig → constants-only (rewrite, re-emit, keep out of the LLM set).
+                anchoredConfig = pubSubConfigAnchor.anchor(allFiles);
+                if (anchoredConfig != null) {
+                    boolean removedFromLlmSet = toMigrate.remove(anchoredConfig.originalPath()) != null;
+                    deterministicConsumers.add(anchoredConfig);
+                    log.info("[{}] hybrid: PubSubConfig anchored to constants-only '{}' (removed from LLM set={})",
+                            getName(), anchoredConfig.originalPath(), removedFromLlmSet);
+                } else {
+                    log.info("[{}] hybrid: PubSubConfigAnchor found no constants-holder to anchor", getName());
+                }
+
+                // TopicBootstrap → DELETE; harvest its topic constants for the generator.
+                var bootstrap = topicBootstrapAnchor.analyze(allFiles);
+                if (bootstrap != null) {
+                    toMigrate.remove(bootstrap.sourceFilePath());
+                    deletedSourcePaths.add(bootstrap.sourceFilePath());
+                    topicConstantNames.addAll(bootstrap.topicConstantNames());
+                    log.info("[{}] hybrid: deleting Pub/Sub bootstrap '{}' (replaced by generated KafkaAdmin/NewTopic "
+                            + "beans for {} topic(s))", getName(), bootstrap.sourceFilePath(), topicConstantNames.size());
+                }
+
+                // Pub/Sub wrapper service + raw-client CDI producer → DELETE.
+                // Dead code by construction once consumers are @KafkaListener
+                // components and publishers use the bridged KafkaTemplate —
+                // keeping them sends the hand-rolled wrapper to the LLM, which
+                // reliably invents a raw kafka-clients re-implementation with
+                // type errors (job d3fa6347: Iterable vs List).  Deleting also
+                // arms revertFilesWithUnresolvedImports: any LLM output still
+                // importing the wrapper reverts to original and flows into the
+                // hybridPublishRewriter's deterministic KafkaTemplate rewrite.
+                // Gated on full deterministic consumer coverage — if any
+                // @Schedule poller bailed to the LLM, its fallback migration
+                // may still lean on the wrapper, so we keep it (current
+                // behaviour) rather than chase a type we removed.
+                if (conv.bails().isEmpty()) {
+                    for (String glue : pubSubWrapperRemover.detect(allFiles)) {
+                        toMigrate.remove(glue);
+                        deletedSourcePaths.add(glue);
+                        log.info("[{}] hybrid: deleting Pub/Sub wrapper glue '{}' (consumers are @KafkaListener, "
+                                + "publishers use the bridged KafkaTemplate)", getName(), glue);
+                    }
+                }
+            }
+
+            // ── Retry-scope narrowing: on a checkpointed retry, only the files
+            // implicated in the previous validation failure go back to the LLM.
+            // Everything else already survived attempt N's full guard chain —
+            // re-migrating healthy files hands the model a fresh chance to
+            // corrupt them (proven regression: job d3fa6347, where the
+            // deterministically-converted @KafkaListener pollers were
+            // re-rewritten by the LLM on retry and lost their CdiLookup
+            // import).  Kept files are re-added verbatim from the overlaid
+            // checkpoint content in the result assembly below.  No failing
+            // paths (e.g. boot timeout produced no per-file findings) → no
+            // narrowing → previous behaviour.
+            Map<String, String> retryKept = new LinkedHashMap<>();
+            if (input.previousArtifact() != null && !input.failingPaths().isEmpty()) {
+                Set<String> failing = new LinkedHashSet<>(input.failingPaths());
+                for (var it = toMigrate.entrySet().iterator(); it.hasNext(); ) {
+                    Map.Entry<String, String> e = it.next();
+                    if (!matchesFailingPath(e.getKey(), failing)) {
+                        retryKept.put(e.getKey(), e.getValue());
+                        it.remove();
+                    }
+                }
+                if (!retryKept.isEmpty()) {
+                    log.info("[{}] retry scope narrowed: {} implicated file(s) to the LLM, "
+                            + "{} kept verbatim from checkpoint", getName(), toMigrate.size(), retryKept.size());
+                }
+            }
+
+            List<MigratedFile> migrated = migrateFiles(toMigrate, effectiveSystemPrompt,
                     perFileProvenance, isJakarta, blueprint);
 
             // Include unchanged versions of files excluded by the pruner
             List<MigratedFile> result = new ArrayList<>(migrated);
+            // Deterministically-converted consumers (removed from the LLM set above).
+            result.addAll(deterministicConsumers);
+            // Retry-narrowing: healthy checkpoint files, kept verbatim (content is the
+            // overlaid previous-attempt output, not the original source).
+            for (Map.Entry<String, String> entry : retryKept.entrySet()) {
+                result.add(unchanged(entry.getKey(), entry.getValue(),
+                        "Retry checkpoint: kept from previous attempt (not implicated in validation failure)"));
+            }
             for (Map.Entry<String, String> entry : allFiles.entrySet()) {
+                if (deletedSourcePaths.contains(entry.getKey())) {
+                    continue; // deliberately deleted (e.g. Pub/Sub TopicBootstrap) — never re-add
+                }
                 if (!pruned.files().containsKey(entry.getKey())) {
                     result.add(unchanged(entry.getKey(), entry.getValue(), "Excluded by context pruner"));
                 }
@@ -545,7 +836,53 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // Reverted files keep the original content, so the build can
             // proceed with the per-file failures the retry loop can actually
             // act on, instead of dying on "cannot find symbol".
-            result = revertFilesWithUnresolvedImports(result, allFiles);
+            // Deterministically-converted consumer files are exempt: they
+            // import CdiLookup which is generated by HybridScaffoldingGenerator
+            // AFTER this pass; reverting them would restore the original EJB
+            // source which can no longer compile once PubSubConfig.subscription()
+            // is stripped by the anchor.
+            Set<String> deterministicPaths = new java.util.HashSet<>();
+            for (MigratedFile f : deterministicConsumers) {
+                String p = f.newPath() != null ? f.newPath() : f.originalPath();
+                if (p != null) deterministicPaths.add(p);
+            }
+            result = revertFilesWithUnresolvedImports(result, allFiles, deterministicPaths);
+
+            // Post-revert hybrid fix: non-consumer files (e.g. JAX-RS resources)
+            // that call pubsub.publish(PubSubConfig.topic(CONST), msg) still carry
+            // the GCP pattern after revert — topic() was stripped by the anchor so
+            // the original source no longer compiles.  Rewrites them deterministically
+            // to kafkaTemplate.send(PubSubConfig.CONST, msg) via CDI injection of
+            // the KafkaTemplate produced by SpringBeanBridge.
+            if (jakartaMessagingTarget == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+                result = hybridPublishRewriter.rewrite(result);
+            }
+
+            // Hybrid-only, deterministic, ADD-files (the one stage permitted to):
+            // generate the 5 mandatory Spring Kafka bridge classes a genuine
+            // Pub/Sub project has no source file to map from.  MUST run BEFORE
+            // applyContractRepairs: the deterministic pollers reference the
+            // generated CdiLookup, and validating an artifact that doesn't
+            // contain it yet produces MISSING_IMPORT violations that send the
+            // (correct) pollers to the repair LLM — which "fixed" them by
+            // nulling the lookup (job d7b6d473: both CdiLookup-calling pollers
+            // came back as `Store store = null;` with the save() deleted —
+            // compiles, boots, and silently drops the business logic).
+            // Generated paths are tracked and, together with the deterministic
+            // transforms, are off-limits to the repairer below.
+            Set<String> generatedPaths = new LinkedHashSet<>();
+            if (jakartaMessagingTarget == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+                Set<String> beforeGenerate = new LinkedHashSet<>();
+                for (MigratedFile f : result) {
+                    String p = f.newPath() != null ? f.newPath() : f.originalPath();
+                    if (p != null) beforeGenerate.add(p);
+                }
+                result = hybridScaffoldingGenerator.generate(result, topicConstantNames);
+                for (MigratedFile f : result) {
+                    String p = f.newPath() != null ? f.newPath() : f.originalPath();
+                    if (p != null && !beforeGenerate.contains(p)) generatedPaths.add(p);
+                }
+            }
 
             // Project Semantic Index — contract validation + minimal-patch
             // LLM repair loop.  The earlier guards revert broken files to
@@ -553,8 +890,12 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // reach DONE.  Catches interface drift, unknown method calls,
             // constructor arity mismatches, file/class rename, missing
             // overrides — everything the file-by-file LLM pass can't see
-            // because it never holds two files at once.
-            result = applyContractRepairs(result);
+            // because it never holds two files at once.  Deterministic and
+            // generated files are correct by construction — the repairer may
+            // read them for context but must never rewrite them.
+            Set<String> repairProtectedPaths = new LinkedHashSet<>(deterministicPaths);
+            repairProtectedPaths.addAll(generatedPaths);
+            result = applyContractRepairs(result, repairProtectedPaths);
 
             // Output gate — every Pub/Sub artifact that survived the
             // migration is a failure (the target is Kafka).  The repairer
@@ -564,6 +905,24 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // can swap Google method chains for Kafka calls.
             result = applyPubSubLeakRepairs(result);
 
+            // Re-stamp the anchored constants class after the ContractRepairer and
+            // PubSubLeakRepairer have run.  Both repairers invoke the LLM to fix
+            // cross-file inconsistencies; when the unconverted Pub/Sub pollers still
+            // call PubSubConfig.topic()/subscription() the ContractRepairer sees
+            // UNKNOWN_METHOD_CALL violations and asks the LLM to "fix" PubSubConfig —
+            // which hallucinates @Configuration/@Bean additions and undoes the
+            // constants-only rewrite.  Re-stamping here makes the anchor final
+            // regardless of what the repairer did.
+            if (anchoredConfig != null) {
+                final String anchoredPath = anchoredConfig.originalPath();
+                final MigratedFile finalAnchor = anchoredConfig;
+                result = result.stream()
+                        .map(f -> anchoredPath.equals(f.originalPath()) ? finalAnchor : f)
+                        .collect(java.util.stream.Collectors.toList());
+                log.info("[{}] hybrid: re-stamped anchored constants class '{}' after repair passes",
+                        getName(), anchoredPath);
+            }
+
             // Final guarantee, deterministic — reconcile pom.xml against
             // whatever Kafka classes the files above actually import, no
             // matter how pom.xml got here (LLM rewrite, structural-check
@@ -571,13 +930,24 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             // final Java content.
             result = applyPomDependencyReconciliation(result);
 
+            // Hybrid-only, deterministic, auto-fix: CDI persistence classes
+            // reached from a Spring @KafkaListener via CdiLookup carry no JTA
+            // transaction unless converted to @Stateless EJBs (see
+            // JAKARTA_EE_SPRING_KAFKA_PREFIX item 7). Runs last so it sees the
+            // final file set, same as the pom reconciliation above it.
+            // (The bridge scaffolding itself is generated earlier, BEFORE the
+            // contract-repair pass — see the comment there.)
+            if (jakartaMessagingTarget == JakartaMessagingTarget.SPRING_KAFKA_HYBRID) {
+                result = cdiStatelessConverter.convert(result);
+            }
+
             persistProvenance(perFileProvenance);
 
             long modifiedCount = result.stream()
                     .filter(f -> f.changeType() == FileChangeType.MODIFIED).count();
             String summary = "Migrated %d/%d file(s) for project '%s' (pruned %d file(s))"
                     .formatted(modifiedCount, result.size(), projectId, pruned.prunedFiles());
-            return new MigrationArtifact(projectId, result, summary);
+            return new MigrationArtifact(projectId, result, summary, jakartaMessagingTarget);
         } catch (Exception e) {
             log.error("[{}] migration failed for project '{}': {}", getName(), projectId, e.getMessage());
             throw new AgentFailureException(getName(), "file migration failed: " + e.getMessage());
@@ -968,7 +1338,16 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
      * <p>No-op when the validator is disabled (null) so the agent is
      * usable in tests without wiring the new components.
      */
-    private List<MigratedFile> applyContractRepairs(List<MigratedFile> files) {
+    /**
+     * @param protectedPaths deterministic/generated files (hybrid consumer
+     *        transforms, anchored config, bridge scaffolding) that are correct
+     *        by construction.  The repairer sees them as read-only context;
+     *        any rewrite it proposes for one of them is discarded — the repair
+     *        LLM has "fixed" them before by nulling the {@code CdiLookup}
+     *        bridge call (job d7b6d473), which compiles but silently drops the
+     *        business logic.
+     */
+    private List<MigratedFile> applyContractRepairs(List<MigratedFile> files, Set<String> protectedPaths) {
         if (contractValidator == null || contractRepairer == null || files.isEmpty()) return files;
 
         Map<String, String> working = new LinkedHashMap<>();
@@ -1004,6 +1383,12 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             String path = f.newPath() != null ? f.newPath() : f.originalPath();
             String newContent = path != null ? repaired.get(path) : null;
             if (newContent == null || newContent.equals(f.content())) {
+                rewired.add(f);
+                continue;
+            }
+            if (path != null && protectedPaths.contains(path)) {
+                log.warn("[{}] contract repair: blocked rewrite of deterministic/generated file '{}' — "
+                        + "kept the deterministic content", getName(), path);
                 rewired.add(f);
                 continue;
             }
@@ -1117,7 +1502,8 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
     }
 
     private List<MigratedFile> revertFilesWithUnresolvedImports(List<MigratedFile> migratedFiles,
-                                                                Map<String, String> allFiles) {
+                                                                Map<String, String> allFiles,
+                                                                Set<String> exemptPaths) {
         if (projectSymbolValidator == null || migratedFiles.isEmpty()) return migratedFiles;
 
         Map<String, String> snapshot = new LinkedHashMap<>();
@@ -1139,6 +1525,14 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
             if (bad == null || bad.isEmpty()
                     || f.changeType() != FileChangeType.MODIFIED
                     || !allFiles.containsKey(path)) {
+                repaired.add(f);
+                continue;
+            }
+            // Deterministically-converted files (consumers, anchored constants) are exempt:
+            // they may import CdiLookup or other scaffold classes not yet generated.
+            if (exemptPaths.contains(path)) {
+                log.debug("[{}] revert skipped for deterministic file '{}' (unresolved: {})",
+                        getName(), path, bad);
                 repaired.add(f);
                 continue;
             }
@@ -1401,6 +1795,23 @@ public class CoreMigratorAgent implements MigrationAgent<ApprovedPlan, Migration
                 .originalPath(path).newPath(path).content(content)
                 .changeType(FileChangeType.UNCHANGED).diffSummary(reason)
                 .build();
+    }
+
+    /**
+     * Retry-scope matching: does {@code artifactPath} correspond to one of the
+     * failing paths reported by the previous validation?  Paths on both sides
+     * are artifact-relative ({@code src/main/java/...} — the sandbox runners
+     * strip their {@code /workspace/} prefix), but suffix-tolerant matching
+     * guards against a runner that reports a differently-rooted variant.  The
+     * {@code /}-boundary check prevents {@code Poller.java} from matching
+     * {@code OtherPoller.java}.
+     */
+    private static boolean matchesFailingPath(String artifactPath, Set<String> failingPaths) {
+        if (failingPaths.contains(artifactPath)) return true;
+        for (String f : failingPaths) {
+            if (artifactPath.endsWith("/" + f) || f.endsWith("/" + artifactPath)) return true;
+        }
+        return false;
     }
 
     /**

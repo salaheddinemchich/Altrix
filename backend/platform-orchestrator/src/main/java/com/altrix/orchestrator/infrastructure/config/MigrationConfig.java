@@ -17,7 +17,7 @@ import java.util.List;
  *     # Maven artifactIds the migrator is allowed to ADD to a project's
  *     # pom.xml that were not present in the original.  Anything else the
  *     # AI inserts is treated as a hallucination and stripped.
- *     allowed-added-artifacts: kafka-clients, spring-kafka
+ *     allowed-added-artifacts: kafka-clients, spring-kafka, spring-context
  *   source:
  *     # Fully-qualified Java imports the model is KNOWN to hallucinate.
  *     # When a migrated .java contains any of these imports the file is
@@ -55,13 +55,13 @@ public record MigrationConfig(
      *                              hallucination and removed.
      */
     public record Pom(
-            @DefaultValue({"kafka-clients", "spring-kafka"})
+            @DefaultValue({"kafka-clients", "spring-kafka", "spring-context"})
             List<String> allowedAddedArtifacts
     ) {
         public Pom {
             allowedAddedArtifacts = allowedAddedArtifacts != null
                     ? List.copyOf(allowedAddedArtifacts)
-                    : List.of("kafka-clients", "spring-kafka");
+                    : List.of("kafka-clients", "spring-kafka", "spring-context");
         }
     }
 

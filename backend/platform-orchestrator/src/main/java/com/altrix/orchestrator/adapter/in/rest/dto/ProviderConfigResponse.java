@@ -1,7 +1,7 @@
 package com.altrix.orchestrator.adapter.in.rest.dto;
 
 import com.altrix.orchestrator.domain.port.in.ProviderConfigView;
-import com.altrix.orchestrator.infra.ai.provider.ProviderCostTier;
+import com.altrix.orchestrator.infrastructure.ai.provider.ProviderCostTier;
 
 import java.time.Instant;
 

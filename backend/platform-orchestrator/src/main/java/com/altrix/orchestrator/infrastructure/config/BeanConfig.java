@@ -5,7 +5,7 @@ import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.orchestrator.domain.port.in.ResumeMigrationUseCase;
 import com.altrix.orchestrator.domain.port.out.*;
 import com.altrix.orchestrator.domain.service.*;
-import com.altrix.orchestrator.infra.ai.provider.factory.ProviderFactory;
+import com.altrix.orchestrator.infrastructure.ai.provider.factory.ProviderFactory;
 import com.altrix.orchestrator.infrastructure.ai.RetryContextBuilder;
 import com.altrix.orchestrator.infrastructure.workflow.MigrationWorkflowGraph;
 import io.minio.MinioClient;

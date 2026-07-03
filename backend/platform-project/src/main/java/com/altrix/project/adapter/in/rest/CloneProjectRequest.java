@@ -1,6 +1,7 @@
 package com.altrix.project.adapter.in.rest;
 
 import com.altrix.common.domain.enums.ConfigFormatPreference;
+import com.altrix.common.domain.enums.JakartaMessagingTarget;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -15,6 +16,9 @@ import jakarta.validation.constraints.Pattern;
  * @param accessToken            HTTPS PAT for private repos, or {@code null} for public
  * @param shallow                {@code true} to request a shallow clone (depth = 50)
  * @param configFormatPreference user's preferred output config format
+ * @param jakartaMessagingTarget user's explicit choice of Jakarta EE messaging
+ *                                output, optional; only meaningful once detection
+ *                                confirms Jakarta EE, ignored otherwise
  */
 public record CloneProjectRequest(
 
@@ -27,6 +31,7 @@ public record CloneProjectRequest(
         String branch,
         String accessToken,
         boolean shallow,
-        ConfigFormatPreference configFormatPreference
+        ConfigFormatPreference configFormatPreference,
+        JakartaMessagingTarget jakartaMessagingTarget
 ) {
 }

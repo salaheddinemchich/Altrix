@@ -1,7 +1,7 @@
 package com.altrix.orchestrator.adapter.out.rag;
 
 import com.altrix.orchestrator.domain.port.out.DocumentationFetchPort;
-import com.altrix.orchestrator.infra.ai.tools.McpToolsPort;
+import com.altrix.orchestrator.infrastructure.ai.tools.McpToolsPort;
 import com.altrix.orchestrator.infrastructure.rag.DomainAllowListValidator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
