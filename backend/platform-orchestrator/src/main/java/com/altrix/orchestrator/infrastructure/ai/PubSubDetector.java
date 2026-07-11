@@ -14,66 +14,71 @@ package com.altrix.orchestrator.infrastructure.ai;
  */
 public final class PubSubDetector {
 
-    private PubSubDetector() {}
+    private PubSubDetector() {
+    }
 
-    /** True if the file path is a Java/build/config file we know how to rewrite. */
+    /**
+     * True if the file path is a Java/build/config file we know how to rewrite.
+     */
     public static boolean isMigratableFile(String path) {
         if (path == null) return false;
         String p = path.toLowerCase();
         return p.endsWith(".java")
-            || p.endsWith(".xml")           // pom.xml, ivy.xml, EJB / Jakarta EE descriptors
-            || p.endsWith(".yml")
-            || p.endsWith(".yaml")
-            || p.endsWith(".properties")
-            || p.endsWith(".gradle")
-            || p.endsWith(".gradle.kts");
+                || p.endsWith(".xml")           // pom.xml, ivy.xml, EJB / Jakarta EE descriptors
+                || p.endsWith(".yml")
+                || p.endsWith(".yaml")
+                || p.endsWith(".properties")
+                || p.endsWith(".gradle")
+                || p.endsWith(".gradle.kts");
     }
 
-    /** True if the file content shows any Pub/Sub fingerprint. */
+    /**
+     * True if the file content shows any Pub/Sub fingerprint.
+     */
     public static boolean hasPubSubCode(String content) {
         if (content == null || content.isEmpty()) return false;
         return
-            // (A) Modern Spring Cloud GCP
-               content.contains("google.cloud.pubsub")
-            || content.contains("PubSubTemplate")
-            || content.contains("@PubSubListener")
-            || content.contains("@SubscriberHandler")
-            || content.contains("MessagePublisher")
+                // (A) Modern Spring Cloud GCP
+                content.contains("google.cloud.pubsub")
+                        || content.contains("PubSubTemplate")
+                        || content.contains("@PubSubListener")
+                        || content.contains("@SubscriberHandler")
+                        || content.contains("MessagePublisher")
 
-            // (B) Legacy GCP Pub/Sub REST v1 — com.google.api.services.pubsub.*
-            || content.contains("com.google.api.services.pubsub")
-            || content.contains("google.api.services.pubsub")
-            || content.contains("ReceivedMessage")
-            || content.contains("PubsubMessage")
+                        // (B) Legacy GCP Pub/Sub REST v1 — com.google.api.services.pubsub.*
+                        || content.contains("com.google.api.services.pubsub")
+                        || content.contains("google.api.services.pubsub")
+                        || content.contains("ReceivedMessage")
+                        || content.contains("PubsubMessage")
 
-            // (C) Common user-wrapper class names + their typical operations
-            || content.contains("PubsubService")
-            || content.contains("PubSubService")
-            || content.contains("PubsubClient")
-            || content.contains("PubSubClient")
-            || content.contains("PubsubConfig")
-            || content.contains("PubSubConfig")
-            || content.contains("getOrCreateTopic")
-            || content.contains("getOrCreateSubscription")
+                        // (C) Common user-wrapper class names + their typical operations
+                        || content.contains("PubsubService")
+                        || content.contains("PubSubService")
+                        || content.contains("PubsubClient")
+                        || content.contains("PubSubClient")
+                        || content.contains("PubsubConfig")
+                        || content.contains("PubSubConfig")
+                        || content.contains("getOrCreateTopic")
+                        || content.contains("getOrCreateSubscription")
 
-            // (D) Build / dependency markers — pom.xml, build.gradle, ivy
-            || content.contains("google-api-services-pubsub")
-            || content.contains("google-cloud-pubsub")
-            || content.contains("spring-cloud-gcp-pubsub")
-            || content.contains("spring-cloud-gcp-starter-pubsub")
+                        // (D) Build / dependency markers — pom.xml, build.gradle, ivy
+                        || content.contains("google-api-services-pubsub")
+                        || content.contains("google-cloud-pubsub")
+                        || content.contains("spring-cloud-gcp-pubsub")
+                        || content.contains("spring-cloud-gcp-starter-pubsub")
 
-            // (E) Bootstrap config markers — application.yml / .properties
-            || content.contains("spring.cloud.gcp.pubsub")
-            || content.contains("gcp.pubsub")
-            || content.contains("GOOGLE_APPLICATION_CREDENTIALS")
-            || content.contains("PUBSUB_EMULATOR_HOST")
+                        // (E) Bootstrap config markers — application.yml / .properties
+                        || content.contains("spring.cloud.gcp.pubsub")
+                        || content.contains("gcp.pubsub")
+                        || content.contains("GOOGLE_APPLICATION_CREDENTIALS")
+                        || content.contains("PUBSUB_EMULATOR_HOST")
 
-            // (F) Catch-all for the bare "Pubsub" / "PubSub" identifier — covers
-            //     user-defined helper classes our specific name list misses
-            //     (PubsubFactory, PubsubProperties, PubsubAdmin, ...).  False
-            //     positives only cost an extra AI call.
-            || content.contains("Pubsub")
-            || content.contains("PubSub")
-            || content.contains("pubsub");
+                        // (F) Catch-all for the bare "Pubsub" / "PubSub" identifier — covers
+                        //     user-defined helper classes our specific name list misses
+                        //     (PubsubFactory, PubsubProperties, PubsubAdmin, ...).  False
+                        //     positives only cost an extra AI call.
+                        || content.contains("Pubsub")
+                        || content.contains("PubSub")
+                        || content.contains("pubsub");
     }
 }

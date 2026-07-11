@@ -39,11 +39,9 @@ import java.util.regex.Pattern;
 public class MigrationClusterPlanner {
 
     /** Delimiter the cluster prompt asks the model to put before each file's content. */
-    private static final Pattern FILE_MARKER = Pattern.compile(
-            "^={2,}\\s*FILE:\\s*(.+?)\\s*={2,}\\s*$", Pattern.MULTILINE);
-
+    private static final Pattern FILE_MARKER = Pattern.compile("^={2,}\\s*FILE:\\s*(.+?)\\s*={2,}\\s*$", Pattern.MULTILINE);
     private final int maxClusterFiles;
-
+    
     public MigrationClusterPlanner(@Value("${migration.cluster.max-files:6}") int maxClusterFiles) {
         this.maxClusterFiles = maxClusterFiles;
     }

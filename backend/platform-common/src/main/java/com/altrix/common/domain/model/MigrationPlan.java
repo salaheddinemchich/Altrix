@@ -61,11 +61,9 @@ public record MigrationPlan(
         targetStack = targetStack != null ? targetStack : "";
         steps = steps != null ? List.copyOf(steps) : List.of();
         riskLevel = riskLevel != null ? riskLevel : "";
-        estimatedEffort = estimatedEffort != null ? estimatedEffort : "";
-        summary = summary != null ? summary : "";
+        estimatedEffort = estimatedEffort != null ? estimatedEffort : "";summary = summary != null ? summary : "";
         targetFiles = targetFiles != null ? List.copyOf(targetFiles) : List.of();
-        jakartaMessagingTarget = jakartaMessagingTarget != null
-                ? jakartaMessagingTarget : JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS;
+        jakartaMessagingTarget = jakartaMessagingTarget != null ? jakartaMessagingTarget : JakartaMessagingTarget.NATIVE_KAFKA_CLIENTS;
     }
 
     public static MigrationPlan empty(String projectId) {

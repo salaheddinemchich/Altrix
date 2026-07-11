@@ -32,14 +32,12 @@ public class KafkaProjectEventAdapter implements ProjectEventPublisherPort {
     @Override
     public void publishProjectRegistered(Project project) {
         // value = "userId|storageKey|jakartaMessagingTarget"
-        String value = project.getUserId() + "|" + project.getStorageKey()
-                + "|" + project.getJakartaMessagingTarget();
+        String value = project.getUserId() + "|" + project.getStorageKey() + "|" + project.getJakartaMessagingTarget();
         log.info("Publishing project.registered for project '{}' storageKey='{}'", project.getId(), project.getStorageKey());
         kafkaTemplate.send(topic, project.getId(), value)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
-                        log.error("Failed to publish project.registered for '{}': {}",
-                                project.getId(), ex.getMessage());
+                        log.error("Failed to publish project.registered for '{}': {}", project.getId(), ex.getMessage());
                     }
                 });
     }

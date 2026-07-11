@@ -35,8 +35,7 @@ public class KafkaJobEventAdapter implements JobEventPublisherPort {
     @Override
     public void publishJobCreated(MigrationJob job) {
         // value = "projectId|storageKey|jakartaMessagingTarget"
-        String value = job.getProjectId() + "|" + job.getProjectStorageKey()
-                + "|" + job.getJakartaMessagingTarget().name();
+        String value = job.getProjectId() + "|" + job.getProjectStorageKey() + "|" + job.getJakartaMessagingTarget().name();
         kafkaTemplate.send(jobCreatedTopic, job.getId(), value)
                 .whenComplete((r, ex) -> {
                     if (ex != null) {

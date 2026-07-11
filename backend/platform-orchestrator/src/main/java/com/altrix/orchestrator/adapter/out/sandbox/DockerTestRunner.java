@@ -75,15 +75,13 @@ public class DockerTestRunner implements SandboxRunnerPort {
      * Surefire summary line — always emitted, even on success.  Captures
      * test/failure/error/skipped counts.
      */
-    private static final Pattern SUREFIRE_SUMMARY = Pattern.compile(
-            "Tests run:\\s+(\\d+),\\s+Failures:\\s+(\\d+),\\s+Errors:\\s+(\\d+),\\s+Skipped:\\s+(\\d+)");
+    private static final Pattern SUREFIRE_SUMMARY = Pattern.compile("Tests run:\\s+(\\d+),\\s+Failures:\\s+(\\d+),\\s+Errors:\\s+(\\d+),\\s+Skipped:\\s+(\\d+)");
 
     /**
      * Per-failure line — Surefire emits "Failed tests:" / "Errors:" sections
      * with FQN lines beneath.  We capture the FQN to attach severity.
      */
-    private static final Pattern SUREFIRE_FAIL_LINE = Pattern.compile(
-            "^\\s*([\\w.$]+(?:Test|IT))\\.(\\w+):\\s*(.+)$", Pattern.MULTILINE);
+    private static final Pattern SUREFIRE_FAIL_LINE = Pattern.compile("^\\s*([\\w.$]+(?:Test|IT))\\.(\\w+):\\s*(.+)$", Pattern.MULTILINE);
 
     private final SandboxDockerConfig config;
     private final SandboxLogRepository sandboxLogRepository;

@@ -34,7 +34,6 @@ public class RetryContextBuilder {
     public static final int MAX_FAILURES = 5;
     public static final int MAX_CHARS_PER_FAILURE = 200;
     public static final String HEADER = "PREVIOUS ATTEMPT FAILED. Fix these specific issues:\n\n";
-
     private final Encoding encoding;
 
     public RetryContextBuilder() {

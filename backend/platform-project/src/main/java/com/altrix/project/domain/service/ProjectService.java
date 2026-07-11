@@ -92,11 +92,8 @@ public class ProjectService implements UploadProjectUseCase, GetProjectQuery, In
 
     @Override
     public Project ingestFromGit(GitIngestionCommand cmd) {
-        log.info("Cloning '{}' (branch={}) for user '{}'",
-                cmd.repoUrl(), cmd.branch(), cmd.userId());
-
-        var cloneReq = new RepositoryIngestionPort.CloneRequest(
-                cmd.repoUrl(), cmd.branch(), cmd.accessToken(), cmd.shallow());
+        log.info("Cloning '{}' (branch={}) for user '{}'", cmd.repoUrl(), cmd.branch(), cmd.userId());
+        var cloneReq = new RepositoryIngestionPort.CloneRequest(cmd.repoUrl(), cmd.branch(), cmd.accessToken(), cmd.shallow());
         RepositorySnapshot snapshot = repositoryIngestion.clone(cloneReq);
 
         try {

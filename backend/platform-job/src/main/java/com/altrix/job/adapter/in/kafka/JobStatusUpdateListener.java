@@ -29,8 +29,7 @@ public class JobStatusUpdateListener {
         // Skip if job is already in terminal state — avoids illegal state transitions
         jobRepository.findById(jobId).ifPresent(job -> {
             if (job.getStatus().isTerminal()) {
-                log.debug("Job '{}' already terminal ({}), skipping status update '{}'",
-                        jobId, job.getStatus(), value);
+                log.debug("Job '{}' already terminal ({}), skipping status update '{}'", jobId, job.getStatus(), value);
                 return;
             }
 

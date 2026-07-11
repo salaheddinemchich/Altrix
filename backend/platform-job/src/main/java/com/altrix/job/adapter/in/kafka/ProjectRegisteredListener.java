@@ -32,8 +32,7 @@ public class ProjectRegisteredListener {
         String userId = parts[0];
         String storageKey = parts.length > 1 ? parts[1] : "";
         JakartaMessagingTarget jakartaMessagingTarget = parseTarget(parts.length > 2 ? parts[2] : null);
-        log.info("Creating job for project '{}' user '{}' storageKey='{}' jakartaMessagingTarget={}",
-                projectId, userId, storageKey, jakartaMessagingTarget);
+        log.info("Creating job for project '{}' user '{}' storageKey='{}' jakartaMessagingTarget={}", projectId, userId, storageKey, jakartaMessagingTarget);
         createJobUseCase.createJob(projectId, userId, storageKey, null, null, jakartaMessagingTarget);
     }
 

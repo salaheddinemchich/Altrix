@@ -1,10 +1,6 @@
 package com.altrix.orchestrator.domain.service;
 
-import com.altrix.common.domain.model.MigratedFile;
-import com.altrix.common.domain.model.MigrationArtifact;
-import com.altrix.common.domain.model.MigrationPlan;
-import com.altrix.common.domain.model.ProjectContext;
-import com.altrix.common.domain.model.ValidationReport;
+import com.altrix.common.domain.model.*;
 import com.altrix.common.domain.port.MigrationAgent;
 import com.altrix.common.exception.AgentFailureException;
 import com.altrix.orchestrator.domain.exception.AiProviderUnavailableException;
@@ -70,8 +66,7 @@ public class OrchestratorService implements RunPipelineUseCase {
         this.sessionRepository = sessionRepository;
         this.autoPauseThreshold = autoPauseThreshold;
         this.projectMapper = projectMapper;
-        log.info("OrchestratorService initialised — typed LangGraph4j workflow (auto-pause threshold={}, projectMapper={})",
-                autoPauseThreshold, projectMapper != null ? "enabled" : "disabled");
+        log.info("OrchestratorService initialised — typed LangGraph4j workflow (auto-pause threshold={}, projectMapper={})", autoPauseThreshold, projectMapper != null ? "enabled" : "disabled");
     }
 
     @Override
@@ -107,8 +102,7 @@ public class OrchestratorService implements RunPipelineUseCase {
                     var blueprint = projectMapper.execute(initial);
                     log.info("Project Mapper produced blueprint for session '{}' — {} class(es), {} file(s)",
                             session.id(),
-                            blueprint != null && blueprint.semanticGraph() != null
-                                    ? blueprint.semanticGraph().classes().size() : 0,
+                            blueprint != null && blueprint.semanticGraph() != null ? blueprint.semanticGraph().classes().size() : 0,
                             blueprint != null ? blueprint.files().size() : 0);
                 } catch (Exception mapErr) {
                     log.warn("Project Mapper failed for session '{}' (non-fatal, falling back to " + "file-by-file migration): {}", session.id(), mapErr.getMessage());

@@ -19,11 +19,7 @@ import org.bsc.langgraph4j.action.AsyncNodeAction;
 import org.bsc.langgraph4j.checkpoint.BaseCheckpointSaver;
 import org.bsc.langgraph4j.serializer.std.ObjectStreamStateSerializer;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static com.altrix.orchestrator.domain.model.workflow.MigrationState.*;
 import static org.bsc.langgraph4j.StateGraph.END;
@@ -75,7 +71,9 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
     private final MigrationAgent<ProjectContext, AnalysisReport> contextAnalyzer;
     private final MigrationAgent<AnalysisReport, MigrationPlan> planner;
     private final MigrationAgent<ApprovedPlan, MigrationArtifact> migrator;
-    /** Verifies the artifact semantically between migrator and sandbox. */
+    /**
+     * Verifies the artifact semantically between migrator and sandbox.
+     */
     private final MigrationAgent<MigrationArtifact, MigrationArtifact> semanticValidator;
     private final MigrationAgent<MigrationArtifact, ValidationReport> validator;
     private final MigrationAgent<WorkflowOutcome, MigrationReport> reporter;
@@ -107,12 +105,8 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
                 .threadId(context.jobId())
                 .build();
 
-        Optional<MigrationState> result = graph.invoke(
-                MigrationState.initial(context), config);
-
-        return result.orElseThrow(() ->
-                new AgentFailureException("MigrationWorkflowGraph",
-                        "Graph invocation returned no state for job " + context.jobId()));
+        Optional<MigrationState> result = graph.invoke(MigrationState.initial(context), config);
+        return result.orElseThrow(() -> new AgentFailureException("MigrationWorkflowGraph", "Graph invocation returned no state for job " + context.jobId()));
     }
 
     // ── Graph construction ───────────────────────────────────────────────────
@@ -128,10 +122,9 @@ public class MigrationWorkflowGraph implements WorkflowExecutionPort {
         return compiledGraph;
     }
 
-    private CompiledGraph<MigrationState> buildGraph() {
+        private CompiledGraph<MigrationState> buildGraph() {
         try {
-            StateGraph<MigrationState> graph = new StateGraph<>(
-                    new ObjectStreamStateSerializer<>(MigrationState::new));
+            StateGraph<MigrationState> graph = new StateGraph<>(new ObjectStreamStateSerializer<>(MigrationState::new));
 
             graph.addNode(NODE_CONTEXT_ANALYZER, nodeAction(this::runContextAnalyzer))
                     .addNode(NODE_MIGRATION_PLANNER, nodeAction(this::runMigrationPlanner))
